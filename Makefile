@@ -16,7 +16,8 @@ headless: headless.o $(COMMON_OBJECTS)
 	$(CC) $(CFLAGS) $(EXTRA_CFLAGS) $^ -o $@ $(LDFLAGS)
 
 asm: solver.o
-	$(CC) $(CFLAGS) $(EXTRA_CFLAGS) -S solver.c
+	$(CC) $(CFLAGS) $(EXTRA_CFLAGS) \
+	-fno-asynchronous-unwind-tables -fno-exceptions -fverbose-asm -S solver.c
 
 clean:
 	rm -f $(TARGETS) *.o .depend solver.s *~
