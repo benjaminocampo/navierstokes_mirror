@@ -1,3 +1,8 @@
+// TODO: Make u and v be part of a velocity struct so we have faster locality
+// access and measure it compared to the current solution
+// diffuse may need to be rewritten, but project, advect and other loops may
+// be benefited
+
 #include <stddef.h>
 
 #include "solver.h"
@@ -34,10 +39,15 @@ static void lin_solve(unsigned int n, boundary b, float * x, const float * x0, f
     for (unsigned int k = 0; k < 20; k++) {
         for (unsigned int i = 1; i <= n; i++) {
             for (unsigned int j = 1; j <= n; j++) {
-                x[IX(i, j)] = (x0[IX(i, j)] + a * (x[IX(i - 1, j)] +
-                                                   x[IX(i + 1, j)] +
-                                                   x[IX(i, j - 1)] +
-                                                   x[IX(i, j + 1)])) / c;
+                x[IX(i, j)] = (
+                    x0[IX(i, j)] +
+                    a * (
+                        x[IX(i - 1, j)] +
+                        x[IX(i + 1, j)] +
+                        x[IX(i, j - 1)] +
+                        x[IX(i, j + 1)]
+                    )
+                ) / c;
             }
         }
         set_bnd(n, b, x);

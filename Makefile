@@ -1,5 +1,6 @@
 CC=cc
-CFLAGS=-std=c99 -Wall -Wextra -Wno-unused-parameter
+CFLAGS=-std=c99 -Wall -Wextra -Werror -Wno-unused-parameter
+EXTRA_CFLAGS?=-O1
 LDFLAGS=
 
 TARGETS=demo headless
@@ -9,13 +10,16 @@ COMMON_OBJECTS=timing.o solver.o
 all: $(TARGETS)
 
 demo: demo.o $(COMMON_OBJECTS)
-	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS) -lGL -lGLU -lglut
+	$(CC) $(CFLAGS) $(EXTRA_CFLAGS) $^ -o $@ $(LDFLAGS) -lGL -lGLU -lglut
 
 headless: headless.o $(COMMON_OBJECTS)
-	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
+	$(CC) $(CFLAGS) $(EXTRA_CFLAGS) $^ -o $@ $(LDFLAGS)
+
+asm: solver.o
+	$(CC) $(CFLAGS) $(EXTRA_CFLAGS) -S solver.c
 
 clean:
-	rm -f $(TARGETS) *.o .depend *~
+	rm -f $(TARGETS) *.o .depend solver.s *~
 
 .depend: *.[ch]
 	$(CC) -MM $(SOURCES) >.depend

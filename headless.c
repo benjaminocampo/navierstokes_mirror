@@ -25,6 +25,7 @@
 
 /* external definitions (from solver.c) */
 
+// TODO: Why extern instead of include solver.h
 extern void dens_step ( int N, float * x, float * x0, float * u, float * v, float diff, float dt );
 extern void vel_step ( int N, float * u, float * v, float * u0, float * v0, float visc, float dt );
 
@@ -37,6 +38,15 @@ static float force, source;
 static float * u, * v, * u_prev, * v_prev;
 static float * dens, * dens_prev;
 
+__attribute__((unused))
+static void dump_grid(float * grid) {
+	for (int i = 0; i < N; i++) {
+		printf("%d [", i);
+		for (int j = 0; j < N; j++)
+			printf("%f, ", grid[IX(i, j)]);
+		printf("], \n");
+	}
+}
 
 /*
   ----------------------------------------------------------------------
@@ -101,6 +111,7 @@ static void react ( float * d, float * u, float * v )
 		}
 	}
 
+	// TODO: Unify these two fors
 	for ( i=0 ; i<size ; i++ ) {
 		u[i] = v[i] = d[i] = 0.0f;
 	}

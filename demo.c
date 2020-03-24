@@ -75,7 +75,7 @@ static int allocate_data ( void )
 	v			= (float *) malloc ( size*sizeof(float) );
 	u_prev		= (float *) malloc ( size*sizeof(float) );
 	v_prev		= (float *) malloc ( size*sizeof(float) );
-	dens		= (float *) malloc ( size*sizeof(float) );	
+	dens		= (float *) malloc ( size*sizeof(float) );
 	dens_prev	= (float *) malloc ( size*sizeof(float) );
 
 	if ( !u || !v || !u_prev || !v_prev || !dens || !dens_prev ) {
