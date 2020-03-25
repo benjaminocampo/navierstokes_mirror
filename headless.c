@@ -16,12 +16,11 @@
 
 #include <stdlib.h>
 #include <stdio.h>
-
 #include "timing.h"
 
 /* macros */
 
-#define IX(i,j) ((i)+(N+2)*(j))
+#define IX(i,j) ((j)+(N+2)*(i))
 
 /* external definitions (from solver.c) */
 
@@ -149,7 +148,7 @@ static void one_step ( void )
 	dens_ns_p_cell += 1.0e9 * (wtime()-start_t)/(N*N);
 
 	if (1.0<wtime()-one_second) { /* at least 1s between stats */
-		printf("%lf, %lf, %lf, %lf: ns per cell total, react, vel_step, dens_step\n",
+		printf("ns per cell total=%lf, react=%lf, vel_step=%lf, dens_step=%lf\n",
 			(react_ns_p_cell+vel_ns_p_cell+dens_ns_p_cell)/times,
 			react_ns_p_cell/times, vel_ns_p_cell/times, dens_ns_p_cell/times);
 		one_second = wtime();
@@ -186,7 +185,7 @@ int main ( int argc, char ** argv )
 	}
 
 	if ( argc == 1 ) {
-		N = 128;
+		N = 2048;
 		dt = 0.1f;
 		diff = 0.0f;
 		visc = 0.0f;

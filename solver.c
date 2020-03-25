@@ -3,11 +3,13 @@
 // diffuse may need to be rewritten, but project, advect and other loops may
 // be benefited
 
+// TODO: Implement statistical hypothesis proof when measuring performance
+
 #include <stddef.h>
 
 #include "solver.h"
 
-#define IX(i,j) ((i)+(n+2)*(j))
+#define IX(i,j) ((j)+(n+2)*(i))
 #define SWAP(x0,x) {float * tmp=x0;x0=x;x=tmp;}
 
 typedef enum { NONE = 0, VERTICAL = 1, HORIZONTAL = 2 } boundary;
