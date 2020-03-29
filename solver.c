@@ -49,7 +49,7 @@ static void lin_solve(unsigned int n, boundary b, float * x, const float * x0, f
                         x[IX(i, j - 1)] +
                         x[IX(i, j + 1)]
                     )
-                ) / c;
+                ) / c; // TODO: There is a division here.
             }
         }
         set_bnd(n, b, x);
@@ -70,6 +70,7 @@ static void advect(unsigned int n, boundary b, float * d, const float * d0, cons
     float dt0 = dt * n;
     for (unsigned int i = 1; i <= n; i++) {
         for (unsigned int j = 1; j <= n; j++) {
+            // TODO: Maybe we have some numerical tricks available here?
             x = i - dt0 * u[IX(i, j)];
             y = j - dt0 * v[IX(i, j)];
             if (x < 0.5f) {

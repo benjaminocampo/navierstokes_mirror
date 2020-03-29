@@ -190,11 +190,11 @@ static void react ( float * d, float * u, float * v )
 	}
 
 	if (max_velocity2<0.0000005f) {
-		u[IX(N/2,N/2)] = force * 10.0f;
-		v[IX(N/2,N/2)] = force * 10.0f;
+		u[IX(N/2,N/2)] = force * 1000.0f;
+		v[IX(N/2,N/2)] = force * 1000.0f;
 	}
 	if (max_density<1.0f) {
-		d[IX(N/2,N/2)] = source * 10.0f;
+		d[IX(N/2,N/2)] = source * 1000.0f;
 	}
 
 	if ( !mouse_down[0] && !mouse_down[2] ) return;
@@ -373,10 +373,10 @@ int main ( int argc, char ** argv )
 	}
 
 	if ( argc == 1 ) {
-		N = 64;
+		N = 128;
 		dt = 0.1f;
-		diff = 0.0f;
-		visc = 0.0f;
+		diff = 0.001f;
+		visc = 0.0001f;
 		force = 5.0f;
 		source = 100.0f;
 		fprintf ( stderr, "Using defaults : N=%d dt=%g diff=%g visc=%g force = %g source=%g\n",
