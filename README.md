@@ -40,4 +40,5 @@ la media bajo de ~900 a ~700 con un sigma de `—` a uno de `—`.
 Esto nos hizo pensar que quizás ante la posibilidad de pérdida de precisión que
 la multiplicación representa `-O3` se abstuvo de implementar esa optimización. Y
 efectivamente al usar `-Ofast` que incluye `-ffast-math` el compilador
-implementó la misma optimización.
+implementó la misma optimización (`-freciprocal-math`). [Respuesta interesante
+al respecto](https://stackoverflow.com/a/45899202/3358251)
