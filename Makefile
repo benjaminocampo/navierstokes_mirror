@@ -17,21 +17,18 @@ headless: headless.o $(COMMON_OBJECTS)
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
 asm: solver.o
-	$(CC) $(CFLAGS) -fno-asynchronous-unwind-tables -fno-exceptions \
-	-fverbose-asm -S solver.c
+	$(CC) $(CFLAGS) -fno-asynchronous-unwind-tables -fno-exceptions \ -S solver.c
 
 runperf: headless
-	sudo perf stat -e \
+	sudo perf stat \
+	-e \
 	cache-references,\
 	cache-misses,\
-	L1-dcache-load-misses,\
-	L1-dcache-loads,\
 	L1-dcache-stores,\
-	L1-icache-load-misses,\
-	LLC-loads,\
-	LLC-load-misses,\
+	L1-dcache-store-misses,\
 	LLC-stores,\
 	LLC-store-misses \
+	-ddd \
 	./headless
 
 .depend: *.[ch]
