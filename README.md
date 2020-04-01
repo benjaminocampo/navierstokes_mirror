@@ -1,26 +1,27 @@
-<!-- TODO: Hablar de (i, j) swap:
-- N=128 no afecta, 512, 2048 sí
-- Programita de prueba que hicimos,
-- Como interpretamos incorrectamente la salida de perf
+# `IX` Optimization
+
+<!-- TODO: Talk about the (i, j) swap:
+- N=128 does not affect performance but N=512, 2048 does
+- The test program we did
+- How we missinterpreted perf output at first
 -->
 
-# Optimización a `lin_solve`
+# `lin_solve` Optimization
 
-Luego de probar [`coz-profiler`](https://www.youtube.com/watch?v=r-TLSBdHe1A)
-con `navierstokes`, la línea principal de `lin_solve` figuraba como la que nos
-daría el mayor *"bang for our buck"* y es por esto que decidimos enfocarnos en
-ella.
+After trying out the
+[`coz-profiler`](https://www.youtube.com/watch?v=r-TLSBdHe1A) with
+`navierstokes`, the main line in `lin_solve` stuck out as the one that would
+bring us the most *"bang for our buck"* so we focused on it.
 
-<!-- TODO: Ese 90% no sé realmente si es cómputo, habría que entender mejor
-que mide perf ahí-->
+<!-- TODO: I'm not sure if that 90% really refers to execution time. We should understand better what perf is measuring there. -->
 
-Aquí fue la primera vez que utilizamos `perf record` sobre el programa, y con
-esto notamos que efectivamente *(compilado con `-O1`)* el 90% del cómputo
-sucedía sobre `lin_solve` y en particular, de ese 90%, el 30% lo usaba una
-instrucción `divss` que correspondía a la división por `c` en nuestro programa.
+So here we used `perf record` for the first time on the program, with this we
+noticed that indeed *(compiled with `-O1`)*, that line was the one where the
+program spent about 90% of its running time. In particular 30% of it was spent
+on a `divss` instruction that came from the division by `c` in our program.
 
-Luego de pensar un rato si había alguna forma algebraica de quitar la división
-nos dimos cuenta que con esta transformación bastaba:
+After thinking a bit about some algebraic manipulation we could do to remove the
+division we figured this transformation would be enough.
 
 ```c
 // Old version using divss instruction
@@ -33,12 +34,12 @@ for i, j, k
     x[i, j, k] = big_summation_and_multiplication * inv;
 ```
 
-<!-- TODO: Poner valores reales de porcentaje, media y sigma -->
-Nos sorprendimos al ver que efectivamente, esto mejoró un 20-30% la performance
-la media bajo de ~900 a ~700 con un sigma de `—` a uno de `—`.
+<!-- TODO: Put real percentage, mean and std deviation values -->
+We were surprised to see that it did improve the performance about 20-30%. The
+mean went from ~900 to ~700 with a standard deviation of `—` to one of `—`.
 
-Esto nos hizo pensar que quizás ante la posibilidad de pérdida de precisión que
-la multiplicación representa `-O3` se abstuvo de implementar esa optimización. Y
-efectivamente al usar `-Ofast` que incluye `-ffast-math` el compilador
-implementó la misma optimización (`-freciprocal-math`). [Respuesta interesante
-al respecto](https://stackoverflow.com/a/45899202/3358251)
+This made us think that maybe upon the possible lost of precision that
+multiplying would represent, `-O3` abstained from implementing this
+optimization. And indeed, when using `-Ofast` which includes `-ffast-math` the
+compiler implemented the same optimization (`-freciprocal-math`). [A related
+stackoverflow answer](https://stackoverflow.com/a/45899202/3358251)
