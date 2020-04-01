@@ -17,7 +17,7 @@ headless: headless.o $(COMMON_OBJECTS)
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
 asm: solver.o
-	$(CC) $(CFLAGS) -fno-asynchronous-unwind-tables -fno-exceptions \ -S solver.c
+	$(CC) $(CFLAGS) -fno-asynchronous-unwind-tables -fno-exceptions -S solver.c
 
 runperf: headless
 	sudo perf stat \
