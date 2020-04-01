@@ -6,6 +6,57 @@
 - How we missinterpreted perf output at first
 -->
 
+<!-- TODO: Talk about this test
+These two compilations of this function produce the exact same output
+
+```bash
+gcc-9.3 -Ofast -floop-interchange -floop-interchange -floop-strip-mine -floop-block -fgraphite-identity -floop-nest-optimize -ftree-loop-distribution
+gcc-9.3 -O3
+```
+
+So gcc did not clever enough to notice
+```
+float square(int n, float* sum) {
+    float* x = malloc(n * n);
+    for (int i = 0; i < n; i++)
+        for (int j = 0; j < n; j++)
+            *sum += x[i + j * n];
+    return *sum;
+}
+```
+
+But when n is a known constant with -Ofast it did it (but not with O3)
+```
+float square(float* sum) {
+    const n = 2048;
+    float* x = malloc(n * n);
+    for (int i = 0; i < n; i++)
+        for (int j = 0; j < n; j++)
+            *sum += x[i + j * n];
+    return *sum;
+}
+
+```
+Also in this case it did it
+```
+static float square(int n, float* restrict sum) {
+    float* x = malloc(n * n);
+    for (int i = 0; i < n; i++)
+        for (int j = 0; j < n; j++)
+            *sum += x[i + j * n];
+    return *sum;
+}
+
+int main(void) {
+    float a;
+    square(2048, &a);
+    return a;
+}
+```
+
+So we will do it by hand as we can't exactly know n at compile time
+-->
+
 # `lin_solve` Optimization
 
 After trying out the
