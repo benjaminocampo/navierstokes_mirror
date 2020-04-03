@@ -1,4 +1,3 @@
-import pdb
 import sys
 import subprocess
 import argparse
@@ -88,7 +87,9 @@ def main():
 
     if tbranch is None:
         source_info = get_data_from_stdin(smake_cmds, sexec_cmds)
-        target_info = get_data_from_stdin(tmake_cmds, texec_cmds)    
+        target_info = get_data_from_stdin(tmake_cmds, texec_cmds)
+        print(source_info)
+        print(target_info)    
     else: 
         if repo.is_dirty():
             print('There are uncommited changes. You cannot switch between branches.', 
@@ -100,7 +101,12 @@ def main():
         target_info = get_data_from_stdin(tmake_cmds, texec_cmds)
         repo.git.checkout(sbranch)    
 
-    test.test_hypotheses(source_info['total_ns'], target_info['total_ns'])
+    print(source_info)
+    print(target_info)
+    if test.test_hypotheses(source_info['total_ns'], target_info['total_ns']):
+        print('There are strong evidence to assert in favour of the new approach')
+    else:
+        print('There are no strong evidence to reject the previous approach')
 
 if __name__ == "__main__":
     main()
