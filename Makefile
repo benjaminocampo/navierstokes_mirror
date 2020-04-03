@@ -27,7 +27,12 @@ runperf: headless
 	L1-dcache-stores,\
 	L1-dcache-store-misses,\
 	LLC-stores,\
-	LLC-store-misses \
+	LLC-store-misses,\
+	page-faults,\
+	cycles,\
+	instructions,\
+	branches,\
+	branch-misses \
 	-ddd \
 	./headless
 
