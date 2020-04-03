@@ -3,3 +3,4 @@ headless
 .depend
 *.o
 .vscode
+*.pyc
