@@ -30,7 +30,8 @@ extern void vel_step ( int N, float * u, float * v, float * u0, float * v0, floa
 
 /* global variables */
 
-static int N, steps;
+static const int N = 2048;
+static const int steps = 32;
 static float dt, diff, visc;
 static float force, source;
 
@@ -133,7 +134,7 @@ static void one_step ( void )
 	static double react_ns_p_cell = 0.0;
 	static double vel_ns_p_cell = 0.0;
 	static double dens_ns_p_cell = 0.0;
-	 
+
 	start_t = wtime();
 	react ( dens_prev, u_prev, v_prev );
 	react_ns_p_cell = 1.0e9 * (wtime()-start_t)/(N*N);
@@ -176,24 +177,20 @@ int main ( int argc, char ** argv )
 	}
 
 	if ( argc == 1 ) {
-		N = 128;
 		dt = 0.1f;
 		diff = 0.001f;
 		visc = 0.0001f;
 		force = 5.0f;
 		source = 100.0f;
-		steps = 5;
-		
+
 		fprintf ( stderr, "Using defaults : N=%d dt=%g diff=%g visc=%g force = %g source=%g steps=%d\n",
 			N, dt, diff, visc, force, source, steps);
 	} else {
-		N = atoi(argv[1]);
 		dt = atof(argv[2]);
 		diff = atof(argv[3]);
 		visc = atof(argv[4]);
 		force = atof(argv[5]);
 		source = atof(argv[6]);
-		steps = atoi(argv[7]);
 	}
 
 	if ( !allocate_data () ) exit ( 1 );
