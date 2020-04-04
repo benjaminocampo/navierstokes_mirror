@@ -4,3 +4,4 @@ headless
 *.o
 .vscode
 *.pyc
+perf.data*
