@@ -30,8 +30,8 @@ extern void vel_step ( int N, float * u, float * v, float * u0, float * v0, floa
 
 /* global variables */
 
-static const int N = 2048;
-static const int steps = 32;
+static const int N = 512;
+static const int steps = 128;
 static const float diff = 0.0f;
 static const float visc = 0.0f;
 static float dt;
