@@ -32,7 +32,9 @@ extern void vel_step ( int N, float * u, float * v, float * u0, float * v0, floa
 
 static const int N = 2048;
 static const int steps = 32;
-static float dt, diff, visc;
+static const float diff = 0.0f;
+static const float visc = 0.0f;
+static float dt;
 static float force, source;
 
 static float * u, * v, * u_prev, * v_prev;
@@ -178,8 +180,6 @@ int main ( int argc, char ** argv )
 
 	if ( argc == 1 ) {
 		dt = 0.1f;
-		diff = 0.001f;
-		visc = 0.0001f;
 		force = 5.0f;
 		source = 100.0f;
 
@@ -187,8 +187,6 @@ int main ( int argc, char ** argv )
 			N, dt, diff, visc, force, source, steps);
 	} else {
 		dt = atof(argv[2]);
-		diff = atof(argv[3]);
-		visc = atof(argv[4]);
 		force = atof(argv[5]);
 		source = atof(argv[6]);
 	}
