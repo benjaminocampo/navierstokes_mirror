@@ -1,10 +1,10 @@
 import sys
 import subprocess
 import argparse
-import pandas as pd
 import git
 import shlex
-from utils import test_hypotheses as test
+import pandas as pd
+import statsmodels.api as sm
 from io import StringIO
 from pathlib import Path
 
@@ -55,6 +55,40 @@ parser.add_argument(
     '--plot',
     action='store_true',
     help='plot graphics.')
+
+
+import statsmodels.api as sm
+
+
+def test_hypotheses(sample_hyp1, sample_hyp2):
+    """
+    Use a ztest procedure to decide if the observed value
+    given by sample_hyp2 rejects the null hypothesis.
+
+    Parameters
+    -------
+    sample_hyp1: Panda Series object
+        sample of null hypothesis.
+    mnts_hyp2: Panda Series object
+        sample of the observed value.
+
+    Returns
+    -------
+    4-Upla:(
+        mu0: float,
+        observed_value: float,
+        p_value: float,
+        ratio: float)
+    """
+
+    mu0 = sample_hyp1.mean()
+    observed_value = sample_hyp2.mean()
+    test_statistic, p_value = sm.stats.ztest(
+        sample_hyp2,
+        value=mu0,
+        alternative='smaller')
+    ratio = ((mu0 - observed_value)/mu0)*100
+    return (mu0, observed_value, p_value, ratio)
 
 
 def get_data_from_stdin(make_cmds, exec_cmds):
@@ -116,12 +150,16 @@ def main():
         target_info = get_data_from_stdin(tmake_cmds, texec_cmds)
         repo.git.checkout(sbranch)
 
-    print(source_info)
-    print(target_info)
-    if test.test_hypotheses(source_info['total_ns'], target_info['total_ns']):
+    significance_level = 0.01
+    mu0, observed_value, p_value, ratio = test_hypotheses(source_info['total_ns'], 
+                                                          target_info['total_ns'])
+    if p_value < significance_level:
         print('Assert in favour of the new approach.')
     else:
         print('No evidence to reject the previous approach.')
+    print("Mu0:", mu0)
+    print("Observed_value:", observed_value)
+    print(f"Ratio: {ratio}%")
 
 
 if __name__ == "__main__":
