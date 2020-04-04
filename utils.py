@@ -5,15 +5,15 @@ import pandas as pd
 import git
 import shlex
 from utils import test_hypotheses as test
-from io import StringIO 
+from io import StringIO
 from pathlib import Path
 
 parser = argparse.ArgumentParser()
 
 parser.add_argument(
-    '-sb', 
+    '-sb',
     '--sbranch',
-    nargs='?', 
+    nargs='?',
     help='name of the source branch')
 
 parser.add_argument(
@@ -24,7 +24,7 @@ parser.add_argument(
 
 parser.add_argument(
     '-tb',
-    '--tbranch', 
+    '--tbranch',
     help='name of the target branch')
 
 parser.add_argument(
@@ -34,19 +34,19 @@ parser.add_argument(
 )
 
 parser.add_argument(
-    '-sexec', 
-    nargs='?', 
+    '-sexec',
+    nargs='?',
     default='./headless',
     help='executable command to be run by the source branch')
-    
+
 parser.add_argument(
-    '-texec', 
-    nargs='?', 
+    '-texec',
+    nargs='?',
     default='./headless',
     help='executable command to be run by the target branch')
 
 parser.add_argument(
-    '-csv', 
+    '-csv',
     action='store_true',
     help='write measurements to a csv file.')
 
@@ -56,27 +56,45 @@ parser.add_argument(
     action='store_true',
     help='plot graphics.')
 
+
 def get_data_from_stdin(make_cmds, exec_cmds):
+    """
+    Run the procedures given by make_cmds and exec_cmds.
+    The output information is sent through stdin
+    to this file (utils.py) and parsed as a Panda DataFrame.
+
+    Parameters
+    -------
+    make_cmds: str
+        make commands separeted by spaces
+    exec_cmds: str
+        executable commands separeted by spaces
+    Returns
+    -------
+    data: Panda DataFrame object
+        measurements obtained by stout after running exec_cmds.
+    """
     try:
         subprocess.run(['make', 'clean'])
         subprocess.run(shlex.split(make_cmds))
         result = subprocess.run(
             shlex.split(exec_cmds),
-            stdout=subprocess.PIPE, 
+            stdout=subprocess.PIPE,
             shell=True).stdout.decode('utf-8')
     except subprocess.CalledProcessError as e:
         print('Fail execution of', e, file=sys.stderr)
         sys.exit(1)
-        
+
     data = StringIO(result)
     data = pd.read_csv(data)
     return data
+
 
 def main():
 
     repo_abs_path = str(Path(".").resolve())
     repo = git.Repo(repo_abs_path)
-    
+
     args = parser.parse_args()
     sbranch = repo.active_branch.name if args.sbranch is None else args.sbranch
     tbranch = args.tbranch
@@ -88,25 +106,23 @@ def main():
     if tbranch is None:
         source_info = get_data_from_stdin(smake_cmds, sexec_cmds)
         target_info = get_data_from_stdin(tmake_cmds, texec_cmds)
-        print(source_info)
-        print(target_info)    
-    else: 
+    else:
         if repo.is_dirty():
-            print('There are uncommited changes. You cannot switch between branches.', 
-                file=sys.stderr)
+            print('There are uncommited changes', file=sys.stderr)
             sys.exit(1)
         repo.git.checkout(sbranch)
         source_info = get_data_from_stdin(smake_cmds, sexec_cmds)
         repo.git.checkout(tbranch)
         target_info = get_data_from_stdin(tmake_cmds, texec_cmds)
-        repo.git.checkout(sbranch)    
+        repo.git.checkout(sbranch)
 
     print(source_info)
     print(target_info)
     if test.test_hypotheses(source_info['total_ns'], target_info['total_ns']):
-        print('There are strong evidence to assert in favour of the new approach')
+        print('Assert in favour of the new approach.')
     else:
-        print('There are no strong evidence to reject the previous approach')
+        print('No evidence to reject the previous approach.')
+
 
 if __name__ == "__main__":
     main()

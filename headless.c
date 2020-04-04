@@ -151,18 +151,6 @@ static void one_step ( void )
 	printf("%lf, %lf, %lf, %lf\n",
 			(react_ns_p_cell+vel_ns_p_cell+dens_ns_p_cell),
 			react_ns_p_cell, vel_ns_p_cell, dens_ns_p_cell);
-	/* if (1.0<wtime()-one_second) { 
-		printf("%lf, %lf, %lf, %lf\n",
-			(react_ns_p_cell+vel_ns_p_cell+dens_ns_p_cell)/times,
-			react_ns_p_cell/times, vel_ns_p_cell/times, dens_ns_p_cell/times);
-		one_second = wtime();
-		react_ns_p_cell = 0.0;
-		vel_ns_p_cell = 0.0;
-		dens_ns_p_cell = 0.0;
-		times = 1;
-	} else {
-		times++;
-	} */
 }
 
 
@@ -196,7 +184,7 @@ int main ( int argc, char ** argv )
 		visc = 0.0f;
 		force = 5.0f;
 		source = 100.0f;
-		steps = 50;
+		steps = 5;
 		
 		fprintf ( stderr, "Using defaults : N=%d dt=%g diff=%g visc=%g force = %g source=%g steps=%d\n",
 			N, dt, diff, visc, force, source, steps);
