@@ -13,11 +13,12 @@ all: $(TARGETS)
 demo: demo.o $(COMMON_OBJECTS)
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS) -lGL -lGLU -lglut
 
+# make headless CFLAGS='-Ofast -march=native -floop-nest-optimize -funroll-loops -flto -g'
 headless: headless.o $(COMMON_OBJECTS)
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
 asm: solver.o
-	$(CC) $(CFLAGS) -fno-asynchronous-unwind-tables -fno-exceptions \ -S solver.c
+	$(CC) $(CFLAGS) -fno-asynchronous-unwind-tables -fno-exceptions -S solver.c
 
 runperf: headless
 	sudo perf stat \
@@ -27,7 +28,12 @@ runperf: headless
 	L1-dcache-stores,\
 	L1-dcache-store-misses,\
 	LLC-stores,\
-	LLC-store-misses \
+	LLC-store-misses,\
+	page-faults,\
+	cycles,\
+	instructions,\
+	branches,\
+	branch-misses \
 	-ddd \
 	./headless
 
