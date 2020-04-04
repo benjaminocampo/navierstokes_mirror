@@ -1,3 +1,17 @@
+# const N optimization
+<!-- TODO
+float square(short n, float* x) {
+    // n = 2147483647;
+    //n = 21474836;
+    //n = 32767;
+    float sum = 0;
+    for (int i = 0; i < n; i++)
+        for (int j = 0; j < n; j++)
+            sum += x[i + j*n];
+    return sum;
+}
+-->
+
 # `IX` Optimization
 
 <!-- TODO: Talk about the (i, j) swap:

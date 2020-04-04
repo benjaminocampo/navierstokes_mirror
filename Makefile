@@ -13,6 +13,7 @@ all: $(TARGETS)
 demo: demo.o $(COMMON_OBJECTS)
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS) -lGL -lGLU -lglut
 
+# make headless CFLAGS='-Ofast -march=native -floop-nest-optimize -funroll-loops -flto -g'
 headless: headless.o $(COMMON_OBJECTS)
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
