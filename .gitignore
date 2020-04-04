@@ -3,4 +3,5 @@ headless
 .depend
 *.o
 .vscode
+*.pyc
 perf.data*

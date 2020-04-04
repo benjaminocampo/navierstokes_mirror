@@ -30,7 +30,7 @@ extern void vel_step ( int N, float * u, float * v, float * u0, float * v0, floa
 
 /* global variables */
 
-static int N;
+static int N, steps;
 static float dt, diff, visc;
 static float force, source;
 
@@ -127,37 +127,28 @@ static void react ( float * d, float * u, float * v )
 
 static void one_step ( void )
 {
-	static int times = 1;
+	//static int times = 1;
 	static double start_t = 0.0;
-	static double one_second = 0.0;
+	//static double one_second = 0.0;
 	static double react_ns_p_cell = 0.0;
 	static double vel_ns_p_cell = 0.0;
 	static double dens_ns_p_cell = 0.0;
-
+	 
 	start_t = wtime();
 	react ( dens_prev, u_prev, v_prev );
-	react_ns_p_cell += 1.0e9 * (wtime()-start_t)/(N*N);
+	react_ns_p_cell = 1.0e9 * (wtime()-start_t)/(N*N);
 
 	start_t = wtime();
 	vel_step ( N, u, v, u_prev, v_prev, visc, dt );
-	vel_ns_p_cell += 1.0e9 * (wtime()-start_t)/(N*N);
+	vel_ns_p_cell = 1.0e9 * (wtime()-start_t)/(N*N);
 
 	start_t = wtime();
 	dens_step ( N, dens, dens_prev, u, v, diff, dt );
-	dens_ns_p_cell += 1.0e9 * (wtime()-start_t)/(N*N);
+	dens_ns_p_cell = 1.0e9 * (wtime()-start_t)/(N*N);
 
-	if (1.0<wtime()-one_second) { /* at least 1s between stats */
-		printf("ns per cell total=%lf, react=%lf, vel_step=%lf, dens_step=%lf\n",
-			(react_ns_p_cell+vel_ns_p_cell+dens_ns_p_cell)/times,
-			react_ns_p_cell/times, vel_ns_p_cell/times, dens_ns_p_cell/times);
-		one_second = wtime();
-		react_ns_p_cell = 0.0;
-		vel_ns_p_cell = 0.0;
-		dens_ns_p_cell = 0.0;
-		times = 1;
-	} else {
-		times++;
-	}
+	printf("%lf, %lf, %lf, %lf\n",
+			(react_ns_p_cell+vel_ns_p_cell+dens_ns_p_cell),
+			react_ns_p_cell, vel_ns_p_cell, dens_ns_p_cell);
 }
 
 
@@ -171,7 +162,7 @@ int main ( int argc, char ** argv )
 {
 	int i = 0;
 
-	if ( argc != 1 && argc != 7 ) {
+	if ( argc != 1 && argc != 8 ) {
 		fprintf ( stderr, "usage : %s N dt diff visc force source\n", argv[0] );
 		fprintf ( stderr, "where:\n" );\
 		fprintf ( stderr, "\t N      : grid resolution\n" );
@@ -180,6 +171,7 @@ int main ( int argc, char ** argv )
 		fprintf ( stderr, "\t visc   : viscosity of the fluid\n" );
 		fprintf ( stderr, "\t force  : scales the mouse movement that generate a force\n" );
 		fprintf ( stderr, "\t source : amount of density that will be deposited\n" );
+		fprintf ( stderr, "\t steps : amount of steps the program will be executed\n" );
 		exit ( 1 );
 	}
 
@@ -190,8 +182,10 @@ int main ( int argc, char ** argv )
 		visc = 0.0001f;
 		force = 5.0f;
 		source = 100.0f;
-		fprintf ( stderr, "Using defaults : N=%d dt=%g diff=%g visc=%g force = %g source=%g\n",
-			N, dt, diff, visc, force, source );
+		steps = 5;
+		
+		fprintf ( stderr, "Using defaults : N=%d dt=%g diff=%g visc=%g force = %g source=%g steps=%d\n",
+			N, dt, diff, visc, force, source, steps);
 	} else {
 		N = atoi(argv[1]);
 		dt = atof(argv[2]);
@@ -199,13 +193,14 @@ int main ( int argc, char ** argv )
 		visc = atof(argv[4]);
 		force = atof(argv[5]);
 		source = atof(argv[6]);
+		steps = atoi(argv[7]);
 	}
 
 	if ( !allocate_data () ) exit ( 1 );
 	clear_data ();
-	for (i=0; i<2048; i++)
+	printf("total_ns,react,vel_step,dens_step\n");
+	for (i=0; i<steps; i++)
 		one_step ();
 	free_data ();
-
 	exit ( 0 );
 }
