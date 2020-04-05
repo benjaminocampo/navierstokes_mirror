@@ -133,7 +133,7 @@ static void one_step ( void )
 	static double react_ns_p_cell = 0.0;
 	static double vel_ns_p_cell = 0.0;
 	static double dens_ns_p_cell = 0.0;
-	 
+
 	start_t = wtime();
 	react ( dens_prev, u_prev, v_prev );
 	react_ns_p_cell = 1.0e9 * (wtime()-start_t)/(N*N);
@@ -161,6 +161,7 @@ static void one_step ( void )
 int main ( int argc, char ** argv )
 {
 	int i = 0;
+	setbuf(stdout, NULL);
 
 	if ( argc != 1 && argc != 8 ) {
 		fprintf ( stderr, "usage : %s N dt diff visc force source\n", argv[0] );
@@ -183,7 +184,6 @@ int main ( int argc, char ** argv )
 		force = 5.0f;
 		source = 100.0f;
 		steps = 5;
-		
 		fprintf ( stderr, "Using defaults : N=%d dt=%g diff=%g visc=%g force = %g source=%g steps=%d\n",
 			N, dt, diff, visc, force, source, steps);
 	} else {
@@ -194,6 +194,8 @@ int main ( int argc, char ** argv )
 		force = atof(argv[5]);
 		source = atof(argv[6]);
 		steps = atoi(argv[7]);
+		fprintf ( stderr, "Using customs : N=%d dt=%g diff=%g visc=%g force = %g source=%g steps=%d\n",
+			N, dt, diff, visc, force, source, steps);
 	}
 
 	if ( !allocate_data () ) exit ( 1 );
