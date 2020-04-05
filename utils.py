@@ -36,14 +36,28 @@ parser.add_argument(
 parser.add_argument(
     '-sexec',
     nargs='?',
-    default='./headless',
+    default=None,
     help='executable command to be run by the source branch')
 
 parser.add_argument(
     '-texec',
     nargs='?',
-    default='./headless',
+    default=None,
     help='executable command to be run by the target branch')
+
+parser.add_argument(
+    '-n',
+    nargs="?",
+    default="128",
+    help="length of the square grid"
+)
+
+parser.add_argument(
+    '-steps',
+    nargs="?",
+    default="4",
+    help="amount of steps to simulate"
+)
 
 parser.add_argument(
     '-csv',
@@ -100,13 +114,13 @@ def get_data_from_stdin(make_cmds, exec_cmds):
     Parameters
     -------
     make_cmds: str
-        make commands separeted by spaces
+        make commands separated by spaces
     exec_cmds: str
-        executable commands separeted by spaces
+        executable commands separated by spaces
     Returns
     -------
     data: Panda DataFrame object
-        measurements obtained by stout after running exec_cmds.
+        measurements obtained by stdout after running exec_cmds.
     """
     try:
         subprocess.run(['make', 'clean'])
@@ -133,9 +147,15 @@ def main():
     sbranch = repo.active_branch.name if args.sbranch is None else args.sbranch
     tbranch = args.tbranch
     smake_cmds = args.smake
+    n = args.n
+    steps = args.steps
     sexec_cmds = args.sexec
+    if sexec_cmds is None and n is not None and steps is not None:
+        sexec_cmds = f"./headless {n} 0.1 0.001 0.0001 5.0 100.0 {steps}"
     tmake_cmds = args.tmake
     texec_cmds = args.texec
+    if texec_cmds is None and n is not None and steps is not None:
+        texec_cmds = f"./headless {n} 0.1 0.001 0.0001 5.0 100.0 {steps}"
 
     if tbranch is None:
         source_info = get_data_from_stdin(smake_cmds, sexec_cmds)
@@ -151,7 +171,7 @@ def main():
         repo.git.checkout(sbranch)
 
     significance_level = 0.01
-    mu0, observed_value, p_value, ratio = test_hypotheses(source_info['total_ns'], 
+    mu0, observed_value, p_value, ratio = test_hypotheses(source_info['total_ns'],
                                                           target_info['total_ns'])
     if p_value < significance_level:
         print('Assert in favour of the new approach.')
