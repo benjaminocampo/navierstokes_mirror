@@ -139,12 +139,12 @@ def get_data_from_stdin(make_cmds, exec_cmds):
 
 
 def main():
-
     repo_abs_path = str(Path(".").resolve())
     repo = git.Repo(repo_abs_path)
 
     args = parser.parse_args()
-    sbranch = repo.active_branch.name if args.sbranch is None else args.sbranch
+    initial_branch = repo.active_branch.name
+    sbranch = initial_branch if args.sbranch is None else args.sbranch
     tbranch = args.tbranch
     smake_cmds = args.smake
     n = args.n
@@ -161,14 +161,24 @@ def main():
         source_info = get_data_from_stdin(smake_cmds, sexec_cmds)
         target_info = get_data_from_stdin(tmake_cmds, texec_cmds)
     else:
-        if repo.is_dirty():
-            print('There are uncommited changes', file=sys.stderr)
-            sys.exit(1)
-        repo.git.checkout(sbranch)
-        source_info = get_data_from_stdin(smake_cmds, sexec_cmds)
-        repo.git.checkout(tbranch)
-        target_info = get_data_from_stdin(tmake_cmds, texec_cmds)
-        repo.git.checkout(sbranch)
+        failed = False
+        was_dirty = repo.is_dirty()
+        if was_dirty:
+            repo.git.stash()
+        try:
+            repo.git.checkout(sbranch)
+            source_info = get_data_from_stdin(smake_cmds, sexec_cmds)
+            repo.git.checkout(tbranch)
+            target_info = get_data_from_stdin(tmake_cmds, texec_cmds)
+        except BaseException as e:
+            failed = True
+            print(f"There was an error in the execution: {repr(e)}")
+        finally:
+            repo.git.checkout(initial_branch)
+            if was_dirty:
+                repo.git.stash("pop")
+        if failed:
+            exit(1)
 
     significance_level = 0.01
     mu0, observed_value, p_value, ratio = test_hypotheses(source_info['total_ns'],
