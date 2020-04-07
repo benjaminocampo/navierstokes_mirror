@@ -1,6 +1,7 @@
 import os
 from os import popen
 from os import chdir
+from os.path import isdir
 from time import time
 
 SHOULD_RUN = True
@@ -28,14 +29,15 @@ def run(branch, flags, n, steps):
     underscored = lambda s: "_".join(s.split())
     cmditime = time()
     directory = f"{branch}_n{n}_steps{steps}_{underscored(flags)}"
-    cmd(f"cp -r navierstokes {directory}")
+    if not isdir(f"./{directory}"):
+        cmd(f"cp -r navierstokes {directory}")
     chdir(directory)
     cmd(f"git checkout l1-{branch}")
     cmd("make clean")
     cmd(f"make headless CFLAGS='-g {flags}'")
     if (SHOULD_RUN): cmd(run_cmd)
-    if (SHOULD_PERFRECORD): cmd(perfstat_cmd)
-    if (SHOULD_PERFSTAT): cmd(perfrecord_cmd)
+    if (SHOULD_PERFSTAT): cmd(perfstat_cmd)
+    if (SHOULD_PERFRECORD): cmd(perfrecord_cmd)
     chdir("..")
     printf(f">>> [TIME] Run finished in {time() - cmditime} seconds.")
 
@@ -53,7 +55,7 @@ for n, steps in [(2048, 32), (512, 128), (128, 512)]:
     run("baseline", "-O3", n, steps)
     run("baseline", "-Ofast", n, steps)
     run("baseline", "-Os", n, steps)
-    run("baseline", "-Os -floop-interchange -floop-nest-optimize", n, steps)
+    run("baseline", "-O3 -floop-interchange -floop-nest-optimize", n, steps)
     run("ijswap", "-O3", n, steps)
 
     # ijswap (-O3) -> invc (-O3)
