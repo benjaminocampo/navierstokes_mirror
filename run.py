@@ -75,6 +75,8 @@ for n, steps in [(2048, 32), (512, 128), (128, 512)]:
     run("invc", "-Ofast -march=native -funroll-loops -floop-nest-optimize", n, steps)
     run("invc", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto", n, steps)
 
+    run("bblocks", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto", n, steps)
+
     run(f"constn{n}", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto", n, steps)
     run(f"zdiffvisc{n}", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto", n, steps)
 
