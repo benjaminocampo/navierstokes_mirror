@@ -56,8 +56,8 @@ static void lin_solve(unsigned int n, boundary b, float * x, const float * x0, f
 {
     // TODO: It does not work for n != 2**k, will not traverse all cells
     const float invc = 1 / c;
-    const int tile_width = 8;
-    const int tile_height = 4;
+    const int tile_width = 4; // 8 for i7 7700hq, 4 for e5 2560v3
+    const int tile_height = 4; // 4 in both
     const int N = (int) n;
     for (unsigned int k = 0; k < 20; k++) {
         for (int ti = 0; ti < N - 2; ti += tile_width) {
