@@ -168,7 +168,7 @@ static void draw_density ( void )
   ----------------------------------------------------------------------
 */
 
-static void react ( float * d, float * u, float * v )
+static void react ( float * d, float * uu, float * vv )
 {
 	int i, j, size = (N+2)*(N+2);
 
@@ -177,8 +177,8 @@ static void react ( float * d, float * u, float * v )
 
 	max_velocity2 = max_density = 0.0f;
 	for ( i=0 ; i<size ; i++ ) {
-		if (max_velocity2 < u[i]*u[i] + v[i]*v[i]) {
-			max_velocity2 = u[i]*u[i] + v[i]*v[i];
+		if (max_velocity2 < uu[i]*uu[i] + vv[i]*vv[i]) {
+			max_velocity2 = uu[i]*uu[i] + vv[i]*vv[i];
 		}
 		if (max_density < d[i]) {
 			max_density = d[i];
@@ -186,12 +186,12 @@ static void react ( float * d, float * u, float * v )
 	}
 
 	for ( i=0 ; i<size ; i++ ) {
-		u[i] = v[i] = d[i] = 0.0f;
+		uu[i] = vv[i] = d[i] = 0.0f;
 	}
 
 	if (max_velocity2<0.0000005f) {
-		u[IX(N/2,N/2)] = force * 1000.0f;
-		v[IX(N/2,N/2)] = force * 1000.0f;
+		uu[IX(N/2,N/2)] = force * 1000.0f;
+		vv[IX(N/2,N/2)] = force * 1000.0f;
 	}
 	if (max_density<1.0f) {
 		d[IX(N/2,N/2)] = source * 1000.0f;
@@ -205,8 +205,8 @@ static void react ( float * d, float * u, float * v )
 	if ( i<1 || i>N || j<1 || j>N ) return;
 
 	if ( mouse_down[0] ) {
-		u[IX(i,j)] = force * (mx-omx);
-		v[IX(i,j)] = force * (omy-my);
+		uu[IX(i,j)] = force * (mx-omx);
+		vv[IX(i,j)] = force * (omy-my);
 	}
 
 	if ( mouse_down[2] ) {

@@ -1,6 +1,6 @@
 # TODO: Try -ffast-math
 CC=cc
-override CFLAGS:=-std=c99 -Wall -Wextra -Werror -Wno-unused-parameter $(CFLAGS)
+override CFLAGS:=-std=c99 -Wall -Wextra -Werror -Wshadow -Wno-unused-parameter $(CFLAGS)
 LDFLAGS=
 
 TARGETS=demo headless
