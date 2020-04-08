@@ -1,12 +1,4 @@
-// TODO: Make u and v be part of a velocity struct so we have faster locality
-// access and measure it compared to the current solution
-// diffuse may need to be rewritten, but project, advect and other loops may
-// be benefited
-
-// TODO: Implement statistical hypothesis proof when measuring performance
-
 #include <stddef.h>
-
 #include "solver.h"
 
 #define IX(i,j) ((j)+(n+2)*(i))
@@ -36,6 +28,7 @@ static void set_bnd(unsigned int n, boundary b, float * x)
     x[IX(n + 1, n + 1)] = 0.5f * (x[IX(n, n + 1)] + x[IX(n + 1, n)]);
 }
 
+/* Old lin_solve algorithm
 static void lin_solve(unsigned int n, boundary b, float * x, const float * x0, float a, float c)
 {
     const float invc = 1 / c;
@@ -56,6 +49,75 @@ static void lin_solve(unsigned int n, boundary b, float * x, const float * x0, f
         set_bnd(n, b, x);
     }
 }
+*/
+
+// basic manual cache blocking
+static void lin_solve(unsigned int n, boundary b, float * x, const float * x0, float a, float c)
+{
+    // TODO: It does not work for n != 2**k, will not traverse all cells
+    const float invc = 1 / c;
+    const int tile_width = 4; // 8 for i7 7700hq, 4 for e5 2560v3
+    const int tile_height = 4; // 4 in both
+    const int N = (int) n;
+    for (unsigned int k = 0; k < 20; k++) {
+        for (int ti = 0; ti < N - 2; ti += tile_width) {
+            for (int tj = 0; tj < N - 2; tj += tile_height) {
+                for (int ii = 0; ii < tile_width; ii++) {
+                    for (int jj = 0; jj < tile_height; jj++) {
+                        const int i = 1 + ti + ii;
+                        const int j = 1 + tj + jj;
+                        x[IX(i, j)] = (
+                            x0[IX(i, j)] +
+                            a * (
+                                x[IX(i - 1, j)] +
+                                x[IX(i + 1, j)] +
+                                x[IX(i, j - 1)] +
+                                x[IX(i, j + 1)]
+                            )
+                        ) * invc;
+                    }
+                }
+            }
+        }
+        set_bnd(n, b, x);
+    }
+}
+
+// Smart lin_solve try
+/*
+static void lin_solve(unsigned int n, boundary b, float * x, const float * x0, float a, float c) {
+    int N = (int) n;
+    const int tile_size = 16;
+    for (int ti = 1; ti < (N + 2) / tile_size - 1; ti++) {
+        for (int tj = 1; tj < (N + 2) / tile_size - 1; tj++) {
+            int tile_i = ti * tile_size;
+            int tile_j = tj * tile_size;
+            int offset = 1;
+            for (int counter = 0; counter < 3; counter++) { // do it three times so there are about 7 * 3 = 21 iterations
+                while (offset < tile_size / 2) {
+                    for (int i = tile_i + offset; i < tile_i + tile_size - offset; i++) {
+                        for (int j = tile_j + offset; j < tile_j + tile_size - offset; j++) {
+                            x[IX(i, j)] = (x0[IX(i, j)] + a * (x[IX(i - 1, j)] + x[IX(i + 1, j)] + x[IX(i, j - 1)] + x[IX(i, j + 1)])) / c;
+                        }
+                    }
+                    offset++;
+                } // Pos: offset = 8
+                for (int r = 0; r <= tile_size / 2 - 2; r++) { // perimeters remaining
+                    for (int p = tile_size / 2 - 2 - r; p >= 0; p--) { // fill perimeter
+                        for (int i = 1; i < tile_size - p * 2; i++) {
+                            // TODO: there is a p - 1 index here, that will crash in boundaries
+                            x[IX(tile_i + p, p + i + tile_j)] = (x0[IX(tile_i + p, p + i + tile_j)] + a * (x[IX(tile_i + -1 + p, p + i + tile_j)] + x[IX(tile_i + 1 + p, p + i + tile_j)] + x[IX(tile_i + p, p + i - 1 + tile_j)] + x[IX(tile_i + p, p + i + 1 + tile_j)])) / c;
+                            x[IX(tile_i + p + i, tile_size - p - 1 + tile_j)] = (x0[IX(tile_i + p + i, tile_size - p - 1 + tile_j)] + a * (x[IX(tile_i + -1 + p + i, tile_size - p - 1 + tile_j)] + x[IX(tile_i + 1 + p + i, tile_size - p - 1 + tile_j)] + x[IX(tile_i + p + i, tile_size - p - 1 - 1 + tile_j)] + x[IX(tile_i + p + i, tile_size - p - 1 + 1 + tile_j)])) / c;
+                            x[IX(tile_i + tile_size - p - 1 - i, p + tile_j)] = (x0[IX(tile_i + tile_size - p - 1 - i, p + tile_j)] + a * (x[IX(tile_i + -1 + tile_size - p - 1 - i, p + tile_j)] + x[IX(tile_i + 1 + tile_size - p - 1 - i, p + tile_j)] + x[IX(tile_i + tile_size - p - 1 - i, p - 1 + tile_j)] + x[IX(tile_i + tile_size - p - 1 - i, p + 1 + tile_j)])) / c;
+                            x[IX(tile_i + tile_size - p - 1, tile_size - p - 1 - i + tile_j)] = (x0[IX(tile_i + tile_size - p - 1, tile_size - p - 1 - i + tile_j)] + a * (x[IX(tile_i + -1 + tile_size - p - 1, tile_size - p - 1 - i + tile_j)] + x[IX(tile_i + 1 + tile_size - p - 1, tile_size - p - 1 - i + tile_j)] + x[IX(tile_i + tile_size - p - 1, tile_size - p - 1 - i - 1 + tile_j)] + x[IX(tile_i + tile_size - p - 1, tile_size - p - 1 - i + 1 + tile_j)])) / c;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+*/
 
 static void diffuse(unsigned int n, boundary b, float * x, const float * x0, float diff, float dt)
 {
