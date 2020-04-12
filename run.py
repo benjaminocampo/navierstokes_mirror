@@ -66,7 +66,7 @@ def batch(branch, flags, n, steps):
     make clean &&
     make headless CFLAGS='-g {flags}' &&
     {perfstat_run_cmd} ||
-    echo {run_name}.error # If this is in the root then you know there was an error
+    echo "If you see this file then your run with this filename had a problem, inspect runs/ folder for more information" > {run_name}.error # If this is in the root then you know there was an error
     """)
     with open(submission_filename, "w") as submission:
         submission.write(submission_text)
