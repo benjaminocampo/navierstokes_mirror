@@ -82,40 +82,38 @@ def main():
     )
     arguments = parser.parse_args()
 
-    try:
-        prun = run if arguments.no_batch else batch # Pick appropiate run method
-        setup_run_folder()
-        repo, initial_branch = save_git_state()
-        itime = time()
-        printf(">>> [START]")
-        for n, steps in [(128, 512), (2048, 32), (512, 128)]:
-            prun("baseline", "-O0", n, steps)
-            prun("baseline", "-O1", n, steps)
-            prun("baseline", "-O2", n, steps)
-            prun("baseline", "-O3", n, steps)
-            prun("baseline", "-Ofast", n, steps)
-            prun("baseline", "-Os", n, steps)
-            prun("baseline", "-O3 -floop-interchange -floop-nest-optimize", n, steps)
-            prun("ijswap", "-O3", n, steps)
+    prun = run if arguments.no_batch else batch # Pick appropiate run method
+    setup_run_folder()
+    repo, initial_branch = save_git_state()
+    itime = time()
+    printf(">>> [START]")
+    for n, steps in [(128, 512), (2048, 32), (512, 128)]:
+        prun("baseline", "-O0", n, steps)
+        prun("baseline", "-O1", n, steps)
+        prun("baseline", "-O2", n, steps)
+        prun("baseline", "-O3", n, steps)
+        prun("baseline", "-Ofast", n, steps)
+        prun("baseline", "-Os", n, steps)
+        prun("baseline", "-O3 -floop-interchange -floop-nest-optimize", n, steps)
+        prun("ijswap", "-O3", n, steps)
 
-            prun("invc", "-O3", n, steps)
-            prun("ijswap", "-O3 -freciprocal-math", n, steps)
-            prun("ijswap", "-Ofast", n, steps)
+        prun("invc", "-O3", n, steps)
+        prun("ijswap", "-O3 -freciprocal-math", n, steps)
+        prun("ijswap", "-Ofast", n, steps)
 
-            prun("invc", "-Ofast", n, steps)
-            prun("invc", "-Ofast -march=native", n, steps)
-            prun("invc", "-Ofast -march=native -funroll-loops", n, steps)
-            prun("invc", "-Ofast -march=native -funroll-loops -floop-nest-optimize", n, steps)
-            prun("invc", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto", n, steps)
+        prun("invc", "-Ofast", n, steps)
+        prun("invc", "-Ofast -march=native", n, steps)
+        prun("invc", "-Ofast -march=native -funroll-loops", n, steps)
+        prun("invc", "-Ofast -march=native -funroll-loops -floop-nest-optimize", n, steps)
+        prun("invc", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto", n, steps)
 
-            prun("bblocks", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto", n, steps)
+        prun("bblocks", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto", n, steps)
 
-            prun(f"constn{n}", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto", n, steps)
-            prun(f"zdiffvisc{n}", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto", n, steps)
-    except BaseException as e:
-        print(f"There was an error in the execution: {repr(e)}")
-    finally:
-        restore_git_state(repo, initial_branch)
+        prun(f"constn{n}", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto", n, steps)
+        prun(f"zdiffvisc{n}", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto", n, steps)
+
+    # Batch command to restore git state after all batches
+    cmd(f"nohup srun --job-name=cleanup 'git checkout {initial_branch} && git stash pop' &")
     printf(f"Done in {time() - itime} seconds with {error_count} errors.")
 
 if __name__ == "__main__":
