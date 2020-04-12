@@ -52,7 +52,7 @@ def batch(branch, flags, n, steps):
     run_cmd = f"./headless {n} 0.1 0.001 0.0001 5.0 100.0 {steps} > runs/stdouts/{run_name}.output"
     perfstat_cmd = f"perf stat -o runs/perfstats/{run_name}.output -e cache-references,cache-misses,L1-dcache-stores,L1-dcache-store-misses,LLC-stores,LLC-store-misses,page-faults,cycles,instructions,branches,branch-misses -ddd"
     perfstat_run_cmd = f"{perfstat_cmd} {run_cmd}"
-    submission_filename = f"submissions/{run_name}.sh"
+    submission_filename = f"runs/submissions/{run_name}.sh"
     submission_text = cleandoc(f"""
     #!/bin/bash
     #SBATCH --job-name={n}x{steps}
