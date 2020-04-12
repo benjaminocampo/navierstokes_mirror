@@ -59,13 +59,14 @@ def batch(branch, flags, n, steps):
     #SBATCH --ntasks=1
     #SBATCH --cpus-per-task=1
     #SBATCH --exclusive
-    #SBATCH -o runs/slurmerr/{run_name}.out
+    #SBATCH -o runs/slurmout/{run_name}.out
     #SBATCH -e runs/slurmerr/{run_name}.err
 
-    git checkout l1-{branch}
-    make clean
-    make headless CFLAGS='-g {flags}'
-    {perfstat_run_cmd}
+    git checkout l1-{branch} &&
+    make clean &&
+    make headless CFLAGS='-g {flags}' &&
+    {perfstat_run_cmd} ||
+    echo {run_name}.error # If this is in the root then you know there was an error
     """)
     with open(submission_filename, "w") as submission:
         submission.write(submission_text)
