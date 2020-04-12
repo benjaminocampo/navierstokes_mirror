@@ -1,9 +1,11 @@
 import os
+import argparse
+
 from os import popen
 from os import chdir, makedirs
 from os.path import isdir
 from time import time
-import argparse
+from inspect import cleandoc
 
 SHOULD_RUN = True # Generates run.output and perfstat.output
 
@@ -19,24 +21,18 @@ parser.add_argument(
 arguments = parser.parse_args()
 
 error_count = 0
-def cmd(c, prefix="", suffix=""):
+def cmd(c):
     global error_count
     red_color = "\033[91m"
     end_color = "\033[0m"
     printf(f"\n>>> [COMMAND] {c} @ {os.getcwd()}")
-    if os.system(f'{prefix}{c}{suffix}'):
+    if os.system(c): # Command returned != 0
         printf(f"{red_color}>>> [ERROR] there was an error in command:{end_color}")
         printf(f"{red_color}>>> [ERROR] {c} @ {os.getcwd()}{end_color}")
         exit()
         error_count += 1
 
-def batch(branch, flags, n, steps):
-    job_name = f"{n}x{steps}"
-    prefix = f"nohup srun --job-name='{job_name}' --ntasks=1 --cpus-per-task=1 --exclusive " # Dettach job from this terminal
-    suffix = f" 2>/dev/null &" # Nulls stderr output, nohup tends to send to stdout otherwise
-    return run(branch, flags, n, steps, prefix, suffix)
-
-def run(branch, flags, n, steps, prefix="", suffix=""):
+def run(branch, flags, n, steps):
     underscored = lambda s: "_".join(s.split())
     run_name = f"{branch}_n{n}_steps{steps}_{underscored(flags)}"
     run_cmd = f"./headless {n} 0.1 0.001 0.0001 5.0 100.0 {steps} > runs/stdouts/{run_name}.output"
@@ -47,10 +43,34 @@ def run(branch, flags, n, steps, prefix="", suffix=""):
     cmd(f"git checkout l1-{branch}")
     cmd("make clean")
     cmd(f"make headless CFLAGS='-g {flags}'")
-    if (SHOULD_RUN): cmd(perfstat_run_cmd, prefix, suffix)
+    if (SHOULD_RUN): cmd(perfstat_run_cmd)
     printf(f">>> [TIME] Run finished in {time() - start_time} seconds.")
 
+def batch(branch, flags, n, steps):
+    underscored = lambda s: "_".join(s.split())
+    run_name = f"{branch}_n{n}_steps{steps}_{underscored(flags)}"
+    run_cmd = f"./headless {n} 0.1 0.001 0.0001 5.0 100.0 {steps} > runs/stdouts/{run_name}.output"
+    perfstat_cmd = f"perf stat -o runs/perfstats/{run_name}.output -e cache-references,cache-misses,L1-dcache-stores,L1-dcache-store-misses,LLC-stores,LLC-store-misses,page-faults,cycles,instructions,branches,branch-misses -ddd"
+    perfstat_run_cmd = f"{perfstat_cmd} {run_cmd}"
+    submission_filename = f"submissions/{run_name}.sh"
+    submission_text = cleandoc(f"""
+    #!/bin/bash
+    #SBATCH --job-name={n}x{steps}
+    #SBATCH --ntasks=1
+    #SBATCH --cpus-per-task=1
+    #SBATCH --exclusive
+
+    git checkout l1-{branch}
+    make clean
+    make headless CFLAGS='-g {flags}'
+    {perfstat_run_cmd}
+    """)
+    with open(submission_filename, "w") as submission:
+        submission.write(submission_text)
+    if (SHOULD_RUN): cmd(f"sbatch ./{submission_filename}")
+
 def setup_run_folder():
+    makedirs("runs/submissions", exist_ok=True)
     makedirs("runs/stdouts", exist_ok=True)
     makedirs("runs/perfstats", exist_ok=True)
 
