@@ -87,7 +87,7 @@ def main():
     repo, initial_branch = save_git_state()
     itime = time()
     printf(">>> [START]")
-    for n, steps in [(128, 512), (2048, 32), (512, 128)]:
+    for n, steps in [(128, 512), (512, 128), (2048, 32)]:
         prun("baseline", "-O0", n, steps)
         prun("baseline", "-O1", n, steps)
         prun("baseline", "-O2", n, steps)
@@ -113,7 +113,7 @@ def main():
         prun(f"zdiffvisc{n}", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto", n, steps)
 
     # Batch command to restore git state after all batches
-    cmd(f"nohup srun --job-name=cleanup 'git checkout {initial_branch} && git stash pop' &")
+    cmd(f"nohup srun --job-name=cleanup -- git checkout {initial_branch} && git stash pop &")
     printf(f"Done in {time() - itime} seconds with {error_count} errors.")
 
 if __name__ == "__main__":
