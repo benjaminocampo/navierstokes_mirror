@@ -59,6 +59,8 @@ def batch(branch, flags, n, steps):
     #SBATCH --ntasks=1
     #SBATCH --cpus-per-task=1
     #SBATCH --exclusive
+    #SBATCH -o runs/slurmerr/{run_name}.out
+    #SBATCH -e runs/slurmerr/{run_name}.err
 
     git checkout l1-{branch}
     make clean
@@ -73,6 +75,8 @@ def setup_run_folder():
     makedirs("runs/submissions", exist_ok=True)
     makedirs("runs/stdouts", exist_ok=True)
     makedirs("runs/perfstats", exist_ok=True)
+    makedirs("runs/slurmout", exist_ok=True)
+    makedirs("runs/slurmerr", exist_ok=True)
 
 prun = run if arguments.no_batch else batch # Pick appropiate run method
 setup_run_folder()

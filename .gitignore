@@ -6,3 +6,4 @@ headless
 *.pyc
 perf.data*
 runs/
+slurm*
