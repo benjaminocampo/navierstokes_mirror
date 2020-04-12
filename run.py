@@ -4,9 +4,8 @@ from os import chdir
 from os.path import isdir
 from time import time
 
-SHOULD_RUN = True
+SHOULD_RUN = True # Generates run.output and perfstat.output
 SHOULD_PERFRECORD = False
-SHOULD_PERFSTAT = False # Not recommended, all those perf.data will occupy a lot
 
 printf = lambda s: print(s, flush=True)
 
@@ -24,10 +23,12 @@ def cmd(c):
 
 def run(branch, flags, n, steps):
     run_cmd = f"./headless {n} 0.1 0.001 0.0001 5.0 100.0 {steps} > run.output"
-    perfstat_cmd = f"perf stat -o perfstat.output -e cache-references,cache-misses,L1-dcache-stores,L1-dcache-store-misses,LLC-stores,LLC-store-misses,page-faults,cycles,instructions,branches,branch-misses -ddd ./headless {n} 0.1 0.001 0.0001 5.0 100.0 {steps}"
-    perfrecord_cmd = f"perf record -g ./headless {n} 0.1 0.001 0.0001 5.0 100.0 {steps}"
+    perfstat_cmd = f"perf stat -o perfstat.output -e cache-references,cache-misses,L1-dcache-stores,L1-dcache-store-misses,LLC-stores,LLC-store-misses,page-faults,cycles,instructions,branches,branch-misses -ddd"
+    perfstat_run_cmd = f"{perfstat_cmd} {run_cmd}"
+    perfrecord_cmd = f"perf record -g {run_cmd}"
+
     underscored = lambda s: "_".join(s.split())
-    cmditime = time()
+    start_time = time()
     directory = f"{branch}_n{n}_steps{steps}_{underscored(flags)}"
     if not isdir(f"./{directory}"):
         cmd(f"cp -r navierstokes {directory}")
@@ -35,11 +36,10 @@ def run(branch, flags, n, steps):
     cmd(f"git checkout l1-{branch}")
     cmd("make clean")
     cmd(f"make headless CFLAGS='-g {flags}'")
-    if (SHOULD_RUN): cmd(run_cmd)
-    if (SHOULD_PERFSTAT): cmd(perfstat_cmd)
-    if (SHOULD_PERFRECORD): cmd(perfrecord_cmd)
+    if (SHOULD_RUN): cmd(perfstat_run_cmd)
+    elif (SHOULD_PERFRECORD): cmd(perfrecord_cmd)
     chdir("..")
-    printf(f">>> [TIME] Run finished in {time() - cmditime} seconds.")
+    printf(f">>> [TIME] Run finished in {time() - start_time} seconds.")
 
 
 itime = time()
