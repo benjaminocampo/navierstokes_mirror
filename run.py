@@ -1,11 +1,12 @@
 import os
 import argparse
-
 from os import popen
 from os import chdir, makedirs
 from os.path import isdir
 from time import time
 from inspect import cleandoc
+
+from utils import save_git_state, restore_git_state
 
 SHOULD_RUN = True # Generates run.output and perfstat.output
 
@@ -81,6 +82,7 @@ def setup_run_folder():
 
 prun = run if arguments.no_batch else batch # Pick appropiate run method
 setup_run_folder()
+repo, initial_branch = save_git_state()
 itime = time()
 printf(">>> [START]")
 for n, steps in [(2048, 32), (512, 128), (128, 512)]:
@@ -108,4 +110,5 @@ for n, steps in [(2048, 32), (512, 128), (128, 512)]:
     prun(f"constn{n}", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto", n, steps)
     prun(f"zdiffvisc{n}", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto", n, steps)
 
+restore_git_state(repo, initial_branch)
 printf(f"Done in {time() - itime} seconds with {error_count} errors.")

@@ -135,7 +135,24 @@ def  get_parser(active_branch, default_n=2048, default_steps=4):
     )
     return parser
 
+
+def save_git_state():
+    repo_abs_path = str(Path(".").resolve())
+    repo = git.Repo(repo_abs_path)
+    initial_branch = repo.active_branch.name
+    repo.__utils_was_dirty = repo.is_dirty()
+    if repo.__utils_was_dirty:
+        repo.git.stash()
+    return (repo, initial_branch)
+
+def restore_git_state(repo, initial_branch):
+    repo.git.checkout(initial_branch)
+    if repo.__utils_was_dirty:
+        repo.git.stash("pop")
+    repo.__utils_was_dirty = False
+
 def main():
+    # TODO: Implement save_git_state here
     repo_abs_path = str(Path(".").resolve())
     repo = git.Repo(repo_abs_path)
     initial_branch = repo.active_branch.name
