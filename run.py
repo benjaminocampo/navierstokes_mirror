@@ -12,15 +12,6 @@ SHOULD_RUN = True # Generates run.output and perfstat.output
 
 printf = lambda s: print(s, flush=True)
 
-parser = argparse.ArgumentParser()
-parser.add_argument(
-    "--no-batch",
-    "-nb",
-    action="store_true",
-    help="This flag will override the default behaviour of submiting to a slurm squeue, and instead directly run the commands"
-)
-arguments = parser.parse_args()
-
 error_count = 0
 def cmd(c):
     global error_count
@@ -80,35 +71,52 @@ def setup_run_folder():
     makedirs("runs/slurmout", exist_ok=True)
     makedirs("runs/slurmerr", exist_ok=True)
 
-prun = run if arguments.no_batch else batch # Pick appropiate run method
-setup_run_folder()
-repo, initial_branch = save_git_state()
-itime = time()
-printf(">>> [START]")
-for n, steps in [(2048, 32), (512, 128), (128, 512)]:
-    prun("baseline", "-O0", n, steps)
-    prun("baseline", "-O1", n, steps)
-    prun("baseline", "-O2", n, steps)
-    prun("baseline", "-O3", n, steps)
-    prun("baseline", "-Ofast", n, steps)
-    prun("baseline", "-Os", n, steps)
-    prun("baseline", "-O3 -floop-interchange -floop-nest-optimize", n, steps)
-    prun("ijswap", "-O3", n, steps)
+def main():
+    # Parser
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--no-batch",
+        "-nb",
+        action="store_true",
+        help="This flag will override the default behaviour of submiting to a slurm squeue, and instead directly run the commands"
+    )
+    arguments = parser.parse_args()
 
-    prun("invc", "-O3", n, steps)
-    prun("ijswap", "-O3 -freciprocal-math", n, steps)
-    prun("ijswap", "-Ofast", n, steps)
+    try:
+        prun = run if arguments.no_batch else batch # Pick appropiate run method
+        setup_run_folder()
+        repo, initial_branch = save_git_state()
+        itime = time()
+        printf(">>> [START]")
+        for n, steps in [(128, 512), (2048, 32), (512, 128)]:
+            prun("baseline", "-O0", n, steps)
+            prun("baseline", "-O1", n, steps)
+            prun("baseline", "-O2", n, steps)
+            prun("baseline", "-O3", n, steps)
+            prun("baseline", "-Ofast", n, steps)
+            prun("baseline", "-Os", n, steps)
+            prun("baseline", "-O3 -floop-interchange -floop-nest-optimize", n, steps)
+            prun("ijswap", "-O3", n, steps)
 
-    prun("invc", "-Ofast", n, steps)
-    prun("invc", "-Ofast -march=native", n, steps)
-    prun("invc", "-Ofast -march=native -funroll-loops", n, steps)
-    prun("invc", "-Ofast -march=native -funroll-loops -floop-nest-optimize", n, steps)
-    prun("invc", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto", n, steps)
+            prun("invc", "-O3", n, steps)
+            prun("ijswap", "-O3 -freciprocal-math", n, steps)
+            prun("ijswap", "-Ofast", n, steps)
 
-    prun("bblocks", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto", n, steps)
+            prun("invc", "-Ofast", n, steps)
+            prun("invc", "-Ofast -march=native", n, steps)
+            prun("invc", "-Ofast -march=native -funroll-loops", n, steps)
+            prun("invc", "-Ofast -march=native -funroll-loops -floop-nest-optimize", n, steps)
+            prun("invc", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto", n, steps)
 
-    prun(f"constn{n}", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto", n, steps)
-    prun(f"zdiffvisc{n}", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto", n, steps)
+            prun("bblocks", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto", n, steps)
 
-restore_git_state(repo, initial_branch)
-printf(f"Done in {time() - itime} seconds with {error_count} errors.")
+            prun(f"constn{n}", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto", n, steps)
+            prun(f"zdiffvisc{n}", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto", n, steps)
+    except BaseException as e:
+        print(f"There was an error in the execution: {repr(e)}")
+    finally:
+        restore_git_state(repo, initial_branch)
+    printf(f"Done in {time() - itime} seconds with {error_count} errors.")
+
+if __name__ == "__main__":
+    main()

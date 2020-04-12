@@ -7,3 +7,4 @@ headless
 perf.data*
 runs/
 slurm*
+__pycache__/
