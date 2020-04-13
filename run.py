@@ -80,9 +80,9 @@ def main():
         action="store_true",
         help="This flag will override the default behaviour of submiting to a slurm squeue, and instead directly run the commands"
     )
-    arguments = parser.parse_args()
+    no_batch = parser.parse_args().no_batch
 
-    prun = run if arguments.no_batch else batch # Pick appropiate run method
+    prun = run if no_batch else batch # Pick appropiate run method
     setup_run_folder()
     repo, initial_branch = save_git_state()
     itime = time()
@@ -112,8 +112,11 @@ def main():
         prun(f"constn{n}", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto", n, steps)
         prun(f"zdiffvisc{n}", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto", n, steps)
 
-    # Batch command to restore git state after all batches
-    cmd(f"nohup srun --job-name=cleanup -- git checkout {initial_branch} && git stash pop &")
+    if no_batch:
+        restore_git_state(repo, initial_branch)
+    else:
+        # Batch command to restore git state after all batches
+        cmd(f"nohup srun --job-name=cleanup -- git checkout {initial_branch} && git stash pop &")
     printf(f"Done in {time() - itime} seconds with {error_count} errors.")
 
 if __name__ == "__main__":
