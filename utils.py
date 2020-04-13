@@ -1,12 +1,28 @@
-import sys
 import subprocess
-import argparse
-import git
 import shlex
 import pandas as pd
 import statsmodels.api as sm
+import matplotlib.pyplot as plt
+import numpy as np
 from io import StringIO, TextIOWrapper
-from pathlib import Path
+
+
+def dump_data(mu0,
+              observed_value,
+              p_value, ratio,
+              significance_level,
+              source,
+              target):
+    if p_value < significance_level:
+        print(f"P value: {p_value} < {significance_level}")
+        print("Assert in favour of the new approach.")
+    else:
+        print(f"P value: {p_value} >= {significance_level}")
+        print("No evidence to reject the previous approach.")
+    print(f"Source {source} mean:", mu0)
+    print(f"Target {target} mean:", observed_value)
+    print(f"Percentage improved from source to target: {ratio:.2f}%")
+
 
 def test_hypotheses(sample_hyp1, sample_hyp2):
     """
@@ -72,70 +88,6 @@ def get_data_from_stdin(make_cmds, exec_cmds):
     data = pd.read_csv(output)
     return data
 
-def  get_parser(active_branch, default_n=2048, default_steps=4):
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        '-sb',
-        '--sbranch',
-        nargs='?',
-        default=active_branch,
-        help='name of the source branch, current one by default'
-    )
-    parser.add_argument(
-        '-smake',
-        required=True,
-        help='make-commands to be run by the source branch'
-    )
-    parser.add_argument(
-        '-tb',
-        '--tbranch',
-        nargs='?',
-        default=active_branch,
-        help='name of the target branch, current one by default'
-    )
-    parser.add_argument(
-        '-tmake',
-        required=True,
-        help='make-commands to be run by the target branch'
-    )
-    parser.add_argument(
-        '-sexec',
-        nargs='?',
-        default=None,
-        help='executable command to be run by the source branch'
-    )
-    parser.add_argument(
-        '-texec',
-        nargs='?',
-        default=None,
-        help='executable command to be run by the target branch'
-    )
-    parser.add_argument(
-        '-n',
-        nargs="?",
-        default=default_n,
-        help="length of the square grid"
-    )
-    parser.add_argument(
-        '-steps',
-        nargs="?",
-        default=default_steps,
-        help="amount of steps to simulate"
-    )
-    parser.add_argument(
-        '-csv',
-        action='store_true',
-        help='[TO BE DONE] write measurements to a csv file.'
-    )
-    parser.add_argument(
-        '-p',
-        '--plot',
-        action='store_true',
-        help='[TO BE DONE] plot graphics.'
-    )
-    return parser
-
-
 def save_git_state():
     repo_abs_path = str(Path(".").resolve())
     repo = git.Repo(repo_abs_path)
@@ -151,64 +103,30 @@ def restore_git_state(repo, initial_branch):
         repo.git.stash("pop")
     repo.__utils_was_dirty = False
 
-def main():
-    # TODO: Implement save_git_state here
-    repo_abs_path = str(Path(".").resolve())
-    repo = git.Repo(repo_abs_path)
-    initial_branch = repo.active_branch.name
-    args = get_parser(initial_branch).parse_args()
+def plot_charts(plotfile,
+                mu0,
+                observed_value,
+                N,
+                steps,
+                p_value,
+                ratio,
+                source_label,
+                target_label):
+    bars = [f"Source:\n{source_label}", f"Target:\n{target_label}"]
+    y_pos = np.arange(len(bars))
+    height = [mu0, observed_value]
+    limit = 1500
 
-    sbranch = args.sbranch
-    tbranch = args.tbranch
-    n = args.n
-    steps = args.steps
-    default_exec = f"./headless {n} 0.1 0.001 0.0001 5.0 100.0 {steps}"
-    sexec = args.sexec or default_exec
-    texec = args.texec or default_exec
-    smake = args.smake
-    tmake = args.tmake
-    print(
-        f"Running with the following configuration:\n"
-        f"Source branch={sbranch}\n"
-        f"Source make={smake}\n"
-        f"Source exec={sexec}\n"
-        f"Target branch={tbranch}\n"
-        f"Target make={tmake}\n"
-        f"Target exec={texec}\n"
-    )
+    plt.figure(figsize=[12, 6])
+    plt.barh(y_pos, height, color=["darkblue", "orange"], height=0.8, alpha=0.75)
 
-    failed = False
-    was_dirty = repo.is_dirty()
-    if was_dirty:
-        repo.git.stash()
-    try:
-        repo.git.checkout(sbranch)
-        source_info = get_data_from_stdin(smake, sexec)
-        repo.git.checkout(tbranch)
-        target_info = get_data_from_stdin(tmake, texec)
-    except BaseException as e:
-        failed = True
-        print(f"There was an error in the execution: {repr(e)}")
-    finally:
-        repo.git.checkout(initial_branch)
-        if was_dirty:
-            repo.git.stash("pop")
-    if failed:
-        exit(1)
+    plt.title(f"N={N} - Steps={steps} - P-Value={p_value:.8f} - Improvement of {ratio:.2f}%", fontsize=11)
+    plt.xlabel("ns per cell")
 
-    significance_level = 0.01
-    mu0, observed_value, p_value, ratio = test_hypotheses(source_info['total_ns'],
-                                                          target_info['total_ns'])
-    if p_value < significance_level:
-        print(f"P value: {p_value} < {significance_level}")
-        print("Assert in favour of the new approach.")
-    else:
-        print(f"P value: {p_value} >= {significance_level}")
-        print("No evidence to reject the previous approach.")
-    print("Source mean:", mu0)
-    print("Target mean:", observed_value)
-    print(f"Percentage improved from source to target: {ratio:.2f}%")
+    plt.xlim(0, limit)
+    plt.yticks(y_pos, bars, color='black')
 
+    plt.rc('grid', linestyle="-", color='black')
+    plt.grid()
 
-if __name__ == "__main__":
-    main()
+    plt.savefig(f"{plotfile}.png")
