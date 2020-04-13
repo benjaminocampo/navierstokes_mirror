@@ -4,47 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from os import makedirs
-
-# # Chart 1: ns/cell comparisson
-
-# baseline -O3 N=128 L1 ns/cell
-# ijswap -O3 N=128 L1 ns/cell
-
-# baseline -O3 N=512 L1 ns/cell
-# ijswap -O3 N=512 L1 ns/cell
-
-# baseline -O3 N=2048 L1 ns/cell
-# ijswap -O3 N=2048 L1 ns/cell
-
-# # Chart 2: L1 Cache
-
-# baseline -O3 N=128 (L1 refs + L1 hits) / N
-# ijswap -O3 N=128 (L1 refs + L1 hits) / N
-
-# baseline -O3 N=512 (L1 refs + L1 hits) / N
-# ijswap -O3 N=512 (L1 refs + L1 hits) / N
-
-# baseline -O3 N=2048 (L1 refs + L1 hits) / N
-# ijswap -O3 N=2048 (L1 refs + L1 hits) / N
-
-# # Chart 3: LLC Cache
-
-# baseline -O3 N=128 (LLC refs + LLC hits) / N
-# ijswap -O3 N=128 (LLC refs + LLC hits) / N
-
-# baseline -O3 N=512 (LLC refs + LLC hits) / N
-# ijswap -O3 N=512 (LLC refs + LLC hits) / N
-
-# baseline -O3 N=2048 (LLC refs + LLC hits) / N
-# ijswap -O3 N=2048 (LLC refs + LLC hits) / N
-
-# TODO: Set colors: https://coolors.co/263238-e63462-fe5f55-3a506b-5bc0be
-# TODO: Set font
-# TODO: Draw graph 2
-# TODO: Draw graph 3
-# TODO: Get data for graph 1
-# TODO: Get data for graph 2
-# TODO: Get data for graph 3
+from os.path import exists
 
 white = "#FFFFFF"
 darkgray = "#263238"
@@ -80,12 +40,12 @@ def save_nscell_graph(source_name, target_name, sources, targets, ns, iterations
 
     def autolabel(rects):
         """Attach a text label above each bar in *rects*, displaying its height."""
-        FONTSIZE = 12
+        FONTSIZE = 10
         for rect in rects:
             height = rect.get_height()
             ax.annotate("{}".format(height),
-                        xy=(rect.get_x() + rect.get_width() / 2, height - FONTSIZE * 4 - 16),
-                        xytext=(0, 3),  # 3 points vertical offset
+                        xy=(rect.get_x() + rect.get_width() / 2, height),
+                        xytext=(0, -16),
                         textcoords="offset points",
                         ha="center", va="center", color=white, fontsize=12)
 
@@ -95,16 +55,8 @@ def save_nscell_graph(source_name, target_name, sources, targets, ns, iterations
 
     fig.tight_layout()
     plt.show() if only_show else plt.savefig(filename, dpi=150)
+    plt.close()
 
-
-# baseline -O3 N=128 (L1 refs + L1 hits) / N
-# ijswap -O3 N=128 (L1 refs + L1 hits) / N
-
-# baseline -O3 N=512 (L1 refs + L1 hits) / N
-# ijswap -O3 N=512 (L1 refs + L1 hits) / N
-
-# baseline -O3 N=2048 (L1 refs + L1 hits) / N
-# ijswap -O3 N=2048 (L1 refs + L1 hits) / N
 def save_cache_graph(source_name, target_name, source_refs, source_misses, target_refs, target_misses, ns, iterations, filename="plot.png", cache_name="L1", only_show=False):
     source_color = "#FFC107" if cache_name == "L1" else "#00BCD4"
     source_color_dark = "#FFA000" if cache_name == "L1" else "#0097A7"
@@ -153,7 +105,7 @@ def save_cache_graph(source_name, target_name, source_refs, source_misses, targe
 
     def autolabel(rects, total=False):
         """Attach a text label above each bar in *rects*, displaying its height."""
-        FONTSIZE = 12
+        FONTSIZE = 10
         for rect in rects:
             height = rect.get_height()
             ax.annotate(f"{human_readable(height if not total else height + rect.get_y())}",
@@ -169,7 +121,7 @@ def save_cache_graph(source_name, target_name, source_refs, source_misses, targe
 
     fig.tight_layout()
     plt.show() if only_show else plt.savefig(filename, dpi=150)
-
+    plt.close()
 
 def read_perfstats(filename, stats, cast_to=int):
     "Given stats=[stat] returns { stat: value } with values read from file"
@@ -186,8 +138,8 @@ def read_perfstats(filename, stats, cast_to=int):
 def main():
     makedirs("runs/graphs", exist_ok=True)
 
-    ns = np.array([128, 512, 2048])
-    steps = np.array([512, 128, 32])
+    ns = np.array([128, 512, 2048, 4096, 8192])
+    steps = np.array([512, 128, 32, 16, 8])
     # array of (branch, flags)
     runs = [
         ("baseline", "-O3"),
@@ -201,7 +153,9 @@ def main():
         ("invc", "-Ofast -march=native -funroll-loops"),
         ("invc", "-Ofast -march=native -funroll-loops -floop-nest-optimize"),
         ("invc", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto"),
-        # TODO # ("constn2048", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto"),
+        ("constn2048", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto"),
+        ("bblocks", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto"),
+        ("baseline", "-O0"),
     ]
 
 
@@ -212,15 +166,22 @@ def main():
         run_measuremets[(branch, flags)] = []
         for n, step in zip(ns, steps):
             filename = f"{branch}_n{n}_steps{step}_{underscored(flags)}.output"
-            nspcells = pd.read_csv(f"runs/stdouts/{filename}")
+            stdout_file = f"runs/stdouts/{filename}"
+            perfstat_file = f"runs/perfstats/{filename}"
+            stats = ["cache-references", "cache-misses", "L1-dcache-loads", "L1-dcache-load-misses"]
+            if exists(stdout_file):
+                nspcells = pd.read_csv(f"runs/stdouts/{filename}")
+            else:
+                print(f"Stdout file does not exists, will use zero instead: {stdout_file}")
+            if exists(perfstat_file):
+                perfstats = read_perfstats(f"runs/perfstats/{filename}", stats)
+            else:
+                perfstats = {stat: 0 for stat in stats}
+                print(f"Perfstat file does not exist, will use zero instead: {perfstat_file}")
             run_measurement = {}
             run_measurement["nspcell_mean"] = np.mean(nspcells["total_ns"])
-            perfstats = read_perfstats(f"runs/perfstats/{filename}", ["cache-references", "cache-misses", "L1-dcache-loads", "L1-dcache-load-misses"])
             run_measurement.update(perfstats)
             run_measuremets[(branch, flags)].append(run_measurement)
-
-    from pprint import pprint
-    pprint(run_measuremets)
 
     comparissons = [
         # (("source_branch", "source_flags"), ("target_branch", "target_flags")),
@@ -233,7 +194,10 @@ def main():
         (("invc", "-Ofast -march=native"), ("invc", "-Ofast -march=native -funroll-loops")),
         (("invc", "-Ofast -march=native -funroll-loops"), ("invc", "-Ofast -march=native -funroll-loops -floop-nest-optimize")),
         (("invc", "-Ofast -march=native -funroll-loops -floop-nest-optimize"), ("invc", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto")),
-        # TODO # (("invc", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto"), ("constn2048", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto")),
+        (("invc", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto"), ("constn2048", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto")),
+        (("invc", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto"), ("bblocks", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto")),
+        (("baseline", "-O3"), ("bblocks", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto")),
+        (("baseline", "-O0"), ("bblocks", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto")),
     ]
     for source_run, target_run in comparissons:
         source_name = " ".join(source_run)
