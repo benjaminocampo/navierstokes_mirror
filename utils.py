@@ -1,11 +1,12 @@
 import subprocess
 import shlex
+import git
 import pandas as pd
 import statsmodels.api as sm
 import matplotlib.pyplot as plt
 import numpy as np
 from io import StringIO, TextIOWrapper
-
+from pathlib import Path
 
 def dump_data(mu0,
               observed_value,
