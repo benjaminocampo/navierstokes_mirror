@@ -31,13 +31,12 @@ def run(source, sflags, target, tflags, n, steps):
     sflags_label = sflags.replace(" ", "\n")
     tflags_label = tflags.replace(" ", "\n")
     cmd(f"python3 ../fcompare.py -sd {sfile} -td {tfile} -sl '{source} {sflags_label}' -tl '{target} {tflags_label}' -p plot > compare.output")
-    
     chdir("..")
     printf(f">>> [TIME] Run finished in {time() - cmditime} seconds.")
 
-
 itime = time()
 printf(">>> [START]")
+# TODO: Implement save_git_state here
 for n, steps in [(2048, 32), (512, 128), (128, 512)]:
     ## baseline -O0, -O1, -O2, -O3, -Ofast, Os
     #run("baseline", "-O0", "baseline", "-O1", n, steps)
@@ -76,7 +75,4 @@ for n, steps in [(2048, 32), (512, 128), (128, 512)]:
     #run("bblocks", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto", "baseline", "-O0", n, steps)
     run("baseline", "-O0", "bblocks", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto", n, steps)
 
-
-
-#
 printf(f"Done in {time() - itime} seconds with {error_count} errors.")

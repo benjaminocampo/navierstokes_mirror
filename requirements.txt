@@ -3,10 +3,10 @@ GitPython==3.1.0
 numpy==1.18.2
 pandas==1.0.3
 patsy==0.5.1
-pkg-resources==0.0.0
 python-dateutil==2.8.1
 pytz==2019.3
 scipy==1.4.1
 six==1.14.0
 smmap==3.0.1
 statsmodels==0.11.1
+matplotlib==3.2.1

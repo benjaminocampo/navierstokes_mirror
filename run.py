@@ -1,12 +1,14 @@
 import os
+import argparse
 from os import popen
-from os import chdir
+from os import chdir, makedirs
 from os.path import isdir
 from time import time
+from inspect import cleandoc
 
-SHOULD_RUN = True
-SHOULD_PERFRECORD = False
-SHOULD_PERFSTAT = False # Not recommended, all those perf.data will occupy a lot
+from utils import save_git_state, restore_git_state
+
+SHOULD_RUN = True # Generates run.output and perfstat.output
 
 printf = lambda s: print(s, flush=True)
 
@@ -16,70 +18,103 @@ def cmd(c):
     red_color = "\033[91m"
     end_color = "\033[0m"
     printf(f"\n>>> [COMMAND] {c} @ {os.getcwd()}")
-    if os.system(c):
+    if os.system(c): # Command returned != 0
         printf(f"{red_color}>>> [ERROR] there was an error in command:{end_color}")
         printf(f"{red_color}>>> [ERROR] {c} @ {os.getcwd()}{end_color}")
         exit()
         error_count += 1
 
 def run(branch, flags, n, steps):
-    run_cmd = f"./headless {n} 0.1 0.001 0.0001 5.0 100.0 {steps} > run.output"
-    perfstat_cmd = f"perf stat -o perfstat.output -e cache-references,cache-misses,L1-dcache-stores,L1-dcache-store-misses,LLC-stores,LLC-store-misses,page-faults,cycles,instructions,branches,branch-misses -ddd ./headless {n} 0.1 0.001 0.0001 5.0 100.0 {steps}"
-    perfrecord_cmd = f"perf record -g ./headless {n} 0.1 0.001 0.0001 5.0 100.0 {steps}"
     underscored = lambda s: "_".join(s.split())
-    cmditime = time()
-    directory = f"{branch}_n{n}_steps{steps}_{underscored(flags)}"
-    if not isdir(f"./{directory}"):
-        cmd(f"cp -r navierstokes {directory}")
-    chdir(directory)
+    run_name = f"{branch}_n{n}_steps{steps}_{underscored(flags)}"
+    run_cmd = f"./headless {n} 0.1 0.001 0.0001 5.0 100.0 {steps} > runs/stdouts/{run_name}.output"
+    perfstat_cmd = f"perf stat -o runs/perfstats/{run_name}.output -e cache-references,cache-misses,L1-dcache-stores,L1-dcache-store-misses,LLC-stores,LLC-store-misses,page-faults,cycles,instructions,branches,branch-misses -ddd"
+    perfstat_run_cmd = f"{perfstat_cmd} {run_cmd}"
+
+    start_time = time()
     cmd(f"git checkout l1-{branch}")
     cmd("make clean")
     cmd(f"make headless CFLAGS='-g {flags}'")
-    if (SHOULD_RUN): cmd(run_cmd)
-    if (SHOULD_PERFSTAT): cmd(perfstat_cmd)
-    if (SHOULD_PERFRECORD): cmd(perfrecord_cmd)
-    chdir("..")
-    printf(f">>> [TIME] Run finished in {time() - cmditime} seconds.")
+    if (SHOULD_RUN): cmd(perfstat_run_cmd)
+    printf(f">>> [TIME] Run finished in {time() - start_time} seconds.")
 
+def batch(branch, flags, n, steps):
+    underscored = lambda s: "_".join(s.split())
+    run_name = f"{branch}_n{n}_steps{steps}_{underscored(flags)}"
+    run_cmd = f"./headless {n} 0.1 0.001 0.0001 5.0 100.0 {steps} > runs/stdouts/{run_name}.output"
+    perfstat_cmd = f"perf stat -o runs/perfstats/{run_name}.output -e cache-references,cache-misses,L1-dcache-stores,L1-dcache-store-misses,LLC-stores,LLC-store-misses,page-faults,cycles,instructions,branches,branch-misses -ddd"
+    perfstat_run_cmd = f"{perfstat_cmd} {run_cmd}"
+    submission_filename = f"runs/submissions/{run_name}.sh"
+    submission_text = cleandoc(f"""
+    #!/bin/bash
+    #SBATCH --job-name={n}x{steps}
+    #SBATCH --ntasks=1
+    #SBATCH --cpus-per-task=1
+    #SBATCH --exclusive
+    #SBATCH -o runs/slurmout/{run_name}.out
+    #SBATCH -e runs/slurmerr/{run_name}.err
 
-itime = time()
-printf(">>> [START]")
-cmd("git clone https://github.com/mateosss/navierstokes")
-for n, steps in [(2048, 32), (512, 128), (128, 512)]:
-    # baseline -O0, -O1, -O2, -O3, -Ofast, Os
-    # baseline (-O3) -> baseline (-O3 -floop-interchange -floop-nest-optimize)
-    # baseline (-O3) -> ijswap (-O3) (mostrar perf stat cache references)
-    run("baseline", "-O0", n, steps)
-    run("baseline", "-O1", n, steps)
-    run("baseline", "-O2", n, steps)
-    run("baseline", "-O3", n, steps)
-    run("baseline", "-Ofast", n, steps)
-    run("baseline", "-Os", n, steps)
-    run("baseline", "-O3 -floop-interchange -floop-nest-optimize", n, steps)
-    run("ijswap", "-O3", n, steps)
+    git checkout l1-{branch} &&
+    make clean &&
+    make headless CFLAGS='-g {flags}' &&
+    {perfstat_run_cmd} ||
+    echo "If you see this file then your run with this filename had a problem, inspect runs/ folder for more information" > {run_name}.error # If this is in the root then you know there was an error
+    """)
+    with open(submission_filename, "w") as submission:
+        submission.write(submission_text)
+    if (SHOULD_RUN): cmd(f"sbatch ./{submission_filename}")
 
-    # ijswap (-O3) -> invc (-O3)
-    # ijswap (-O3 -freciprocal-math) -> ijswap (-Ofast) [Ver si ofast nos da alguna otra ventaja que no notamos ademas del reciprocal]
-    # invc (-O3) -> ijswap (-Ofast) [nuestra optimizacion permitio no meter otras flags peligrosas?]
-    run("invc", "-O3", n, steps)
-    run("ijswap", "-O3 -freciprocal-math", n, steps)
-    run("ijswap", "-Ofast", n, steps)
+def setup_run_folder():
+    makedirs("runs/submissions", exist_ok=True)
+    makedirs("runs/stdouts", exist_ok=True)
+    makedirs("runs/perfstats", exist_ok=True)
+    makedirs("runs/slurmout", exist_ok=True)
+    makedirs("runs/slurmerr", exist_ok=True)
 
-    # invc (-Ofast)
-    # invc (-Ofast -march=native)
-    # invc (-Ofast -march=native -funroll-loops -floop-nest-optimize) [con estas nada]
-    # invc (-Ofast -march=native -funroll-loops -floop-nest-optimize -flto) [y con flto tampoco]
-    # constn2048 (-Ofast -march=native -funroll-loops -floop-nest-optimize -flto) [pero si ponemos const n una banda]
-    # diffvisc0 (-Ofast -march=native -funroll-loops -floop-nest-optimize -flto) [una banda mas con mas constantes]
-    run("invc", "-Ofast", n, steps)
-    run("invc", "-Ofast -march=native", n, steps)
-    run("invc", "-Ofast -march=native -funroll-loops", n, steps)
-    run("invc", "-Ofast -march=native -funroll-loops -floop-nest-optimize", n, steps)
-    run("invc", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto", n, steps)
+def main():
+    # Parser
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--no-batch",
+        "-nb",
+        action="store_true",
+        help="This flag will override the default behaviour of submiting to a slurm squeue, and instead directly run the commands"
+    )
+    arguments = parser.parse_args()
 
-    run("bblocks", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto", n, steps)
+    prun = run if arguments.no_batch else batch # Pick appropiate run method
+    setup_run_folder()
+    repo, initial_branch = save_git_state()
+    itime = time()
+    printf(">>> [START]")
+    for n, steps in [(128, 512), (512, 128), (2048, 32)]:
+        prun("baseline", "-O0", n, steps)
+        prun("baseline", "-O1", n, steps)
+        prun("baseline", "-O2", n, steps)
+        prun("baseline", "-O3", n, steps)
+        prun("baseline", "-Ofast", n, steps)
+        prun("baseline", "-Os", n, steps)
+        prun("baseline", "-O3 -floop-interchange -floop-nest-optimize", n, steps)
+        prun("ijswap", "-O3", n, steps)
 
-    run(f"constn{n}", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto", n, steps)
-    run(f"zdiffvisc{n}", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto", n, steps)
+        prun("invc", "-O3", n, steps)
+        prun("ijswap", "-O3 -freciprocal-math", n, steps)
+        prun("ijswap", "-Ofast", n, steps)
 
-printf(f"Done in {time() - itime} seconds with {error_count} errors.")
+        prun("invc", "-Ofast", n, steps)
+        prun("invc", "-Ofast -march=native", n, steps)
+        prun("invc", "-Ofast -march=native -funroll-loops", n, steps)
+        prun("invc", "-Ofast -march=native -funroll-loops -floop-nest-optimize", n, steps)
+        prun("invc", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto", n, steps)
+
+        prun("bblocks", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto", n, steps)
+
+        prun(f"constn{n}", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto", n, steps)
+        prun(f"zdiffvisc{n}", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto", n, steps)
+
+    # Batch command to restore git state after all batches
+    cmd(f"nohup srun --job-name=cleanup -- git checkout {initial_branch} && git stash pop &")
+    printf(f"Done in {time() - itime} seconds with {error_count} errors.")
+
+if __name__ == "__main__":
+    main()

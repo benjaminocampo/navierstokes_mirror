@@ -5,3 +5,6 @@ headless
 .vscode
 *.pyc
 perf.data*
+runs/
+slurm*
+__pycache__/

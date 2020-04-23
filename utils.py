@@ -1,11 +1,12 @@
 import subprocess
 import shlex
+import git
 import pandas as pd
 import statsmodels.api as sm
 import matplotlib.pyplot as plt
 import numpy as np
 from io import StringIO, TextIOWrapper
-
+from pathlib import Path
 
 def dump_data(mu0,
               observed_value,
@@ -88,6 +89,20 @@ def get_data_from_stdin(make_cmds, exec_cmds):
     data = pd.read_csv(output)
     return data
 
+def save_git_state():
+    repo_abs_path = str(Path(".").resolve())
+    repo = git.Repo(repo_abs_path)
+    initial_branch = repo.active_branch.name
+    repo.__utils_was_dirty = repo.is_dirty()
+    if repo.__utils_was_dirty:
+        repo.git.stash()
+    return (repo, initial_branch)
+
+def restore_git_state(repo, initial_branch):
+    repo.git.checkout(initial_branch)
+    if repo.__utils_was_dirty:
+        repo.git.stash("pop")
+    repo.__utils_was_dirty = False
 
 def plot_charts(plotfile,
                 mu0,
