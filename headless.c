@@ -16,17 +16,14 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+
+#include "indices.h"
+#include "solver.h"
 #include "timing.h"
 
 /* macros */
 
-#define IX(i,j) ((j)+(N+2)*(i))
-
-/* external definitions (from solver.c) */
-
-// TODO: Why extern instead of include solver.h
-extern void dens_step ( int N, float * x, float * x0, float * u, float * v, float diff, float dt );
-extern void vel_step ( int N, float * u, float * v, float * u0, float * v0, float visc, float dt );
+#define IX(x, y) (rb_idx((x), (y), (N + 2)))
 
 /* global variables */
 
