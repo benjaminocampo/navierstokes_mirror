@@ -1,10 +1,6 @@
-//
-// timing.h
-//
-
-#ifndef TIMING_H_INCLUDED
-#define TIMING_H_INCLUDED
+#ifndef TIMING_H
+#define TIMING_H
 
 double wtime(void);
 
-#endif /* TIMING_H_INCLUDED */
+#endif /* TIMING_H */
