@@ -4,8 +4,8 @@
 #include <sys/cdefs.h>
 
 #include "indices.h"
-/* #include "solver_ispc.h"
- */
+#include "solver_ispc.h"
+
 #define IX(x, y) (rb_idx((x), (y), (n + 2)))
 #define SWAP(x0, x)  \
   {                  \
@@ -16,13 +16,13 @@
 
 typedef enum { NONE = 0, VERTICAL = 1, HORIZONTAL = 2 } boundary;
 typedef enum { RED, BLACK } grid_color;
-
+/* 
 static void add_source(unsigned int n, float *x, const float *s, float dt) {
   unsigned int size = (n + 2) * (n + 2);
   for (unsigned int i = 0; i < size; i++) {
     x[i] += dt * s[i];
   }
-}
+} */
 
 static void set_bnd(unsigned int n, boundary b, float *x) {
   for (unsigned int i = 1; i <= n; i++) {
@@ -36,8 +36,8 @@ static void set_bnd(unsigned int n, boundary b, float *x) {
   x[IX(n + 1, 0)] = 0.5f * (x[IX(n, 0)] + x[IX(n + 1, 1)]);
   x[IX(n + 1, n + 1)] = 0.5f * (x[IX(n, n + 1)] + x[IX(n + 1, n)]);
 }
-
-static void lin_solve_rb_step(grid_color color, unsigned int n, float a,
+ 
+/* static void lin_solve_rb_step(grid_color color, unsigned int n, float a,
                               float c, const float *restrict same0,
                               const float *restrict neigh,
                               float *restrict same) {
@@ -55,7 +55,7 @@ static void lin_solve_rb_step(grid_color color, unsigned int n, float a,
           c;
     }
   }
-}
+} */
 
 static void lin_solve(unsigned int n, boundary b, float *restrict x,
                       const float *restrict x0, float a, float c) {

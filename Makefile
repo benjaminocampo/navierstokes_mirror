@@ -1,7 +1,7 @@
 # TODO: Try -ffast-math
 CC=cc
 ISPC=ispc
-ISPCFLAGS=--target=avx2
+ISPCFLAGS=--target=sse4
 override CFLAGS:=-std=c99 -Wall -Wextra -Werror -Wshadow -Wno-unused-parameter $(CFLAGS)
 LDFLAGS=
 
