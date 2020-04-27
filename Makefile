@@ -1,11 +1,13 @@
 # TODO: Try -ffast-math
 CC=cc
+ISPC=ispc
+ISPCFLAGS=--target=avx2
 override CFLAGS:=-std=c99 -Wall -Wextra -Werror -Wshadow -Wno-unused-parameter $(CFLAGS)
 LDFLAGS=
 
 TARGETS=demo headless
 SOURCES=$(shell echo *.c)
-COMMON_OBJECTS=timing.o solver.o
+COMMON_OBJECTS=timing.o solver.o solver_ispc.o
 
 .PHONY: clean
 all: $(TARGETS)
@@ -39,6 +41,9 @@ runperf: headless
 
 .depend: *.[ch]
 	$(CC) -MM $(SOURCES) > .depend
+
+solver_ispc.o: 
+	$(ISPC) solver.ispc -o solver_ispc.o $(ISPCFLAGS)
 
 -include .depend
 

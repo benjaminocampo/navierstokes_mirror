@@ -4,7 +4,8 @@
 #include <sys/cdefs.h>
 
 #include "indices.h"
-
+/* #include "solver_ispc.h"
+ */
 #define IX(x, y) (rb_idx((x), (y), (n + 2)))
 #define SWAP(x0, x)  \
   {                  \
