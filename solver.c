@@ -1,5 +1,6 @@
 #include "solver.h"
 
+#include <x86intrin.h>
 #include <stddef.h>
 #include <sys/cdefs.h>
 
@@ -40,18 +41,37 @@ static void lin_solve_rb_step(grid_color color, unsigned int n, float a,
                               float c, const float *restrict same0,
                               const float *restrict neigh,
                               float *restrict same) {
+  const float invc = 1 / c;
   int shift = color == RED ? 1 : -1;
   unsigned int start = color == RED ? 0 : 1;
 
   unsigned int width = (n + 2) / 2;
 
-  for (unsigned int y = 1; y <= n; ++y, shift = -shift, start = 1 - start) {
-    for (unsigned int x = start; x < width - (1 - start); ++x) {
+  const __m256 pinvc = _mm256_set1_ps(invc);
+  const __m256 pa = _mm256_set1_ps(a);
+  for (unsigned int y = 1 + 8; y <= n - 8; ++y, shift = -shift, start = 1 - start) {
+    for (unsigned int x = start + 8; x < width - 8 - (1 - start); x += 8) {
+      // TODO: Make clear that row width should be a multiple of 8 (8|width=s(n/2))
+      // TODO: start should get you to the next multiple of 8
       int index = idx(x, y, width);
-      same[index] =
-          (same0[index] + a * (neigh[index - width] + neigh[index] +
-                               neigh[index + shift] + neigh[index + width])) /
-          c;
+      __m256 f = _mm256_loadu_ps(&same0[index]);
+      __m256 u = _mm256_loadu_ps(&neigh[index - width]);
+      __m256 r = _mm256_loadu_ps(&neigh[index + shift]);
+      __m256 d = _mm256_loadu_ps(&neigh[index + width]);
+      __m256 l = _mm256_loadu_ps(&neigh[index]);
+      // TODO: Try fmadd
+      // TODO: Align loads and store
+      __m256 t = _mm256_mul_ps(( // (f + a * (u + r + d + l)) / c
+        _mm256_add_ps(( // f + a * (u + r + d + l)
+          _mm256_mul_ps(( // a * (u + r + d + l)
+            _mm256_add_ps( // u + r + d + l
+              _mm256_add_ps(u, r), // u + r
+              _mm256_add_ps(l, d) // d + l
+            )
+          ), pa)
+        ), f)
+      ), pinvc);
+      _mm256_storeu_ps(&same[index], t);
     }
   }
 }
