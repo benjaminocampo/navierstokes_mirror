@@ -15,30 +15,40 @@ export void lin_solve_rb_step(uniform int color,
                               const uniform float * uniform same0,
                               const uniform float * uniform neigh,
                               uniform float * uniform same) {
-    uniform int shift = color == 0 ? 1 : -1;
-    uniform int start = color == 0 ? 0 : 1;
+  uniform int shift = color == 0 ? 1 : -1;
+  uniform int start = color == 0 ? 0 : 1;
 
-    uniform int width = (n + 2) / 2;
-    
-    for (uniform int y = 1; y <= n; y++, shift = -shift, start = 1 - start) {
-        uniform int x;
-        for (x = start;
-             x < width - (1 - start) - (width - (1 - start)) % programCount;
-             x+= programCount) {
-            
-            varying int index = (x + programIndex) + y * width;
+  uniform int width = (n + 2) / 2;
+  uniform int tile_width = programCount; // Multiple of programCount
+  uniform int tile_height = 4;
+  uniform int N = (int)n;
+
+  for(uniform int ty = 1; ty <= N; ty += tile_height) { 
+    for(uniform int tx = 0; tx < width - tile_width; tx += tile_width) {
+      for(uniform int yy = 0; yy < tile_height; ++yy, 
+                                        shift = -shift,
+                                        start = 1 - start){
+        for(uniform int xx = start; xx < tile_width + start; xx+=programCount){
+            varying int index = (xx + tx + programIndex) + (ty + yy) * width;
             same[index] =
-                (same0[index] + a * (neigh[index - width] + neigh[index] +
-                                     neigh[index + shift] + neigh[index + width])) /
+                (same0[index] +
+                  a * (neigh[index - width] + neigh[index] +
+                      neigh[index + shift] + neigh[index + width])) /
                 c;
         }
-
-        for(; x < width - (1 - start); ++x){
-            uniform int index = x + y * width;
-            same[index] =
-                (same0[index] + a * (neigh[index - width] + neigh[index] +
-                                    neigh[index + shift] + neigh[index + width])) /
-                c;
-        }
+      }
     }
+  }
+  // The last tile must be updated separately
+  // An odd amount of cells to update (3 in the case of N = 2**k)
+  for (uniform int y = 1; y <= N; y++, shift = -shift, start = 1 - start) {
+    for(varying int x = width - tile_width + programIndex;
+        x < width - (1 - start); x++){
+      varying int index = x + y * width;
+      same[index] =
+          (same0[index] + a * (neigh[index - width] + neigh[index] +
+                               neigh[index + shift] + neigh[index + width])) /
+          c;
+    }
+  }
 }
