@@ -1,4 +1,4 @@
-export void add_source(uniform uint32 n,
+export void add_source(uniform unsigned int n,
                        uniform float * uniform x,
                        const uniform float * uniform s,
                        uniform float dt) {
