@@ -88,29 +88,9 @@ def main():
     itime = time()
     printf(">>> [START]")
     for n, steps in [(128, 512), (512, 128), (2048, 32)]:
-        prun("baseline", "-O0", n, steps)
-        prun("baseline", "-O1", n, steps)
-        prun("baseline", "-O2", n, steps)
-        prun("baseline", "-O3", n, steps)
-        prun("baseline", "-Ofast", n, steps)
-        prun("baseline", "-Os", n, steps)
-        prun("baseline", "-O3 -floop-interchange -floop-nest-optimize", n, steps)
-        prun("ijswap", "-O3", n, steps)
-
-        prun("invc", "-O3", n, steps)
-        prun("ijswap", "-O3 -freciprocal-math", n, steps)
-        prun("ijswap", "-Ofast", n, steps)
-
-        prun("invc", "-Ofast", n, steps)
-        prun("invc", "-Ofast -march=native", n, steps)
-        prun("invc", "-Ofast -march=native -funroll-loops", n, steps)
-        prun("invc", "-Ofast -march=native -funroll-loops -floop-nest-optimize", n, steps)
-        prun("invc", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto", n, steps)
-
-        prun("bblocks", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto", n, steps)
-
-        prun(f"constn{n}", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto", n, steps)
-        prun(f"zdiffvisc{n}", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto", n, steps)
+        prun("rb_bblock", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto", n, steps)
+        prun("ispc_rb_bblock", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto", n, steps)
+        prun("ispc_bstencil", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto", n, steps)
 
     if no_batch:
         restore_git_state(repo, initial_branch)
