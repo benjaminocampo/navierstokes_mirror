@@ -45,6 +45,9 @@ runperf: headless
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@ $(LDFLAGS)
 
+%.s: %.c
+	$(CC) $(CFLAGS) $^ -S -masm=intel
+
 .PHONY: clean
 clean:
 	rm -f $(TARGETS) *.o .depend solver.s *~
