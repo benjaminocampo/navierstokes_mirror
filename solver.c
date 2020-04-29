@@ -100,6 +100,7 @@ static void advect(unsigned int n, boundary b, float *d, const float *d0,
       } else if (y > n + 0.5f) {
         y = n + 0.5f;
       }
+
       j0 = (int)y;
       j1 = j0 + 1;
       s1 = x - i0;
@@ -111,6 +112,47 @@ static void advect(unsigned int n, boundary b, float *d, const float *d0,
     }
   }
   set_bnd(n, b, d);
+}
+
+static void vel_advect(unsigned int n, float *restrict u, float *restrict v,
+                       const float *restrict u0, const float *restrict v0,
+                       float dt) {
+  int i0, i1, j0, j1;
+  float x, y, s0, t0, s1, t1;
+
+  float dt0 = dt * n;
+  for (unsigned int i = 1; i <= n; i++) {
+    for (unsigned int j = 1; j <= n; j++) {
+      // TODO: Maybe we have some numerical tricks available here?
+      x = i - dt0 * u0[IX(i, j)];
+      y = j - dt0 * v0[IX(i, j)];
+      if (x < 0.5f) {
+        x = 0.5f;
+      } else if (x > n + 0.5f) {
+        x = n + 0.5f;
+      }
+      i0 = (int)x;
+      i1 = i0 + 1;
+      if (y < 0.5f) {
+        y = 0.5f;
+      } else if (y > n + 0.5f) {
+        y = n + 0.5f;
+      }
+      j0 = (int)y;
+      j1 = j0 + 1;
+      s1 = x - i0;
+      s0 = 1 - s1;
+      t1 = y - j0;
+      t0 = 1 - t1;
+
+      u[IX(i, j)] = s0 * (t0 * u0[IX(i0, j0)] + t1 * u0[IX(i0, j1)]) +
+                    s1 * (t0 * u0[IX(i1, j0)] + t1 * u0[IX(i1, j1)]);
+      v[IX(i, j)] = s0 * (t0 * v0[IX(i0, j0)] + t1 * v0[IX(i0, j1)]) +
+                    s1 * (t0 * v0[IX(i1, j0)] + t1 * v0[IX(i1, j1)]);
+    }
+  }
+  set_bnd(n, HORIZONTAL, u);
+  set_bnd(n, VERTICAL, v);
 }
 
 static void project(unsigned int n, float *u, float *v, float *p, float *div) {
@@ -158,7 +200,6 @@ void vel_step(unsigned int n, float *u, float *v, float *u0, float *v0,
   project(n, u, v, u0, v0);
   SWAP(u0, u);
   SWAP(v0, v);
-  advect(n, VERTICAL, u, u0, u0, v0, dt);
-  advect(n, HORIZONTAL, v, v0, u0, v0, dt);
+  vel_advect(n, u, v, u0, v0, dt);
   project(n, u, v, u0, v0);
 }
