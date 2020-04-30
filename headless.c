@@ -14,6 +14,7 @@
   =======================================================================
 */
 
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <x86intrin.h>
@@ -191,6 +192,7 @@ int main(int argc, char **argv) {
     force = atof(argv[5]);
     source = atof(argv[6]);
     steps = atoi(argv[7]);
+    assert((N / 2) % 8 == 0 && "N/2 must be divisible by avx vector size of 8");
     fprintf(stderr,
             "Using customs : N=%d dt=%g diff=%g visc=%g force = %g source=%g "
             "steps=%d\n",
