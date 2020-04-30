@@ -118,7 +118,7 @@ static void vel_advect_rb(grid_color color, unsigned int n,
                           float *restrict sameu, float *restrict samev,
                           const float *sameu0, const float *samev0,
                           const float *u0, const float *v0, float dt) {
-  int i0, i1, j0, j1;
+  int i0, j0;
   float x, y, s0, t0, s1, t1;
 
   int shift = color == RED ? 1 : -1;
@@ -138,27 +138,33 @@ static void vel_advect_rb(grid_color color, unsigned int n,
       } else if (x > n + 0.5f) {
         x = n + 0.5f;
       }
-      j0 = (int)x;
-      j1 = j0 + 1;
       if (y < 0.5f) {
         y = 0.5f;
       } else if (y > n + 0.5f) {
         y = n + 0.5f;
       }
+      j0 = (int)x;
       i0 = (int)y;
-      i1 = i0 + 1;
-
       s1 = x - j0;
       s0 = 1 - s1;
       t1 = y - i0;
       t0 = 1 - t1;
-      // TODO: Reuse IX
-      /*
 
-      sameu[index] = s0 * (t0 * u0[IX(j0, i0)] + t1 * u0[IX(j0, i1)]) +
-                     s1 * (t0 * u0[IX(j1, i0)] + t1 * u0[IX(j1, i1)]);
-      samev[index] = s0 * (t0 * v0[IX(j0, i0)] + t1 * v0[IX(j0, i1)]) +
-                     s1 * (t0 * v0[IX(j1, i0)] + t1 * v0[IX(j1, i1)]);
+      unsigned int i0j0 = IX(j0, i0);
+      unsigned int isblack = (j0 % 2) ^ (i0 % 2);
+      unsigned int isred = !isblack;
+      unsigned int iseven = (i0 % 2 == 0);
+      unsigned int isodd = !iseven;
+      unsigned int fstart = ((isred && iseven) || (isblack && isodd));
+      int fshift = isred ? 1 : -1;
+      unsigned int i1j1 = i0j0 + width + (1 - fstart);
+      unsigned int i0j1 = i0j0 + fshift * width * (n + 2) + (1 - fstart);
+      unsigned int i1j0 = i0j0 + fshift * width * (n + 2) + width;
+
+      sameu[index] = s0 * (t0 * u0[i0j0] + t1 * u0[i1j0]) +
+                     s1 * (t0 * u0[i0j1] + t1 * u0[i1j1]);
+      samev[index] = s0 * (t0 * v0[i0j0] + t1 * v0[i1j0]) +
+                     s1 * (t0 * v0[i0j1] + t1 * v0[i1j1]);
     }
   }
 }
