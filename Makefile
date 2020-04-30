@@ -1,8 +1,13 @@
-# TODO: Try -ffast-math
+# Example run make headless BUILD=fast
+# TODO: For some reason BUILD initialization needs to be done explicitly in args
+BUILD=fast
+cflags.common:=
+cflags.fast:=-Ofast -march=native -floop-nest-optimize -funroll-loops -flto -g
+
 CC=cc
 ISPC=ispc
 ISPCFLAGS=--target=sse4
-override CFLAGS:=-std=c99 -Wall -Wextra -Werror -Wshadow -Wno-unused-parameter $(CFLAGS)
+override CFLAGS:=-std=c99 -Wall -Wextra -Werror -Wshadow -Wno-unused-parameter $(cflags.$(BUILD)) $(CFLAGS)
 LDFLAGS=
 
 TARGETS=demo headless
@@ -14,7 +19,6 @@ all: $(TARGETS)
 demo: demo.o $(COMMON_OBJECTS)
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS) -lGL -lGLU -lglut
 
-# make headless CFLAGS='-Ofast -march=native -floop-nest-optimize -funroll-loops -flto -g'
 headless: headless.o $(COMMON_OBJECTS)
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
