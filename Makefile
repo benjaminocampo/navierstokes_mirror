@@ -9,7 +9,6 @@ TARGETS=demo headless
 SOURCES=$(shell echo *.c)
 COMMON_OBJECTS=timing.o solver.o solver_ispc.o
 
-.PHONY: clean
 all: $(TARGETS)
 
 demo: demo.o $(COMMON_OBJECTS)
@@ -39,11 +38,14 @@ runperf: headless
 	-ddd \
 	./headless
 
+%_ispc.h: %.ispc
+	$(ISPC) $< -h $@ $(ISPCFLAGS)
+
+%_ispc.o: %.ispc
+	$(ISPC) $< -o $@ $(ISPCFLAGS)
+
 .depend: *.[ch]
 	$(CC) -MM $(SOURCES) > .depend
-
-solver_ispc.o: 
-	$(ISPC) solver.ispc -o solver_ispc.o $(ISPCFLAGS)
 
 -include .depend
 
@@ -52,4 +54,4 @@ solver_ispc.o:
 
 .PHONY: clean
 clean:
-	rm -f $(TARGETS) *.o .depend solver.s *~
+	rm -f $(TARGETS) *.o *.asm .depend solver.s *~
