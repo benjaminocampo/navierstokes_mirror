@@ -6,7 +6,7 @@ cflags.fast:=-Ofast -march=native -floop-nest-optimize -funroll-loops -flto -g
 
 CC=cc
 ISPC=ispc
-ISPCFLAGS=--target=sse4
+ISPCFLAGS=--target=sse2-i32x4
 override CFLAGS:=-std=c99 -Wall -Wextra -Werror -Wshadow -Wno-unused-parameter $(cflags.$(BUILD)) $(CFLAGS)
 LDFLAGS=
 

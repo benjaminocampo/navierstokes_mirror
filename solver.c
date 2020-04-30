@@ -4,6 +4,7 @@
 #include <sys/cdefs.h>
 
 #include "indices.h"
+#include "solver_ispc.h"
 
 #define IX(x, y) (rb_idx((x), (y), (n + 2)))
 #define SWAP(x0, x)  \
@@ -87,7 +88,7 @@ static void advect(unsigned int n, boundary b, float *d, const float *d0,
   set_bnd(n, b, d);
 }
 
-static void vel_advect_rb(grid_color color, unsigned int n,
+/* static void vel_advect_rb(grid_color color, unsigned int n,
                           float *restrict sameu, float *restrict samev,
                           const float *sameu0, const float *samev0,
                           const float *u0, const float *v0, float dt) {
@@ -140,7 +141,7 @@ static void vel_advect_rb(grid_color color, unsigned int n,
                      s1 * (t0 * v0[i0j1] + t1 * v0[i1j1]);
     }
   }
-}
+} */
 
 static void vel_advect(unsigned int n, float *restrict u, float *restrict v,
                        const float *restrict u0, const float *restrict v0,
