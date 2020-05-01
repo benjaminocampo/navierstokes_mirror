@@ -19,9 +19,15 @@ typedef enum { RED, BLACK } grid_color;
 
 static void add_source(unsigned int n, float *x, const float *s, float dt) {
   unsigned int size = (n + 2) * (n + 2);
-  for (unsigned int i = 0; i < size; i++) {
-    x[i] += dt * s[i];
+  const __m256 pdt = _mm256_set1_ps(dt);
+  unsigned int i;
+  for (i = 0; i < size - 8; i += 8) {
+    __m256 px = _mm256_load_ps(&x[i]);
+    __m256 ps = _mm256_load_ps(&s[i]);
+    __m256 product = _mm256_fmadd_ps(pdt, ps, px);  // x + dt * s[i]
+    _mm256_store_ps(&x[i], product);                // x[i] += dt * s[i];
   }
+  for (; i < size; i++) x[i] += dt * s[i];
 }
 
 static void set_bnd(unsigned int n, boundary b, float *x) {
