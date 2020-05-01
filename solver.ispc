@@ -28,7 +28,7 @@ export void lin_solve_rb_step(uniform int color,
   uniform float invc = 1/c;
 
   for (uniform int y = 1; y <= n; y++, shift = -shift, start = 1 - start) {
-    for (varying int x = programIndex + start;
+    cfor (varying int x = programIndex + start;
          x < width - (1 - start);
          x+= programCount) {
       
