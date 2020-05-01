@@ -1,5 +1,5 @@
 int idx(int x, int y, int dim) {
-  int base = ((x % 2) ^ (y % 2)) * dim * (dim / 2);
+  int base = ((x & 1) ^ (y & 1)) * dim * (dim / 2);
   int offset = (x / 2) + y * (dim / 2);
   return base + offset;
 }
@@ -79,17 +79,6 @@ export void vel_advect_rb(uniform int color,
       s0 = 1 - s1;
       t1 = y - i0;
       t0 = 1 - t1;
-
- /*      varying int isblack = (j0 % 2) ^ (i0 % 2);
-      varying int i0j0 = (isblack * (n + 2) * width) + (j0/2 + i0 * width);
-      varying int isred = !isblack;
-      varying int iseven = (i0 % 2 == 0);
-      varying int isodd = !iseven;
-      varying int fstart = ((isred && iseven) && (isblack && isodd));
-      varying int fshift = isred ? 1 : -1;
-      varying int i1j1 = i0j0 + width + (1 - fstart);
-      varying int i0j1 = i0j0 + fshift * width * (n + 2) + (1 - fstart);
-      varying int i1j0 = i0j0 + fshift * width * (n + 2) + width; */
 
       sameu[index] = s0 * (t0 * u0[idx(j0, i0, n + 2)] + t1 * u0[idx(j0, i1, n + 2)]) +
                      s1 * (t0 * u0[idx(j1, i0, n + 2)] + t1 * u0[idx(j1, i1, n + 2)]);
