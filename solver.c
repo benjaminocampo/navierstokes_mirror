@@ -1,10 +1,13 @@
 #include "solver.h"
 
+#include <assert.h>
 #include <stddef.h>
+#include <stdio.h>
 #include <sys/cdefs.h>
 #include <x86intrin.h>
 
 #include "indices.h"
+#include "intrinsics_helpers.h"
 
 #define IX(x, y) (rb_idx((x), (y), (n + 2)))
 #define SWAP(x0, x)  \
@@ -138,64 +141,166 @@ static void advect(unsigned int n, boundary b, float *d, const float *d0,
   set_bnd(n, b, d);
 }
 
-static void vel_advect_rb(grid_color color, unsigned int n,
-                          float *restrict sameu, float *restrict samev,
-                          const float *sameu0, const float *samev0,
-                          const float *u0, const float *v0, float dt) {
-  int i0, j0;
-  float x, y, s0, t0, s1, t1;
-
+static void vel_advect_rb(grid_color color, unsigned int n, float *sameu,
+                          float *samev, const float *sameu0,
+                          const float *samev0, const float *u0, const float *v0,
+                          float dt) {
   int shift = color == RED ? 1 : -1;
-  unsigned int start = color == RED ? 0 : 1;
-  unsigned int width = (n + 2) / 2;
+  int start = color == RED ? 0 : 1;
+  const int width = (n + 2) / 2;
+  const float dt0 = dt * n;
 
-  float dt0 = dt * n;
-  for (unsigned int i = 1; i <= n; i++, shift = -shift, start = 1 - start) {
-    for (unsigned int j = start; j < width - (1 - start); j++) {
-      int index = idx(j, i, width);
-      unsigned int gridi = i;
-      unsigned int gridj = 2 * j + shift + start;
-      x = gridj - dt0 * sameu0[index];
-      y = gridi - dt0 * samev0[index];
-      if (x < 0.5f) {
-        x = 0.5f;
-      } else if (x > n + 0.5f) {
-        x = n + 0.5f;
-      }
-      if (y < 0.5f) {
-        y = 0.5f;
-      } else if (y > n + 0.5f) {
-        y = n + 0.5f;
-      }
-      j0 = (int)x;
-      i0 = (int)y;
-      s1 = x - j0;
-      s0 = 1 - s1;
-      t1 = y - i0;
-      t0 = 1 - t1;
+  // See answers from Peter Cordes as to why we can't use _mm256_loadu_epi32
+  // https://stackoverflow.com/questions/59649287/how-to-emulate-mm256-loadu-epi32-with-gcc-or-clang
+  // https://stackoverflow.com/questions/53905757/what-is-the-difference-between-mm512-load-epi32-and-mm512-load-si512
+  // TODO: See agner fog optimization manuals for generating constants
+  // maybe using that we can free some vector registers
+  const __m256i psuccs = _mm256_set_epi32(7, 6, 5, 4, 3, 2, 1, 0);
+  const __m256 pdt0 = _mm256_set1_ps(dt0);
+  const __m256 plowest = _mm256_set1_ps(0.5f);
+  const __m256 phighest = _mm256_set1_ps(n + 0.5f);
+  const __m256i pone = _mm256_set1_epi32(1);
+  const __m256 pfone = _mm256_set1_ps(1.0);
+  const __m256i pnplus2 = _mm256_set1_epi32(n + 2);
+  const __m256i pwidth = _mm256_set1_epi32(width);
+  const __m256i phalfgrid = imul(pnplus2, pwidth);
+  for (int iy = 1; iy <= (int)n; iy++, shift = -shift, start = 1 - start) {
+    const __m256i pshift = _mm256_set1_epi32(shift);
+    const __m256i pstart = _mm256_set1_epi32(start);
+    const __m256i pi = _mm256_set1_epi32(iy);
+    for (int ix = start; ix < width - (1 - start); ix += 8) {
+      __m256i pj = _mm256_add_epi32(_mm256_set1_epi32(ix),
+                                    psuccs);  // j = x + 0, ..., x + 7
 
-      unsigned int i0j0 = IX(j0, i0);
-      unsigned int isblack = (j0 % 2) ^ (i0 % 2);
-      unsigned int isred = !isblack;
-      unsigned int iseven = (i0 % 2 == 0);
-      unsigned int isodd = !iseven;
-      unsigned int fstart = ((isred && iseven) || (isblack && isodd));
-      int fshift = isred ? 1 : -1;
-      unsigned int i1j1 = i0j0 + width + (1 - fstart);
-      unsigned int i0j1 = i0j0 + fshift * width * (n + 2) + (1 - fstart);
-      unsigned int i1j0 = i0j0 + fshift * width * (n + 2) + width;
+      int index = idx(ix, iy, width);
+      const __m256i pgridi = pi;
+      const __m256 pfgridi = _mm256_cvtepi32_ps(pgridi);  // (float)gridi
+      const __m256i pgridj = _mm256_add_epi32(  // 2 * j + shift + start
+          _mm256_slli_epi32(pj, 1),             // 2 * j
+          _mm256_add_epi32(pshift, pstart)      // + shift + start
+      );
+      const __m256 pfgridj = _mm256_cvtepi32_ps(pgridj);  // (float)gridj
+      const __m256 psameu0 = _mm256_loadu_ps(&sameu0[index]);
+      const __m256 psamev0 = _mm256_loadu_ps(&samev0[index]);
+      __m256 px = _mm256_fnmadd_ps(pdt0, psameu0,
+                                   pfgridj);  // gridj - dt0 * sameu0[index]
 
-      sameu[index] = s0 * (t0 * u0[i0j0] + t1 * u0[i1j0]) +
-                     s1 * (t0 * u0[i0j1] + t1 * u0[i1j1]);
-      samev[index] = s0 * (t0 * v0[i0j0] + t1 * v0[i1j0]) +
-                     s1 * (t0 * v0[i0j1] + t1 * v0[i1j1]);
+      __m256 py = _mm256_fnmadd_ps(pdt0, psamev0,
+                                   pfgridi);  // gridi - dt0 * samev0[index]
+      // TODO: Idea, as suggested in
+      // https://stackoverflow.com/questions/38006616/how-to-use-if-condition-in-intrinsics
+      // Use an if instead of these four instructions
+      // Usually none of the branches will be taken
+      // The hope is the branch predictor will do its thing
+      // To help it we could firstly traverse an internal portion of the
+      // grid (with some margin) so it almost always guesses correctly
+      px = _mm256_max_ps(px, plowest);  // clamp(x, 0.5, n + 0.5)
+      px = _mm256_min_ps(px, phighest);
+      py = _mm256_max_ps(py, plowest);  // clamp(y, 0.5, n + 0.5)
+      py = _mm256_min_ps(py, phighest);
+
+      const __m256i pj0 = _mm256_cvttps_epi32(px);  // j0 = (int)x;
+      const __m256i pi0 = _mm256_cvttps_epi32(py);  // i0 = (int)y;
+
+      const __m256 ps1 =
+          _mm256_sub_ps(px, _mm256_cvtepi32_ps(pj0));  // s1 = x - j0;
+      const __m256 ps0 = _mm256_sub_ps(pfone, ps1);    // s0 = 1 - s1;
+      const __m256 pt1 =
+          _mm256_sub_ps(py, _mm256_cvtepi32_ps(pi0));  // t1 = y - i0;
+      const __m256 pt0 = _mm256_sub_ps(pfone, pt1);    // t0 = 1 - t1;
+
+      // Let's build IX(j0, i0):
+      const __m256i pisoddrow = _mm256_and_si256(pi0, pone);  // i % 2
+      const __m256i pisevenrow =
+          _mm256_xor_si256(pisoddrow, pone);  // !isoddrow
+      const __m256i pisblack =
+          _mm256_xor_si256(                 // (j0 % 2) ^ (i0 % 2) (!=parity)
+              _mm256_and_si256(pj0, pone),  // j0 & 0x1 (isoddcolumn)
+              pisoddrow                     // i0 & 0x1
+          );
+      const __m256i pisred = _mm256_xor_si256(pisblack, pone);  // !isblack
+      const __m256i pfshift =
+          _mm256_sub_epi32(pisred, pisblack);  // isred ? 1 : -1
+
+      // TODO: All the bool operations are using entire int registers,
+      // can we improve on that?
+      // !((isred && isevenrow) || (isblack && isoddrow)), or equivalently
+      // (isblack || isoddrow) && (isred || isevenrow)
+      const __m256i p_starts_at_zero =
+          _mm256_and_si256(_mm256_or_si256(pisblack, pisoddrow),
+                           _mm256_or_si256(pisred, pisevenrow));
+
+      // TODO: Maybe instead of a multiplication with
+      // pisblack we could do a conditional move?
+      // pbase = isblack ? (n+2) * width : 0
+      const __m256i pbase = imul(pisblack, phalfgrid);
+      const __m256i poffset = _mm256_add_epi32(  // (j0 / 2) + i0 * ((n+2) / 2)
+          _mm256_srai_epi32(pj0, 1),             // (j0 / 2)
+          imul(pi0, pwidth)                      // i0 * ((n+2) / 2)
+      );
+
+      // i0j0 = // IX(j0, i0)
+      const __m256i pi0j0 = _mm256_add_epi32(pbase, poffset);
+      // i0j1 = i0j0 + width + (1 - isoffstart);
+      const __m256i pi1j1 =
+          _mm256_add_epi32(pi0j0, _mm256_add_epi32(pwidth, p_starts_at_zero));
+      // i0j1 = i0j0 + fshift * width * (n + 2) + (1 - isoffstart);
+      const __m256i pi0j1 = _mm256_add_epi32(
+          pi0j0,
+          _mm256_add_epi32(      // fshift * width * (n + 2) + (1 - isoffstart);
+              p_starts_at_zero,  // (1 - isoffstart)
+              imul(pfshift, phalfgrid)  // fshift * width * (n + 2)
+              ));
+      // i1j0 = i0j0 + fshift * width * (n + 2) + width;
+      const __m256i pi1j0 = _mm256_add_epi32(
+          pi0j0,
+          _mm256_add_epi32(  // fshift * width * (n + 2) + width;
+              pwidth, imul(pfshift, phalfgrid)  // fshift * width * (n + 2)
+              ));
+
+      // TODO: Gather ps seems to be slower on zx81 but faster on i7 7700hq
+      // Read and test with:
+      // https://stackoverflow.com/questions/24756534/in-what-situation-would-the-avx2-gather-instructions-be-faster-than-individually
+      // So maybe we shouldn't use gather
+      const __m256 pu0i0j0 = _mm256_i32gather_ps(u0, pi0j0, 4);
+      const __m256 pu0i0j1 = _mm256_i32gather_ps(u0, pi0j1, 4);
+      const __m256 pu0i1j0 = _mm256_i32gather_ps(u0, pi1j0, 4);
+      const __m256 pu0i1j1 = _mm256_i32gather_ps(u0, pi1j1, 4);
+      const __m256 psameu = _mm256_add_ps(
+          _mm256_mul_ps(ps0,            // s0 * (t0 * u0[i0j0] + t1 * u0[i1j0])
+                        _mm256_add_ps(  // t0 * u0[i0j0] + t1 * u0[i1j0]
+                            _mm256_mul_ps(pt0, pu0i0j0),  // t0 * u0[i0j0]
+                            _mm256_mul_ps(pt1, pu0i1j0)   // t1 * u0[i1j0]
+                            )),
+          _mm256_mul_ps(ps1,            // s1 * (t0 * u0[i0j1] + t1 * u0[i1j1])
+                        _mm256_add_ps(  // t0 * u0[i0j1] + t1 * u0[i1j1]
+                            _mm256_mul_ps(pt0, pu0i0j1),  // t0 * u0[i0j1]
+                            _mm256_mul_ps(pt1, pu0i1j1)   // t1 * u0[i1j1]
+                            )));
+      const __m256 pv0i0j0 = _mm256_i32gather_ps(v0, pi0j0, 4);
+      const __m256 pv0i0j1 = _mm256_i32gather_ps(v0, pi0j1, 4);
+      const __m256 pv0i1j0 = _mm256_i32gather_ps(v0, pi1j0, 4);
+      const __m256 pv0i1j1 = _mm256_i32gather_ps(v0, pi1j1, 4);
+      const __m256 psamev = _mm256_add_ps(
+          _mm256_mul_ps(ps0,            // s0 * (t0 * v0[i0j0] + t1 * v0[i1j0])
+                        _mm256_add_ps(  // t0 * v0[i0j0] + t1 * v0[i1j0]
+                            _mm256_mul_ps(pt0, pv0i0j0),  // t0 * v0[i0j0]
+                            _mm256_mul_ps(pt1, pv0i1j0)   // t1 * v0[i1j0]
+                            )),
+          _mm256_mul_ps(ps1,            // s1 * (t0 * v0[i0j1] + t1 * v0[i1j1])
+                        _mm256_add_ps(  // t0 * v0[i0j1] + t1 * v0[i1j1]
+                            _mm256_mul_ps(pt0, pv0i0j1),  // t0 * v0[i0j1]
+                            _mm256_mul_ps(pt1, pv0i1j1)   // t1 * v0[i1j1]
+                            )));
+
+      _mm256_storeu_ps(&sameu[index], psameu);
+      _mm256_storeu_ps(&samev[index], psamev);
     }
   }
 }
 
-static void vel_advect(unsigned int n, float *restrict u, float *restrict v,
-                       const float *restrict u0, const float *restrict v0,
-                       float dt) {
+static void vel_advect(unsigned int n, float *u, float *v, const float *u0,
+                       const float *v0, float dt) {
   unsigned int color_size = (n + 2) * ((n + 2) / 2);
   float *redu = u;
   float *redv = v;
