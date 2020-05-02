@@ -37,6 +37,10 @@ static inline __m256 fmul(__m256 a, __m256 b) {
   return _mm256_mul_ps(a, b);
 }
 
+static inline __m256 fadd(__m256 a, __m256 b) {
+  return _mm256_add_ps(a, b);
+}
+
 static inline __m256 ffmadd(__m256 a, __m256 x, __m256 y) {
   return _mm256_fmadd_ps(a, x, y);  // a * x + y
 }
