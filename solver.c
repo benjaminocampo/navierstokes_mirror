@@ -48,22 +48,20 @@ static void lin_solve_rb_step(grid_color color, unsigned int n, float a,
                               const float *restrict neigh,
                               float *restrict same) {
   const float invc = 1 / c;
-  int shift = color == RED ? 1 : -1;
   unsigned int start = color == RED ? 0 : 1;
-
   unsigned int width = (n + 2) / 2;
-
   const __m256 pinvc = _mm256_set1_ps(invc);
   const __m256 pa = _mm256_set1_ps(a);
-  for (unsigned int y = 1; y <= n; ++y, shift = -shift, start = 1 - start) {
+  for (unsigned int y = 1; y <= n; ++y, start = 1 - start) {
     for (unsigned int x = start; x < width - (1 - start); x += 8) {
       int index = idx(x, y, width);
       // In haswell it is a tad better to load two 128 vectors when unaligned
+      // See 14.6.2 at intel IA-32 Architectures Optimization Reference Manual
       __m256 f = fload2x4(&same0[index]);
       __m256 u = fload2x4(&neigh[index - width]);
-      __m256 r = fload2x4(&neigh[index + shift]);
+      __m256 r = fload2x4(&neigh[index - start + 1]);
       __m256 d = fload2x4(&neigh[index + width]);
-      __m256 l = fload2x4(&neigh[index]);
+      __m256 l = fload2x4(&neigh[index - start]);
       // t = (f + a * (u + r + d + l)) / c
       __m256 t = fmul(ffmadd(pa, fadd(u, fadd(r, fadd(d, l))), f), pinvc);
       _mm256_storeu_ps(&same[index], t);
@@ -447,10 +445,9 @@ static void vel_advect(unsigned int n, float *u, float *v, const float *u0,
 static void project_rb_step1(unsigned int n, grid_color color,
                              float *restrict sameu0, float *restrict samev0,
                              float *restrict neighu, float *restrict neighv) {
-  int shift = color == RED ? 1 : -1;
   unsigned int start = color == RED ? 0 : 1;
   unsigned int width = (n + 2) / 2;
-  for (unsigned int i = 1; i <= n; ++i, shift = -shift, start = 1 - start) {
+  for (unsigned int i = 1; i <= n; ++i, start = 1 - start) {
     for (unsigned int j = start; j < width - (1 - start); ++j) {
       int index = idx(j, i, width);
       samev0[index] = -0.5f *
@@ -465,11 +462,9 @@ static void project_rb_step1(unsigned int n, grid_color color,
 static void project_rb_step2(unsigned int n, grid_color color,
                              float *restrict sameu, float *restrict samev,
                              float *restrict neighu0) {
-  int shift = color == RED ? 1 : -1;
   unsigned int start = color == RED ? 0 : 1;
   unsigned int width = (n + 2) / 2;
-
-  for (unsigned int i = 1; i <= n; ++i, shift = -shift, start = 1 - start) {
+  for (unsigned int i = 1; i <= n; ++i, start = 1 - start) {
     for (unsigned int j = start; j < width - (1 - start); ++j) {
       int index = idx(j, i, width);
       sameu[index] -=
