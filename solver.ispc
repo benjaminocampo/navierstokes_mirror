@@ -78,25 +78,29 @@ export void lin_solve_rb_step(uniform int color,
   uniform int width = (n + 2) / 2;
   uniform float invc = 1/c;
   for (uniform int y = 1; y <= n; y++, shift = -shift, start = 1 - start) {
-    varying float left = neigh[programIndex + y * width];
+    varying int index_left = programIndex + y * width;
+    varying float left = neigh[index_left];
     for (uniform int x = start; x < width - programCount; x+= programCount) {
-      varying float next_left = neigh[programCount + programIndex + y * width];
+      varying int index_next_left = programCount + index_left;
+      varying float next_left = neigh[index_next_left];
       varying float right = insert(rotate(left, 1), programCount - 1, extract(next_left, 0));
       
       varying int index = (x + programIndex) + y * width;
+      /* print("x = %\n", x);
+      print("color = % \n", color);
       print("programIndex = % , y = % \n", programIndex, y);
-      print("left = % \n", programIndex + y * width);
-      print("next_left = % \n", programCount + programIndex + y * width);
+      print("left = % \n", index_left);
+      print("next_left = % \n", index_next_left);
       print("up = % \n", index - width);
       print("down = % \n", index + width);
       print("index = % \n", index);
-      print("---------\n");
+      print("---------\n"); */
       same[index] =
           (same0[index] + a * (neigh[index - width] + left +
                                 right + neigh[index + width])) *
           invc;
-    
       left = next_left;
+      index_left = index_next_left;
     }
     varying int xx = programIndex + (width - programCount);
     if(xx < width - (1-start)){
