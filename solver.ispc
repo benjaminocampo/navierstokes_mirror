@@ -27,15 +27,23 @@ export void lin_solve_rb_step(uniform int color,
   uniform int width = (n + 2) / 2;
   uniform float invc = 1/c;
 
-  for (uniform int y = 1; y <= n; y++, shift = -shift, start = 1 - start) {
-    cfor (varying int x = programIndex + start;
-         x < width - (1 - start);
+  for (uniform int y = 1; y <= n; y++, start = 1 - start) {
+    for (uniform int x = start;
+         x < width - programCount;
          x+= programCount) {
       
-      varying int index = x + y * width;
+      varying int index = (x + programIndex) + y * width;
       same[index] =
-          (same0[index] + a * (neigh[index - width] + neigh[index] +
-                                neigh[index + shift] + neigh[index + width])) *
+          (same0[index] + a * (neigh[index - width] + neigh[index - start] +
+                                neigh[index - start + 1] + neigh[index + width])) *
+          invc;
+    }
+    varying int xx = programIndex + (width - programCount);
+    if(xx < width - (1 - start)){
+      varying int index = xx + y * width;
+      same[index] =
+          (same0[index] + a * (neigh[index - width] + neigh[index - start] +
+                                neigh[index - start + 1] + neigh[index + width])) *
           invc;
     }
   }
