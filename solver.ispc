@@ -54,9 +54,9 @@ export void vel_advect_rb(uniform int color,
                           uniform float * uniform sameu,
                           uniform float * uniform samev,
                           const uniform float * uniform sameu0,
-                          const float uniform * uniform samev0,
-                          const float uniform * uniform u0,
-                          const float uniform * uniform v0,
+                          const uniform float * uniform samev0,
+                          const uniform float * uniform u0,
+                          const uniform float * uniform v0,
                           uniform float dt) {
 
   uniform int shift = color == 0 ? 1 : -1;
