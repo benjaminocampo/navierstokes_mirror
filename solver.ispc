@@ -63,9 +63,9 @@ export void vel_advect_rb(uniform int color,
                           uniform float *uniform sameu,
                           uniform float *uniform samev,
                           const uniform float *uniform sameu0,
-                          const float uniform *uniform samev0,
-                          const float uniform *uniform u0,
-                          const float uniform *uniform v0,
+                          const uniform float *uniform samev0,
+                          const uniform float *uniform u0,
+                          const uniform float *uniform v0,
                           uniform float dt)
 {
 
@@ -105,6 +105,53 @@ export void vel_advect_rb(uniform int color,
                      s1 * (t0 * u0[idx(j1, i0, n + 2)] + t1 * u0[idx(j1, i1, n + 2)]);
       samev[index] = s0 * (t0 * v0[idx(j0, i0, n + 2)] + t1 * v0[idx(j0, i1, n + 2)]) +
                      s1 * (t0 * v0[idx(j1, i0, n + 2)] + t1 * v0[idx(j1, i1, n + 2)]);
+    }
+  }
+}
+
+export void advect_rb(uniform int color,
+                      uniform unsigned int n, 
+                      uniform float * uniform samed,
+                      const uniform float * uniform d0,
+                      const uniform float * uniform sameu,
+                      const uniform float * uniform samev,
+                      uniform float dt)
+{
+
+  uniform int shift = color == 0 ? 1 : -1;
+  uniform unsigned int start = color == 0 ? 0 : 1;
+  uniform unsigned int width = (n + 2) / 2;
+
+  uniform float dt0 = dt * n;
+  for (uniform int i = 1; i <= n; i++, shift = -shift, start = 1 - start)
+  {
+    for (varying int j = programIndex + start;
+         j < width - (1 - start);
+         j += programCount)
+    {
+      varying int i0, j0, i1, j1;
+      varying float x, y, s0, t0, s1, t1;
+
+      varying int index = j + i * width;
+      varying int gridi = i;
+      varying int gridj = 2 * j + shift + start;
+      x = gridj - dt0 * sameu[index];
+      y = gridi - dt0 * samev[index];
+
+      x = clamp(x, 0.5f, n + 0.5f);
+      y = clamp(y, 0.5f, n + 0.5f);
+
+      j0 = (int)x;
+      i0 = (int)y;
+      i1 = i0 + 1;
+      j1 = j0 + 1;
+      s1 = x - j0;
+      s0 = 1 - s1;
+      t1 = y - i0;
+      t0 = 1 - t1;
+
+      samed[index] = s0 * (t0 * d0[idx(j0, i0, n + 2)] + t1 * d0[idx(j0, i1, n + 2)]) +
+                     s1 * (t0 * d0[idx(j1, i0, n + 2)] + t1 * d0[idx(j1, i1, n + 2)]);
     }
   }
 }
