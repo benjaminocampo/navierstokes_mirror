@@ -26,3 +26,9 @@ static inline int fiszero(__m256 ps) {
   return as[0] == 0 && as[1] == 0 && as[2] == 0 && as[3] == 0 && as[4] == 0 &&
          as[5] == 0 && as[6] == 0 && as[7] == 0;
 }
+
+static inline __m256 fload2x4(float const *base_addr) {
+  // equivalent to _mm256_loadu2_m128
+  __m256 __v256 = _mm256_castps128_ps256(_mm_loadu_ps(base_addr));
+  return _mm256_insertf128_ps(__v256, _mm_loadu_ps(base_addr + 4), 1);
+}

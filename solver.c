@@ -57,15 +57,13 @@ static void lin_solve_rb_step(grid_color color, unsigned int n, float a,
   const __m256 pa = _mm256_set1_ps(a);
   for (unsigned int y = 1; y <= n; ++y, shift = -shift, start = 1 - start) {
     for (unsigned int x = start; x < width - (1 - start); x += 8) {
-      // TODO: Make clear that row width should be a multiple of 8
-      // (8|width=s(n/2))
-      // TODO: start should get you to the next multiple of 8
       int index = idx(x, y, width);
-      __m256 f = _mm256_loadu_ps(&same0[index]);
-      __m256 u = _mm256_loadu_ps(&neigh[index - width]);
-      __m256 r = _mm256_loadu_ps(&neigh[index + shift]);
-      __m256 d = _mm256_loadu_ps(&neigh[index + width]);
-      __m256 l = _mm256_loadu_ps(&neigh[index]);
+      // In haswell it is a tad better to load two 128 vectors when unaligned
+      __m256 f = fload2x4(&same0[index]);
+      __m256 u = fload2x4(&neigh[index - width]);
+      __m256 r = fload2x4(&neigh[index + shift]);
+      __m256 d = fload2x4(&neigh[index + width]);
+      __m256 l = fload2x4(&neigh[index]);
       // DONE: Try fmadd. EDIT: it seems that gcc already figures that out.
       // DONE: Align loads and store. EDIT: Done, but wasn't worth it, 10ns
       // gain at the cost of modifying the codebase entirely
