@@ -14,6 +14,54 @@ export void add_source(uniform unsigned int n,
   }
 } 
 
+/* 
+R B R B R B R B | R B R B R B R B | R B R B R B R B | R B R B R B R B 
+B R B R B R B R | B R B R B R B R | B R B R B R B R | B R B R B R B R
+R B R B R B R B | R B R B R B R B | R B R B R B R B | R B R B R B R B 
+B R B R B R B R | B R B R B R B R | B R B R B R B R | B R B R B R B R
+R B R B R B R B | R B R B R B R B | R B R B R B R B | R B R B R B R B 
+B R B R B R B R | B R B R B R B R | B R B R B R B R | B R B R B R B R
+*/
+/*                                                    width - programCount = 24
+R R R R R R R R | R R R R R R R R | R R R R R R R R | R R R R x x x x
+R R R R R R R R | R R R R R R R R | R R R R R R R R | R R R R x x x x
+R R R R R R R R | R R R R R R R R | R R R R R R R R | R R R R x x x x 
+R R R R R R R R | R R R R R R R R | R R R R R R R R | R R R R x x x x
+R R R R R R R R | R R R R R R R R | R R R R R R R R | R R R R x x x x
+R R R R R R R R | R R R R R R R R | R R R R R R R R | R R R R x x x x
+
+R R R R | R R R R | R R R R | R R R R |
+R R R R | R R R R | R R R R | R R R R |
+R R R R | R R R R | R R R R | R R R R |
+R R R R | R R R R | R R R R | R R R R |
+R R R R | R R R R | R R R R | R R R R |
+R R R R | R R R R | R R R R | R R R R |
+R R R R | R R R R | R R R R | R R R R |
+R R R R | R R R R | R R R R | R R R R |
+R R R R | R R R R | R R R R | R R R R |
+
+*/
+
+/* 
+
+up;
+left;
+right;
+down;
+
+B B B B B B B B            | B B B B B B B B    | B B B B B B B B | B B B B X X X X    
+B B B B B B B B            | B B B B B B B B    | B B B B B B B B | B B B B X X X X 
+B B B B B B B B            | B B B B B B B B    | B B B B B B B B | B B B B X X X X
+B B B B B B B B            | B B B B B B B B    | B B B B B B B B | B B B B X X X X
+B B B B B B B B            | B B B B B B B B    | B B B B B B B B | B B B B X X X X
+B B B B B B B B            | B B B B B B B B    | B B B B B B B B | B B B B X X X X
+
+*/
+
+/* 
+B1 B2 B3 B4 B5 B6 B7
+ */
+
 export void lin_solve_rb_step(uniform int color,
                               uniform int n,
                               uniform float a,
@@ -21,21 +69,41 @@ export void lin_solve_rb_step(uniform int color,
                               const uniform float * uniform same0,
                               const uniform float * uniform neigh,
                               uniform float * uniform same) {
+  /* if(color != 0 && index != 0 && left != 0 &&next_left!=0 && first!=0 && right != 0){
+    print("color = %, index = %, left = % ,next_left = %, first = %, right = % \n", color, index, left, next_left, first, right);
+    assert(1 == 0);
+  } */
   uniform int shift = color == 0 ? 1 : -1;
   uniform int start = color == 0 ? 0 : 1;
-
   uniform int width = (n + 2) / 2;
   uniform float invc = 1/c;
-
   for (uniform int y = 1; y <= n; y++, shift = -shift, start = 1 - start) {
-    cfor (varying int x = programIndex + start;
-         x < width - (1 - start);
-         x+= programCount) {
+    varying float left = neigh[programIndex + y * width];
+    for (uniform int x = start; x < width - programCount; x+= programCount) {
+      varying float next_left = neigh[programCount + programIndex + y * width];
+      varying float right = insert(rotate(left, 1), programCount - 1, extract(next_left, 0));
       
-      varying int index = x + y * width;
+      varying int index = (x + programIndex) + y * width;
+      print("programIndex = % , y = % \n", programIndex, y);
+      print("left = % \n", programIndex + y * width);
+      print("next_left = % \n", programCount + programIndex + y * width);
+      print("up = % \n", index - width);
+      print("down = % \n", index + width);
+      print("index = % \n", index);
+      print("---------\n");
       same[index] =
-          (same0[index] + a * (neigh[index - width] + neigh[index] +
-                                neigh[index + shift] + neigh[index + width])) *
+          (same0[index] + a * (neigh[index - width] + left +
+                                right + neigh[index + width])) *
+          invc;
+    
+      left = next_left;
+    }
+    varying int xx = programIndex + (width - programCount);
+    if(xx < width - (1-start)){
+      varying int index = xx + y * width;
+      same[index] =
+          (same0[index] + a * (neigh[index - width] + neigh[index - start] +
+                                neigh[index - start + 1] + neigh[index + width])) *
           invc;
     }
   }
