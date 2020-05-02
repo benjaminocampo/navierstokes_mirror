@@ -74,40 +74,70 @@ static void diffuse(unsigned int n, boundary b, float *x, const float *x0,
   lin_solve(n, b, x, x0, a, 1 + 4 * a);
 }
 
-static void advect(unsigned int n, boundary b, float *d, const float *d0,
-                   const float *u, const float *v, float dt) {
-  int i0, i1, j0, j1;
+static void advect_rb(grid_color color, unsigned int n, float *samed,
+                      const float *d0, const float *sameu, const float *samev,
+                      float dt) {
+  int i0, j0;
   float x, y, s0, t0, s1, t1;
 
+  int shift = color == RED ? 1 : -1;
+  unsigned int start = color == RED ? 0 : 1;
+  unsigned int width = (n + 2) / 2;
+
   float dt0 = dt * n;
-  for (unsigned int i = 1; i <= n; i++) {
-    for (unsigned int j = 1; j <= n; j++) {
-      // TODO: Maybe we have some numerical tricks available here?
-      x = i - dt0 * u[IX(i, j)];
-      y = j - dt0 * v[IX(i, j)];
+  for (unsigned int i = 1; i <= n; i++, shift = -shift, start = 1 - start) {
+    for (unsigned int j = start; j < width - (1 - start); j++) {
+      int index = idx(j, i, width);
+      unsigned int gridi = i;
+      unsigned int gridj = 2 * j + shift + start;
+      x = gridj - dt0 * sameu[index];
+      y = gridi - dt0 * samev[index];
       if (x < 0.5f) {
         x = 0.5f;
       } else if (x > n + 0.5f) {
         x = n + 0.5f;
       }
-      i0 = (int)x;
-      i1 = i0 + 1;
       if (y < 0.5f) {
         y = 0.5f;
       } else if (y > n + 0.5f) {
         y = n + 0.5f;
       }
-
-      j0 = (int)y;
-      j1 = j0 + 1;
-      s1 = x - i0;
+      j0 = (int)x;
+      i0 = (int)y;
+      s1 = x - j0;
       s0 = 1 - s1;
-      t1 = y - j0;
+      t1 = y - i0;
       t0 = 1 - t1;
-      d[IX(i, j)] = s0 * (t0 * d0[IX(i0, j0)] + t1 * d0[IX(i0, j1)]) +
-                    s1 * (t0 * d0[IX(i1, j0)] + t1 * d0[IX(i1, j1)]);
+
+      unsigned int i0j0 = IX(j0, i0);
+      unsigned int isblack = (j0 % 2) ^ (i0 % 2);
+      unsigned int isred = !isblack;
+      unsigned int iseven = (i0 % 2 == 0);
+      unsigned int isodd = !iseven;
+      unsigned int fstart = ((isred && iseven) || (isblack && isodd));
+      int fshift = isred ? 1 : -1;
+      unsigned int i1j1 = i0j0 + width + (1 - fstart);
+      unsigned int i0j1 = i0j0 + fshift * width * (n + 2) + (1 - fstart);
+      unsigned int i1j0 = i0j0 + fshift * width * (n + 2) + width;
+
+      samed[index] = s0 * (t0 * d0[i0j0] + t1 * d0[i1j0]) +
+                     s1 * (t0 * d0[i0j1] + t1 * d0[i1j1]);
     }
   }
+}
+
+static void advect(unsigned int n, boundary b, float *d, const float *d0,
+                   const float *u, const float *v, float dt) {
+  unsigned int color_size = (n + 2) * ((n + 2) / 2);
+
+  float *redd = d;
+  const float *redu = u;
+  const float *redv = v;
+  float *blkd = d + color_size;
+  const float *blku = u + color_size;
+  const float *blkv = v + color_size;
+  advect_rb(RED, n, redd, d0, redu, redv, dt);
+  advect_rb(BLACK, n, blkd, d0, blku, blkv, dt);
   set_bnd(n, b, d);
 }
 
