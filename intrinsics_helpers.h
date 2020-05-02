@@ -32,3 +32,11 @@ static inline __m256 fload2x4(float const *base_addr) {
   __m256 __v256 = _mm256_castps128_ps256(_mm_loadu_ps(base_addr));
   return _mm256_insertf128_ps(__v256, _mm_loadu_ps(base_addr + 4), 1);
 }
+
+static inline __m256 fmul(__m256 a, __m256 b) {
+  return _mm256_mul_ps(a, b);
+}
+
+static inline __m256 ffmadd(__m256 a, __m256 x, __m256 y) {
+  return _mm256_fmadd_ps(a, x, y);  // a * x + y
+}

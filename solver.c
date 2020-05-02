@@ -212,17 +212,16 @@ static void advect_rb(grid_color color, unsigned int n, float *samed,
       const __m256 pd0i0j1 = _mm256_i32gather_ps(d0, pi0j1, 4);
       const __m256 pd0i1j0 = _mm256_i32gather_ps(d0, pi1j0, 4);
       const __m256 pd0i1j1 = _mm256_i32gather_ps(d0, pi1j1, 4);
-      const __m256 psamed0 = _mm256_add_ps(
-          _mm256_mul_ps(ps0,            // s0 * (t0 * d0[i0j0] + t1 * d0[i1j0])
-                        _mm256_add_ps(  // t0 * d0[i0j0] + t1 * d0[i1j0]
-                            _mm256_mul_ps(pt0, pd0i0j0),  // t0 * d0[i0j0]
-                            _mm256_mul_ps(pt1, pd0i1j0)   // t1 * d0[i1j0]
-                            )),
-          _mm256_mul_ps(ps1,            // s1 * (t0 * d0[i0j1] + t1 * d0[i1j1])
-                        _mm256_add_ps(  // t0 * d0[i0j1] + t1 * d0[i1j1]
-                            _mm256_mul_ps(pt0, pd0i0j1),  // t0 * d0[i0j1]
-                            _mm256_mul_ps(pt1, pd0i1j1)   // t1 * d0[i1j1]
-                            )));
+
+      // Replace the next formula with the same but using fmadd operations
+      // s0 * (t0 * d0[i0j0] + t1 * d0[i1j0]) +
+      // s1 * (t0 * d0[i0j1] + t1 * d0[i1j1])
+      const __m256 a = fmul(pt1, pd0i1j0); // t1 * d0[i1j0]
+      const __m256 b = ffmadd(pt0, pd0i0j0, a); // t0 * d0[i0j0] + a
+      const __m256 a1 = fmul(pt1, pd0i1j1); // t1 * d0[i1j1]
+      const __m256 b1 = ffmadd(pt0, pd0i0j1, a1); // t0 * d0[i0j1] + a1
+      const __m256 c = fmul(ps0, b);
+      const __m256 psamed0 = ffmadd(ps1, b1, c); // c + s1 * b1
 
       _mm256_storeu_ps(&samed[index], psamed0);
     }
