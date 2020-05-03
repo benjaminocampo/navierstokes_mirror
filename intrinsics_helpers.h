@@ -31,8 +31,8 @@ static inline __m256 fload8(float const *base_addr) {
   return _mm256_load_ps(base_addr);
 }
 
+// equivalent to _mm256_loadu2_m128
 static inline __m256 fload2x4(float const *base_addr) {
-  // equivalent to _mm256_loadu2_m128
   __m256 __v256 = _mm256_castps128_ps256(_mm_loadu_ps(base_addr));
   return _mm256_insertf128_ps(__v256, _mm_loadu_ps(base_addr + 4), 1);
 }
@@ -41,8 +41,11 @@ static inline __m256 fmul(__m256 a, __m256 b) { return _mm256_mul_ps(a, b); }
 
 static inline __m256 fadd(__m256 a, __m256 b) { return _mm256_add_ps(a, b); }
 
+static inline __m256 fsub(__m256 a, __m256 b) { return _mm256_sub_ps(a, b); }
+
+// a * x + y
 static inline __m256 ffmadd(__m256 a, __m256 x, __m256 y) {
-  return _mm256_fmadd_ps(a, x, y);  // a * x + y
+  return _mm256_fmadd_ps(a, x, y);
 }
 
 static inline __m256 fset(float x7, float x6, float x5, float x4, float x3,
@@ -52,16 +55,16 @@ static inline __m256 fset(float x7, float x6, float x5, float x4, float x3,
 
 static inline __m256 fset1(float a) { return _mm256_set1_ps(a); }
 
+// shift right: if a = [ 8 7 6 5 | 4 3 2 1 ] -> returns [ 0 8 7 6 | 5 4 3 2 ]
 static inline __m256 fshr(__m256 a) {
-  // shift right: if a = [ 8 7 6 5 | 4 3 2 1 ] -> returns [ 0 8 7 6 | 5 4 3 2 ]
   __m256 t0 = _mm256_permute_ps(a, 0b00111001);  // [ 5 8 7 6 | 1 4 3 2 ]
   __m256 t1 = _mm256_permute2f128_ps(t0, t0, 0b10000001);  // [0 0 0 0 5 8 7 6]
   __m256 sr = _mm256_blend_ps(t0, t1, 0b10001000);  // [ 0 8 7 6 | 5 4 3 2 ]
   return sr;
 }
 
+// shift left: if a = [ 8 7 6 5 | 4 3 2 1 ] -> returns [ 7 6 5 4 | 3 2 1 0 ]
 static inline __m256 fshl(__m256 a) {
-  // shift left: if a = [ 8 7 6 5 | 4 3 2 1 ] -> returns [ 7 6 5 4 | 3 2 1 0 ]
   __m256 t0 = _mm256_permute_ps(a, 0b10010011);  // [ 7 6 5 8 | 3 2 1 4 ]
   __m256 t1 = _mm256_permute2f128_ps(t0, t0, 0b00001000);  // [3 2 1 4 0 0 0 0]
   __m256 sl = _mm256_blend_ps(t0, t1, 0b00010001);  // [ 7 6 5 4 | 3 2 1 0 ]
