@@ -15,7 +15,6 @@
 */
 
 #include <GL/glut.h>
-#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <x86intrin.h>
@@ -373,7 +372,6 @@ int main(int argc, char **argv) {
     visc = 0.0001f;
     force = 5.0f;
     source = 100.0f;
-    assert((N / 2) % 8 == 0 && "N/2 must be divisible by avx vector size of 8");
     fprintf(
         stderr,
         "Using defaults : N=%d dt=%g diff=%g visc=%g force = %g source=%g\n", N,

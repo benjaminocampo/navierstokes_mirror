@@ -20,6 +20,14 @@ static inline __m256i imul(__m256i a, __m256i b) {
   return _mm256_mullo_epi32(a, b);
 }
 
+static inline __m256i iadd(__m256i a, __m256i b) {
+  return _mm256_add_epi32(a, b);
+}
+
+static inline __m256i isub(__m256i a, __m256i b) {
+  return _mm256_sub_epi32(a, b);
+}
+
 static inline int fiszero(__m256 ps) {
   float as[8];
   _mm256_storeu_ps(&as[0], ps);

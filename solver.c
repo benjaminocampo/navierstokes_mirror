@@ -25,22 +25,22 @@ static void add_source(unsigned int n, float *x, const float *s, float dt) {
     __m256 px = _mm256_load_ps(&x[i]);
     __m256 ps = _mm256_load_ps(&s[i]);
     __m256 product = _mm256_fmadd_ps(pdt, ps, px);  // x + dt * s[i]
-    _mm256_store_ps(&x[i], product);                // x[i] += dt * s[i];
+    _mm256_stream_ps(&x[i], product);               // x[i] += dt * s[i];
   }
   for (; i < size; i++) x[i] += dt * s[i];
 }
 
 static void set_bnd(unsigned int n, boundary b, float *x) {
-  for (unsigned int i = 1; i <= n; i++) {
-    x[IX(0, i)] = b == VERTICAL ? -x[IX(1, i)] : x[IX(1, i)];
-    x[IX(n + 1, i)] = b == VERTICAL ? -x[IX(n, i)] : x[IX(n, i)];
-    x[IX(i, 0)] = b == HORIZONTAL ? -x[IX(i, 1)] : x[IX(i, 1)];
-    x[IX(i, n + 1)] = b == HORIZONTAL ? -x[IX(i, n)] : x[IX(i, n)];
-  }
-  x[IX(0, 0)] = 0.5f * (x[IX(1, 0)] + x[IX(0, 1)]);
-  x[IX(0, n + 1)] = 0.5f * (x[IX(1, n + 1)] + x[IX(0, n)]);
-  x[IX(n + 1, 0)] = 0.5f * (x[IX(n, 0)] + x[IX(n + 1, 1)]);
-  x[IX(n + 1, n + 1)] = 0.5f * (x[IX(n, n + 1)] + x[IX(n + 1, n)]);
+  // for (unsigned int i = 1; i <= n; i++) {
+  //   x[IX(0, i)] = 0;
+  //   x[IX(n + 1, i)] = 0;
+  //   x[IX(i, 0)] = 0;
+  //   x[IX(i, n + 1)] = 0;
+  // }
+  // // x[IX(0, 0)] = 0;
+  // x[IX(0, n + 1)] = 0;
+  // x[IX(n + 1, 0)] = 0;
+  // x[IX(n + 1, n + 1)] = 0;
 }
 
 static void lin_solve_rb_step(grid_color color, unsigned int n, float a,
@@ -53,15 +53,15 @@ static void lin_solve_rb_step(grid_color color, unsigned int n, float a,
   const __m256 pinvc = _mm256_set1_ps(invc);
   const __m256 pa = _mm256_set1_ps(a);
   for (unsigned int y = 1; y <= n; ++y, start = 1 - start) {
-    for (unsigned int x = start; x < width - (1 - start); x += 8) {
+    for (unsigned int x = 0; x < width; x += 8) {
       int index = idx(x, y, width);
       // In haswell it is a tad better to load two 128 vectors when unaligned
       // See 14.6.2 at intel IA-32 Architectures Optimization Reference Manual
       __m256 f = fload2x4(&same0[index]);
       __m256 u = fload2x4(&neigh[index - width]);
-      __m256 r = fload2x4(&neigh[index - start + 1]);
+      __m256 r = fload2x4(&neigh[index + start]);
       __m256 d = fload2x4(&neigh[index + width]);
-      __m256 l = fload2x4(&neigh[index - start]);
+      __m256 l = fload2x4(&neigh[index + start - 1]);
       // t = (f + a * (u + r + d + l)) / c
       __m256 t = fmul(ffmadd(pa, fadd(u, fadd(r, fadd(d, l))), f), pinvc);
       _mm256_storeu_ps(&same[index], t);
@@ -96,7 +96,6 @@ static void advect_rb(grid_color color, unsigned int n, float *samed,
   // TODO: This is a stripped down copypaste from vel_advect_rb
   // Try to keep it DRY, but also remember to update this whenever
   // the other one changes
-  int shift = color == RED ? 1 : -1;
   int start = color == RED ? 0 : 1;
   const int width = (n + 2) / 2;
   const float dt0 = dt * n;
@@ -110,21 +109,20 @@ static void advect_rb(grid_color color, unsigned int n, float *samed,
   const __m256i pnplus2 = _mm256_set1_epi32(n + 2);
   const __m256i pwidth = _mm256_set1_epi32(width);
   const __m256i phalfgrid = imul(pnplus2, pwidth);
-  for (int iy = 1; iy <= (int)n; iy++, shift = -shift, start = 1 - start) {
-    const __m256i pshift = _mm256_set1_epi32(shift);
+  for (int iy = 1; iy <= (int)n; iy++, start = 1 - start) {
     const __m256i pstart = _mm256_set1_epi32(start);
     const __m256i pi = _mm256_set1_epi32(iy);
-    for (int ix = start; ix < width - (1 - start); ix += 8) {
+    for (int ix = 0; ix < width; ix += 8) {
       __m256i pj = _mm256_add_epi32(_mm256_set1_epi32(ix),
                                     psuccs);  // j = x + 0, ..., x + 7
 
       int index = idx(ix, iy, width);
       const __m256i pgridi = pi;
       const __m256 pfgridi = _mm256_cvtepi32_ps(pgridi);  // (float)gridi
-      const __m256i pgridj = _mm256_add_epi32(  // 2 * j + shift + start
-          _mm256_slli_epi32(pj, 1),             // 2 * j
-          _mm256_add_epi32(pshift, pstart)      // + shift + start
-      );
+
+      const __m256i pgridj =  // gridj = 2 * j + 1 + start
+          iadd(_mm256_slli_epi32(pj, 1), iadd(pone, pstart));
+
       const __m256 pfgridj = _mm256_cvtepi32_ps(pgridj);  // (float)gridj
       const __m256 psameu = _mm256_loadu_ps(&sameu[index]);
       const __m256 psamev = _mm256_loadu_ps(&samev[index]);
@@ -161,12 +159,9 @@ static void advect_rb(grid_color color, unsigned int n, float *samed,
       const __m256i pfshift =
           _mm256_sub_epi32(pisred, pisblack);  // isred ? 1 : -1
 
-      // !((isred && isevenrow) || (isblack && isoddrow)), or equivalently
-      // (isblack || isoddrow) && (isred || isevenrow)
-      const __m256i p_starts_at_zero =
-          _mm256_and_si256(_mm256_or_si256(pisblack, pisoddrow),
-                           _mm256_or_si256(pisred, pisevenrow));
-
+      const __m256i pfstart =  // (isred && isevenrow) || (isblack && isoddrow)
+          _mm256_or_si256(_mm256_and_si256(pisred, pisevenrow),
+                          _mm256_and_si256(pisblack, pisoddrow));
       // pbase = isblack ? (n+2) * width : 0
       const __m256i pbase = imul(pisblack, phalfgrid);
       const __m256i poffset = _mm256_add_epi32(  // (j0 / 2) + i0 * ((n+2) / 2)
@@ -175,23 +170,14 @@ static void advect_rb(grid_color color, unsigned int n, float *samed,
       );
 
       // i0j0 = // IX(j0, i0)
-      const __m256i pi0j0 = _mm256_add_epi32(pbase, poffset);
-      // i0j1 = i0j0 + width + (1 - isoffstart);
-      const __m256i pi1j1 =
-          _mm256_add_epi32(pi0j0, _mm256_add_epi32(pwidth, p_starts_at_zero));
-      // i0j1 = i0j0 + fshift * width * (n + 2) + (1 - isoffstart);
-      const __m256i pi0j1 = _mm256_add_epi32(
-          pi0j0,
-          _mm256_add_epi32(      // fshift * width * (n + 2) + (1 - isoffstart);
-              p_starts_at_zero,  // (1 - isoffstart)
-              imul(pfshift, phalfgrid)  // fshift * width * (n + 2)
-              ));
+      const __m256i pi0j0 = isub(iadd(pbase, poffset), pfstart);
+      // i0j1 = i0j0 + width + start;
+      const __m256i pi1j1 = iadd(pi0j0, iadd(pwidth, pfstart));
+      // i0j1 = i0j0 + fshift * width * (n + 2) + start;
+      const __m256i pi0j1 =
+          iadd(pi0j0, iadd(pfstart, imul(pfshift, phalfgrid)));
       // i1j0 = i0j0 + fshift * width * (n + 2) + width;
-      const __m256i pi1j0 = _mm256_add_epi32(
-          pi0j0,
-          _mm256_add_epi32(  // fshift * width * (n + 2) + width;
-              pwidth, imul(pfshift, phalfgrid)  // fshift * width * (n + 2)
-              ));
+      const __m256i pi1j0 = iadd(pi0j0, iadd(pwidth, imul(pfshift, phalfgrid)));
 
       const __m256 pd0i0j0 = _mm256_i32gather_ps(d0, pi0j0, 4);
       const __m256 pd0i0j1 = _mm256_i32gather_ps(d0, pi0j1, 4);
@@ -208,7 +194,7 @@ static void advect_rb(grid_color color, unsigned int n, float *samed,
       const __m256 c = fmul(ps0, b);
       const __m256 psamed0 = ffmadd(ps1, b1, c);  // c + s1 * b1
 
-      _mm256_storeu_ps(&samed[index], psamed0);
+      _mm256_stream_ps(&samed[index], psamed0);
     }
   }
 }
@@ -225,45 +211,6 @@ static void advect(unsigned int n, boundary b, float *d, const float *d0,
   const float *blkv = v + color_size;
   advect_rb(RED, n, redd, d0, redu, redv, dt);
   advect_rb(BLACK, n, blkd, d0, blku, blkv, dt);
-  set_bnd(n, b, d);
-}
-
-__attribute__((unused)) static void old_advect(unsigned int n, boundary b,
-                                               float *d, const float *d0,
-                                               const float *u, const float *v,
-                                               float dt) {
-  int i0, i1, j0, j1;
-  float x, y, s0, t0, s1, t1;
-
-  float dt0 = dt * n;
-  for (unsigned int i = 1; i <= n; i++) {
-    for (unsigned int j = 1; j <= n; j++) {
-      // TODO: Maybe we have some numerical tricks available here?
-      x = i - dt0 * u[IX(i, j)];
-      y = j - dt0 * v[IX(i, j)];
-      if (x < 0.5f) {
-        x = 0.5f;
-      } else if (x > n + 0.5f) {
-        x = n + 0.5f;
-      }
-      i0 = (int)x;
-      i1 = i0 + 1;
-      if (y < 0.5f) {
-        y = 0.5f;
-      } else if (y > n + 0.5f) {
-        y = n + 0.5f;
-      }
-
-      j0 = (int)y;
-      j1 = j0 + 1;
-      s1 = x - i0;
-      s0 = 1 - s1;
-      t1 = y - j0;
-      t0 = 1 - t1;
-      d[IX(i, j)] = s0 * (t0 * d0[IX(i0, j0)] + t1 * d0[IX(i0, j1)]) +
-                    s1 * (t0 * d0[IX(i1, j0)] + t1 * d0[IX(i1, j1)]);
-    }
-  }
   set_bnd(n, b, d);
 }
 
@@ -291,20 +238,18 @@ static void vel_advect_rb(grid_color color, unsigned int n, float *sameu,
   const __m256i pwidth = _mm256_set1_epi32(width);
   const __m256i phalfgrid = imul(pnplus2, pwidth);
   for (int iy = 1; iy <= (int)n; iy++, shift = -shift, start = 1 - start) {
-    const __m256i pshift = _mm256_set1_epi32(shift);
     const __m256i pstart = _mm256_set1_epi32(start);
     const __m256i pi = _mm256_set1_epi32(iy);
-    for (int ix = start; ix < width - (1 - start); ix += 8) {
+    for (int ix = 0; ix < width; ix += 8) {
       __m256i pj = _mm256_add_epi32(_mm256_set1_epi32(ix),
                                     psuccs);  // j = x + 0, ..., x + 7
 
       int index = idx(ix, iy, width);
       const __m256i pgridi = pi;
       const __m256 pfgridi = _mm256_cvtepi32_ps(pgridi);  // (float)gridi
-      const __m256i pgridj = _mm256_add_epi32(  // 2 * j + shift + start
-          _mm256_slli_epi32(pj, 1),             // 2 * j
-          _mm256_add_epi32(pshift, pstart)      // + shift + start
-      );
+
+      const __m256i pgridj =  // gridj = 2 * j + 1 + start
+          iadd(_mm256_slli_epi32(pj, 1), iadd(pone, pstart));
       const __m256 pfgridj = _mm256_cvtepi32_ps(pgridj);  // (float)gridj
       const __m256 psameu0 = _mm256_loadu_ps(&sameu0[index]);
       const __m256 psamev0 = _mm256_loadu_ps(&samev0[index]);
@@ -350,11 +295,10 @@ static void vel_advect_rb(grid_color color, unsigned int n, float *sameu,
 
       // TODO: All the bool operations are using entire int registers,
       // can we improve on that?
-      // !((isred && isevenrow) || (isblack && isoddrow)), or equivalently
-      // (isblack || isoddrow) && (isred || isevenrow)
-      const __m256i p_starts_at_zero =
-          _mm256_and_si256(_mm256_or_si256(pisblack, pisoddrow),
-                           _mm256_or_si256(pisred, pisevenrow));
+
+      const __m256i pfstart =  // (isred && isevenrow) || (isblack && isoddrow)
+          _mm256_or_si256(_mm256_and_si256(pisred, pisevenrow),
+                          _mm256_and_si256(pisblack, pisoddrow));
 
       // TODO: Maybe instead of a multiplication with
       // pisblack we could do a conditional move?
@@ -366,23 +310,14 @@ static void vel_advect_rb(grid_color color, unsigned int n, float *sameu,
       );
 
       // i0j0 = // IX(j0, i0)
-      const __m256i pi0j0 = _mm256_add_epi32(pbase, poffset);
-      // i0j1 = i0j0 + width + (1 - isoffstart);
-      const __m256i pi1j1 =
-          _mm256_add_epi32(pi0j0, _mm256_add_epi32(pwidth, p_starts_at_zero));
-      // i0j1 = i0j0 + fshift * width * (n + 2) + (1 - isoffstart);
-      const __m256i pi0j1 = _mm256_add_epi32(
-          pi0j0,
-          _mm256_add_epi32(      // fshift * width * (n + 2) + (1 - isoffstart);
-              p_starts_at_zero,  // (1 - isoffstart)
-              imul(pfshift, phalfgrid)  // fshift * width * (n + 2)
-              ));
+      const __m256i pi0j0 = isub(iadd(pbase, poffset), pfstart);
+      // i0j1 = i0j0 + width + start;
+      const __m256i pi1j1 = iadd(pi0j0, iadd(pwidth, pfstart));
+      // i0j1 = i0j0 + fshift * width * (n + 2) + start;
+      const __m256i pi0j1 =
+          iadd(pi0j0, iadd(pfstart, imul(pfshift, phalfgrid)));
       // i1j0 = i0j0 + fshift * width * (n + 2) + width;
-      const __m256i pi1j0 = _mm256_add_epi32(
-          pi0j0,
-          _mm256_add_epi32(  // fshift * width * (n + 2) + width;
-              pwidth, imul(pfshift, phalfgrid)  // fshift * width * (n + 2)
-              ));
+      const __m256i pi1j0 = iadd(pi0j0, iadd(pwidth, imul(pfshift, phalfgrid)));
 
       // TODO: Gather ps seems to be slower on zx81 but faster on i7 7700hq
       // Read and test with:
@@ -419,8 +354,8 @@ static void vel_advect_rb(grid_color color, unsigned int n, float *sameu,
                             _mm256_mul_ps(pt1, pv0i1j1)   // t1 * v0[i1j1]
                             )));
 
-      _mm256_storeu_ps(&sameu[index], psameu);
-      _mm256_storeu_ps(&samev[index], psamev);
+      _mm256_stream_ps(&sameu[index], psameu);
+      _mm256_stream_ps(&samev[index], psamev);
     }
   }
 }
@@ -445,13 +380,14 @@ static void vel_advect(unsigned int n, float *u, float *v, const float *u0,
 static void project_rb_step1(unsigned int n, grid_color color,
                              float *restrict sameu0, float *restrict samev0,
                              float *restrict neighu, float *restrict neighv) {
+  // TODO: Vectorize and make the writes with non temporal _mm256_stream_ps
   unsigned int start = color == RED ? 0 : 1;
   unsigned int width = (n + 2) / 2;
   for (unsigned int i = 1; i <= n; ++i, start = 1 - start) {
-    for (unsigned int j = start; j < width - (1 - start); ++j) {
+    for (unsigned int j = 0; j < width; ++j) {
       int index = idx(j, i, width);
       samev0[index] = -0.5f *
-                      (neighu[index - start + 1] - neighu[index - start] +
+                      (neighu[index + start] - neighu[index + start - 1] +
                        neighv[index + width] - neighv[index - width]) /
                       n;
       sameu0[index] = 0;
@@ -462,13 +398,14 @@ static void project_rb_step1(unsigned int n, grid_color color,
 static void project_rb_step2(unsigned int n, grid_color color,
                              float *restrict sameu, float *restrict samev,
                              float *restrict neighu0) {
+  // TODO: Vectorize and make aligned writes with _mm256_store_ps
   unsigned int start = color == RED ? 0 : 1;
   unsigned int width = (n + 2) / 2;
   for (unsigned int i = 1; i <= n; ++i, start = 1 - start) {
-    for (unsigned int j = start; j < width - (1 - start); ++j) {
+    for (unsigned int j = 0; j < width; ++j) {
       int index = idx(j, i, width);
       sameu[index] -=
-          0.5f * n * (neighu0[index - start + 1] - neighu0[index - start]);
+          0.5f * n * (neighu0[index + start] - neighu0[index + start - 1]);
       samev[index] -=
           0.5f * n * (neighu0[index + width] - neighu0[index - width]);
     }
