@@ -1,5 +1,4 @@
-int idx(int x, int y, int dim)
-{
+int idx(int x, int y, int dim) {
   int base = ((x & 1) ^ (y & 1)) * dim * (dim / 2);
   int offset = (x / 2) + y * (dim / 2);
   return base + offset;
@@ -8,11 +7,9 @@ int idx(int x, int y, int dim)
 export void add_source(uniform unsigned int n,
                        uniform float *uniform x,
                        const uniform float *uniform s,
-                       uniform float dt)
-{
+                       uniform float dt) {
   uniform int32 size = (n + 2) * (n + 2);
-  foreach (i = 0 ... size)
-  {
+  foreach (i = 0 ... size) {
     x[i] += dt * s[i];
   }
 }
@@ -23,28 +20,36 @@ export void lin_solve_rb_step(uniform int color,
                               uniform float c,
                               const uniform float *uniform same0,
                               const uniform float *uniform neigh,
-                              uniform float *uniform same)
-{
+                              uniform float *uniform same){
   uniform int start = color == 0 ? 0 : 1;
   uniform int width = (n + 2) / 2;
   uniform float invc = 1/c;
+  uniform int tile_width = 2*programCount; // Multiple of programCount
+  uniform int tile_height = 2;
+  uniform int N = (int)n;
 
-  for (uniform int y = 1; y <= n; y++, start = 1 - start) {
-    uniform int x;
-    for (x = start; x < width - programCount; x+= programCount) {
-      
-      varying int index = (x + programIndex) + y * width;
-      same[index] =
-          (same0[index] + a * (neigh[index - width] + neigh[index - start] +
-                                neigh[index - start + 1] + neigh[index + width])) *
-          invc;
+  for(uniform int ty = 1; ty <= N; ty += tile_height) { 
+    for(uniform int tx = 0; tx < width - tile_width; tx += tile_width) {
+      for(uniform int yy = 0; yy < tile_height; ++yy, start = 1 - start){
+        for(uniform int xx = start; xx < tile_width + start; xx+=programCount){
+            varying int index = (xx + tx + programIndex) + (ty + yy) * width;
+            same[index] =
+                (same0[index] +
+                  a * (neigh[index - width] + neigh[index - start] +
+                      neigh[index - start + 1] + neigh[index + width])) *
+                invc;
+        }
+      }
     }
-    varying int xx = programIndex + x;
-    if(xx < width - (1 - start)){
-      varying int index = xx + y * width;
+  }
+  // The last block must be updated separately
+  for (uniform int y = 1; y <= N; y++, start = 1 - start) {
+    for(varying int x = width - tile_width + start + programIndex;
+        x < width - (1 - start); x+=programCount){
+      varying int index = x + y * width;
       same[index] =
           (same0[index] + a * (neigh[index - width] + neigh[index - start] +
-                                neigh[index - start + 1] + neigh[index + width])) *
+                               neigh[index - start + 1] + neigh[index + width])) *
           invc;
     }
   }
