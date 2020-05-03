@@ -1,8 +1,11 @@
 #include "solver.h"
 
 #include <stddef.h>
+#include <sys/cdefs.h>
 
-#define IX(i, j) ((j) + (n + 2) * (i))
+#include "indices.h"
+
+#define IX(x, y) (rb_idx((x), (y), (n + 2)))
 #define SWAP(x0, x)  \
   {                  \
     float *tmp = x0; \
@@ -11,6 +14,7 @@
   }
 
 typedef enum { NONE = 0, VERTICAL = 1, HORIZONTAL = 2 } boundary;
+typedef enum { RED, BLACK } grid_color;
 
 static void add_source(unsigned int n, float *x, const float *s, float dt) {
   unsigned int size = (n + 2) * (n + 2);
@@ -32,29 +36,37 @@ static void set_bnd(unsigned int n, boundary b, float *x) {
   x[IX(n + 1, n + 1)] = 0.5f * (x[IX(n, n + 1)] + x[IX(n + 1, n)]);
 }
 
-// basic manual cache blocking
-static void lin_solve(unsigned int n, boundary b, float *x, const float *x0,
-                      float a, float c) {
-  // TODO: It does not work for n != 2**k, will not traverse all cells
-  const float invc = 1 / c;
-  const int tile_width = 4;   // 8 for i7 7700hq, 4 for e5 2560v3
-  const int tile_height = 4;  // 4 in both
-  const int N = (int)n;
-  for (unsigned int k = 0; k < 20; k++) {
-    for (int ti = 0; ti < N - 2; ti += tile_width) {
-      for (int tj = 0; tj < N - 2; tj += tile_height) {
-        for (int ii = 0; ii < tile_width; ii++) {
-          for (int jj = 0; jj < tile_height; jj++) {
-            const int i = 1 + ti + ii;
-            const int j = 1 + tj + jj;
-            x[IX(i, j)] =
-                (x0[IX(i, j)] + a * (x[IX(i - 1, j)] + x[IX(i + 1, j)] +
-                                     x[IX(i, j - 1)] + x[IX(i, j + 1)])) *
-                invc;
-          }
-        }
-      }
+static void lin_solve_rb_step(grid_color color, unsigned int n, float a,
+                              float c, const float *restrict same0,
+                              const float *restrict neigh,
+                              float *restrict same) {
+  int shift = color == RED ? 1 : -1;
+  unsigned int start = color == RED ? 0 : 1;
+
+  unsigned int width = (n + 2) / 2;
+
+  for (unsigned int y = 1; y <= n; ++y, shift = -shift, start = 1 - start) {
+    for (unsigned int x = start; x < width - (1 - start); ++x) {
+      int index = idx(x, y, width);
+      same[index] =
+          (same0[index] + a * (neigh[index - width] + neigh[index] +
+                               neigh[index + shift] + neigh[index + width])) /
+          c;
     }
+  }
+}
+
+static void lin_solve(unsigned int n, boundary b, float *restrict x,
+                      const float *restrict x0, float a, float c) {
+  unsigned int color_size = (n + 2) * ((n + 2) / 2);
+  const float *red0 = x0;
+  const float *blk0 = x0 + color_size;
+  float *red = x;
+  float *blk = x + color_size;
+
+  for (unsigned int k = 0; k < 20; ++k) {
+    lin_solve_rb_step(RED, n, a, c, red0, blk, red);
+    lin_solve_rb_step(BLACK, n, a, c, blk0, red, blk);
     set_bnd(n, b, x);
   }
 }
