@@ -32,7 +32,8 @@ export void lin_solve_rb_step(uniform int color,
   {
     varying int index_left = programIndex + y * width;
     varying float left = neigh[index_left];
-    for (uniform int x = start; x < width - programCount; x += programCount)
+    uniform int x;
+    for (x = start; x < width - programCount; x += programCount)
     {
       varying int index_next_left = programCount + index_left;
       varying float next_left = neigh[index_next_left];
@@ -46,7 +47,7 @@ export void lin_solve_rb_step(uniform int color,
       left = next_left;
       index_left = index_next_left;
     }
-    varying int xx = programIndex + (width - programCount);
+    varying int xx = programIndex + x;
     if (xx < width - (1 - start))
     {
       varying int index = xx + y * width;
