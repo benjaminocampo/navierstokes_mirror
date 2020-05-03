@@ -17,51 +17,51 @@ COMMON_OBJECTS=timing.o solver.o solver_ispc.o
 all: $(TARGETS)
 
 demo: demo.o $(COMMON_OBJECTS)
-        $(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS) -lGL -lGLU -lglut
+	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS) -lGL -lGLU -lglut
 
 headless: headless.o $(COMMON_OBJECTS)
-        $(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
+	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
 asm: solver.o
-        $(CC) $(CFLAGS) -fno-asynchronous-unwind-tables -fno-exceptions -S solver.c
+	$(CC) $(CFLAGS) -fno-asynchronous-unwind-tables -fno-exceptions -S solver.c
 
 runperf: headless
-        sudo perf stat \
-        -e \
-        cache-references,\
-        cache-misses,\
-        L1-dcache-stores,\
-        L1-dcache-store-misses,\
-        LLC-stores,\
-        LLC-store-misses,\
-        page-faults,\
-        cycles,\
-        instructions,\
-        branches,\
-        branch-misses \
-        -ddd \
-        ./headless
+	sudo perf stat \
+	-e \
+	cache-references,\
+	cache-misses,\
+	L1-dcache-stores,\
+	L1-dcache-store-misses,\
+	LLC-stores,\
+	LLC-store-misses,\
+	page-faults,\
+	cycles,\
+	instructions,\
+	branches,\
+	branch-misses \
+	-ddd \
+	./headless
 
 %_ispc.h: %.ispc
-        $(ISPC) $< -h $@ $(ISPCFLAGS)
+	$(ISPC) $< -h $@ $(ISPCFLAGS)
 
 %_ispc.o: %.ispc
-        $(ISPC) $< -o $@ $(ISPCFLAGS)
+	$(ISPC) $< -o $@ $(ISPCFLAGS)
 
 .depend: *.[ch]
-        $(CC) -MM $(SOURCES) > .depend
+	$(CC) -MM $(SOURCES) > .depend
 
 -include .depend
 
 %.o: %.c
-        $(CC) $(CFLAGS) -c $< -o $@ $(LDFLAGS)
+	$(CC) $(CFLAGS) -c $< -o $@ $(LDFLAGS)
 
 %.s: %.c
-        $(CC) $(CFLAGS) $^ -S -masm=intel
+	$(CC) $(CFLAGS) $^ -S -masm=intel
 
 .PHONY: clean ispc_server
 clean:
-        rm -f $(TARGETS) *.o *.asm .depend solver.s *~
+	rm -f $(TARGETS) *.o *.asm .depend solver.s *~
 
 ispc_server: ISPC='/opt/ispc/1.12.0/bin/ispc'
 ispc_server: ISPCFLAGS='--target=avx2-i32x8'
