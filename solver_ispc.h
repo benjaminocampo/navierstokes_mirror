@@ -32,6 +32,7 @@ namespace ispc { /* namespace */
 #if defined(__cplusplus) && (! defined(__ISPC_NO_EXTERN_C) || !__ISPC_NO_EXTERN_C )
 extern "C" {
 #endif // __cplusplus
+    extern void add_source(uint32_t n, float * x, const float * s, float dt);
     extern void lin_solve_rb_step(int32_t color, int32_t n, float a, float c, const float * same0, const float * neigh, float * same);
 #if defined(__cplusplus) && (! defined(__ISPC_NO_EXTERN_C) || !__ISPC_NO_EXTERN_C )
 } /* end extern C */
