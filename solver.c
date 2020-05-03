@@ -81,42 +81,6 @@ static void vel_advect(unsigned int n, float *restrict u, float *restrict v,
   set_bnd(n, HORIZONTAL, v);
 }
 
-static void project_rb_step1(unsigned int n, grid_color color,
-                             float *restrict sameu0, float *restrict samev0,
-                             float *restrict neighu, float *restrict neighv) {
-  int shift = color == RED ? 1 : -1;
-  unsigned int start = color == RED ? 0 : 1;
-  unsigned int width = (n + 2) / 2;
-  for (unsigned int i = 1; i <= n; ++i, shift = -shift, start = 1 - start) {
-    for (unsigned int j = start; j < width - (1 - start); ++j) {
-      int index = idx(j, i, width);
-      samev0[index] = -0.5f *
-                      (neighu[index - start + 1] - neighu[index - start] +
-                       neighv[index + width] - neighv[index - width]) /
-                      n;
-      sameu0[index] = 0;
-    }
-  }
-}
-
-static void project_rb_step2(unsigned int n, grid_color color,
-                             float *restrict sameu, float *restrict samev,
-                             float *restrict neighu0) {
-  int shift = color == RED ? 1 : -1;
-  unsigned int start = color == RED ? 0 : 1;
-  unsigned int width = (n + 2) / 2;
-
-  for (unsigned int i = 1; i <= n; ++i, shift = -shift, start = 1 - start) {
-    for (unsigned int j = start; j < width - (1 - start); ++j) {
-      int index = idx(j, i, width);
-      sameu[index] -=
-          0.5f * n * (neighu0[index - start + 1] - neighu0[index - start]);
-      samev[index] -=
-          0.5f * n * (neighu0[index + width] - neighu0[index - width]);
-    }
-  }
-}
-
 static void project(unsigned int n, float *u, float *v, float *u0, float *v0) {
   unsigned int color_size = (n + 2) * ((n + 2) / 2);
   float *redu = u;
