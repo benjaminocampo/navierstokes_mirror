@@ -6,13 +6,14 @@ cflags.fast:=-Ofast -march=native -floop-nest-optimize -funroll-loops -flto -g
 
 CC=cc
 override CFLAGS:=-std=c99 -Wall -Wextra -Werror -Wshadow -Wno-unused-parameter $(cflags.$(BUILD)) $(CFLAGS)
+ISPC=ispc
+ISPCFLAGS=--target=sse4-i32x8
 LDFLAGS=
 
 TARGETS=demo headless
 SOURCES=$(shell echo *.c)
-COMMON_OBJECTS=timing.o solver.o
+COMMON_OBJECTS=timing.o solver.o solver_ispc.o
 
-.PHONY: clean
 all: $(TARGETS)
 
 demo: demo.o $(COMMON_OBJECTS)
@@ -41,6 +42,12 @@ runperf: headless
 	-ddd \
 	./headless
 
+%_ispc.h: %.ispc
+	$(ISPC) $< -h $@ $(ISPCFLAGS)
+
+%_ispc.o: %.ispc
+	$(ISPC) $< -o $@ $(ISPCFLAGS)
+
 .depend: *.[ch]
 	$(CC) -MM $(SOURCES) > .depend
 
@@ -54,4 +61,4 @@ runperf: headless
 
 .PHONY: clean
 clean:
-	rm -f $(TARGETS) *.o .depend solver.s *~
+	rm -f $(TARGETS) *.o *.asm .depend solver.s *~
