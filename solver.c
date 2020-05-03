@@ -14,6 +14,13 @@
 typedef enum { NONE = 0, VERTICAL = 1, HORIZONTAL = 2 } boundary;
 typedef enum { RED, BLACK } grid_color;
 
+static void add_source(unsigned int n, float *x, const float *s, float dt) {
+  unsigned int size = (n + 2) * (n + 2);
+  for (unsigned int i = 0; i < size; i++) {
+    x[i] += dt * s[i];
+  }
+}
+
 static void set_bnd(unsigned int n, boundary b, float *x) {
   for (unsigned int i = 1; i <= n; i++) {
     x[IX(0, i)] = b == VERTICAL ? -x[IX(1, i)] : x[IX(1, i)];
