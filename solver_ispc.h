@@ -33,6 +33,7 @@ namespace ispc { /* namespace */
 extern "C" {
 #endif // __cplusplus
     extern void add_source(uint32_t n, float * x, const float * s, float dt);
+    extern void advect_rb(int32_t color, uint32_t n, float * samed, const float * d0, const float * sameu, const float * samev, float dt);
     extern void lin_solve_rb_step(int32_t color, int32_t n, float a, float c, const float * same0, const float * neigh, float * same);
     extern void vel_advect_rb(int32_t color, uint32_t n, float * sameu, float * samev, const float * sameu0, const float * samev0, const float * u0, const float * v0, float dt);
 #if defined(__cplusplus) && (! defined(__ISPC_NO_EXTERN_C) || !__ISPC_NO_EXTERN_C )
