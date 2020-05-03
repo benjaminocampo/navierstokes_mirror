@@ -142,3 +142,61 @@ export void advect_rb(uniform int color,
     }
   }
 }
+
+export void project_rb_step1(uniform unsigned int n,
+                             uniform int color,
+                             uniform float * uniform sameu0,
+                             uniform float * uniform samev0,
+                             uniform float * uniform neighu,
+                             uniform float * uniform neighv) {
+  uniform unsigned int start = color == 0 ? 0 : 1;
+  uniform unsigned int width = (n + 2) / 2;
+  for (uniform unsigned int i = 1; i <= n; ++i, start = 1 - start) {
+    uniform unsigned int j = start;
+    for (j = start; j < width - programCount; j+=programCount) {
+      varying int index = (j + programIndex) + i * width;
+      samev0[index] = -0.5f *
+                      (neighu[index - start + 1] - neighu[index - start] +
+                       neighv[index + width] - neighv[index - width]) /
+                      n;
+      sameu0[index] = 0;
+    }
+    varying unsigned int jj = programIndex + j;
+    if(jj < width - (1 - start)){
+      varying int index = jj + i * width;
+      samev0[index] = -0.5f *
+                      (neighu[index - start + 1] - neighu[index - start] +
+                       neighv[index + width] - neighv[index - width]) /
+                      n;
+      sameu0[index] = 0;
+    }
+  }
+}
+
+export void project_rb_step2(uniform unsigned int n,
+                             uniform int color,
+                             uniform float * uniform sameu,
+                             uniform float * uniform samev,
+                             uniform float * uniform neighu0) {
+  uniform unsigned int start = color == 0 ? 0 : 1;
+  uniform unsigned int width = (n + 2) / 2;
+
+  for (uniform unsigned int i = 1; i <= n; ++i, start = 1 - start) {
+    uniform unsigned int j = start;
+    for (j = start; j < width - programCount; j+=programCount) {
+      varying int index = (j + programIndex) + i * width;
+      sameu[index] -=
+          0.5f * n * (neighu0[index - start + 1] - neighu0[index - start]);
+      samev[index] -=
+          0.5f * n * (neighu0[index + width] - neighu0[index - width]);
+    }
+    varying unsigned int jj = programIndex + j;
+    if(jj < width - (1 - start)){
+      varying int index = jj + i * width;
+      sameu[index] -=
+          0.5f * n * (neighu0[index - start + 1] - neighu0[index - start]);
+      samev[index] -=
+          0.5f * n * (neighu0[index + width] - neighu0[index - width]);
+    }
+  }
+}
