@@ -48,25 +48,33 @@ static void lin_solve_rb_step(grid_color color, unsigned int n, float a,
                               const float *restrict neigh,
                               float *restrict same) {
   const float invc = 1 / c;
+  int shift = color == RED ? 1 : -1;
   unsigned int start = color == RED ? 0 : 1;
+
   unsigned int width = (n + 2) / 2;
   const __m256 pinvc = _mm256_set1_ps(invc);
   const __m256 pa = _mm256_set1_ps(a);
-  for (unsigned int y = 1; y <= n; ++y, start = 1 - start) {
-    for (unsigned int x = start; x < width - (1 - start); x += 8) {
-      int index = idx(x, y, width);
-      // In haswell it is a tad better to load two 128 vectors when unaligned
-      // See 14.6.2 at intel IA-32 Architectures Optimization Reference Manual
-      __m256 f = fload2x4(&same0[index]);
-      __m256 u = fload2x4(&neigh[index - width]);
-      __m256 r = fload2x4(&neigh[index - start + 1]);
-      __m256 d = fload2x4(&neigh[index + width]);
-      __m256 l = fload2x4(&neigh[index - start]);
-      // t = (f + a * (u + r + d + l)) / c
-      __m256 t = fmul(ffmadd(pa, fadd(u, fadd(r, fadd(d, l))), f), pinvc);
-      _mm256_storeu_ps(&same[index], t);
-    }
-  }
+
+  const unsigned int tile_width = 8;
+  const unsigned int tile_height = 8;
+  for (unsigned int ti = 1; ti <= n; ti += tile_height)
+    for (unsigned int tj = 0; tj < width - 1; tj += tile_width)
+      for (unsigned int iy = 0; iy < tile_height;
+           ++iy, shift = -shift, start = 1 - start)
+        for (unsigned int ix = start; ix < tile_width - (1 - start); ix += 8) {
+          int x = tj + ix;
+          int y = ti + iy;
+          int index = idx(x, y, width);
+          // Load two 2x128b instead of 1x256b, peculiarity of haswell
+          __m256 f = fload2x4(&same0[index]);
+          __m256 u = fload2x4(&neigh[index - width]);
+          __m256 r = fload2x4(&neigh[index + shift]);
+          __m256 d = fload2x4(&neigh[index + width]);
+          __m256 l = fload2x4(&neigh[index]);
+          // t = (f + a * (u + r + d + l)) / c
+          __m256 t = fmul(ffmadd(pa, fadd(u, fadd(r, fadd(d, l))), f), pinvc);
+          _mm256_storeu_ps(&same[index], t);
+        }
 }
 
 static void lin_solve(unsigned int n, boundary b, float *restrict x,
