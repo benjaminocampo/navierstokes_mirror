@@ -234,45 +234,6 @@ static void advect(unsigned int n, boundary b, float *d, const float *d0,
   set_bnd(n, b, d);
 }
 
-__attribute__((unused)) static void old_advect(unsigned int n, boundary b,
-                                               float *d, const float *d0,
-                                               const float *u, const float *v,
-                                               float dt) {
-  int i0, i1, j0, j1;
-  float x, y, s0, t0, s1, t1;
-
-  float dt0 = dt * n;
-  for (unsigned int i = 1; i <= n; i++) {
-    for (unsigned int j = 1; j <= n; j++) {
-      // TODO: Maybe we have some numerical tricks available here?
-      x = i - dt0 * u[IX(i, j)];
-      y = j - dt0 * v[IX(i, j)];
-      if (x < 0.5f) {
-        x = 0.5f;
-      } else if (x > n + 0.5f) {
-        x = n + 0.5f;
-      }
-      i0 = (int)x;
-      i1 = i0 + 1;
-      if (y < 0.5f) {
-        y = 0.5f;
-      } else if (y > n + 0.5f) {
-        y = n + 0.5f;
-      }
-
-      j0 = (int)y;
-      j1 = j0 + 1;
-      s1 = x - i0;
-      s0 = 1 - s1;
-      t1 = y - j0;
-      t0 = 1 - t1;
-      d[IX(i, j)] = s0 * (t0 * d0[IX(i0, j0)] + t1 * d0[IX(i0, j1)]) +
-                    s1 * (t0 * d0[IX(i1, j0)] + t1 * d0[IX(i1, j1)]);
-    }
-  }
-  set_bnd(n, b, d);
-}
-
 static void vel_advect_rb(grid_color color, unsigned int n, float *sameu,
                           float *samev, const float *sameu0,
                           const float *samev0, const float *u0, const float *v0,
