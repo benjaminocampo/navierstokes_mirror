@@ -16,6 +16,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <x86intrin.h>
 
 #include "indices.h"
 #include "solver.h"
@@ -49,12 +50,12 @@ __attribute__((unused)) static void dump_grid(float *grid) {
 */
 
 static void free_data(void) {
-  if (u) free(u);
-  if (v) free(v);
-  if (u_prev) free(u_prev);
-  if (v_prev) free(v_prev);
-  if (dens) free(dens);
-  if (dens_prev) free(dens_prev);
+  if (u) _mm_free(u);
+  if (v) _mm_free(v);
+  if (u_prev) _mm_free(u_prev);
+  if (v_prev) _mm_free(v_prev);
+  if (dens) _mm_free(dens);
+  if (dens_prev) _mm_free(dens_prev);
 }
 
 static void clear_data(void) {
@@ -68,12 +69,12 @@ static void clear_data(void) {
 static int allocate_data(void) {
   int size = (N + 2) * (N + 2);
 
-  u = (float *)malloc(size * sizeof(float));
-  v = (float *)malloc(size * sizeof(float));
-  u_prev = (float *)malloc(size * sizeof(float));
-  v_prev = (float *)malloc(size * sizeof(float));
-  dens = (float *)malloc(size * sizeof(float));
-  dens_prev = (float *)malloc(size * sizeof(float));
+  u = (float *)_mm_malloc(size * sizeof(float), 32);
+  v = (float *)_mm_malloc(size * sizeof(float), 32);
+  u_prev = (float *)_mm_malloc(size * sizeof(float), 32);
+  v_prev = (float *)_mm_malloc(size * sizeof(float), 32);
+  dens = (float *)_mm_malloc(size * sizeof(float), 32);
+  dens_prev = (float *)_mm_malloc(size * sizeof(float), 32);
 
   if (!u || !v || !u_prev || !v_prev || !dens || !dens_prev) {
     fprintf(stderr, "cannot allocate data\n");
