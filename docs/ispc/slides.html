@@ -288,14 +288,14 @@ Comparison between the red-black code given at the beggining of the lab and new 
 was called *baseline* on account of our new starting point.
 
 <div align="center">
-  <img src="graphs/nspcellgraph__rb __vs__baseline .png" alt="drawing" style="width:550px;"/>
+  <img src="ispc_graphs/nspcellgraph__rb __vs__baseline .png" alt="drawing" style="width:550px;"/>
 </div>
 
 ---
 <div align="center">
-  <img src="graphs/l1graph__rb __vs__baseline .png" alt="drawing" style="width:430px;"/>
+  <img src="ispc_graphs/l1graph__rb __vs__baseline .png" alt="drawing" style="width:430px;"/>
 
-  <img src="graphs/llcgraph__rb __vs__baseline .png" alt="drawing" style="width:430px;"/>
+  <img src="ispc_graphs/llcgraph__rb __vs__baseline .png" alt="drawing" style="width:430px;"/>
 </div>
 
 ---
@@ -313,13 +313,10 @@ Up to this point we needed to take different paths, one of us worked with *intri
 *ispc*.
 
 Both of us tried to take the same approaches in order to compare how much performance we got with different paths.
-Before going to the code the profiler told us were to put focus on.
-
-USE PERF REPORT 
 
 ---
 
-## linsolve: ISPC
+## linsolve - ISPC
 
 ```c
 export void lin_solve_rb_step(uniform int color,
@@ -353,23 +350,43 @@ export void lin_solve_rb_step(uniform int color,
 ```
 ---
 <div align="center">
-  <h3>baseline vs ispc/linsolve</h3>
+  <h3>baseline vs linsolve</h3>
 </div>
 
 <div align="center">
-  <img src="graphs/nspcellgraph__baseline __vs__linsolve .png" alt="drawing" style="width:550px;"/>
+  <img src="ispc_graphs/nspcellgraph__baseline __vs__linsolve .png" alt="drawing" style="width:550px;"/>
 </div>
 
 ---
 <div align="center">
-  <img src="graphs/l1graph__baseline __vs__linsolve .png" alt="drawing" style="width:430px;"/>
+  <img src="ispc_graphs/l1graph__baseline __vs__linsolve .png" alt="drawing" style="width:430px;"/>
 
-  <img src="graphs/llcgraph__baseline __vs__linsolve .png" alt="drawing" style="width:430px;"/>
+  <img src="ispc_graphs/llcgraph__baseline __vs__linsolve .png" alt="drawing" style="width:430px;"/>
 </div>
 
 ---
 
-## linsolve: intrinsics
+## linsolve - intrinsics
+
+linsolve code 
+
+---
+
+<div align="center">
+  <h3>baseline vs linsolve</h3>
+</div>
+
+<div align="center">
+  <img src="intrinsics_graphs/nspcellgraph__baseline __vs__linsolve .png" alt="drawing" style="width:550px;"/>
+</div>
+
+---
+<div align="center">
+  <img src="intrinsics_graphs/l1graph__baseline __vs__linsolve .png" alt="drawing" style="width:430px;"/>
+
+  <img src="intrinsics_graphs/llcgraph__baseline __vs__linsolve .png" alt="drawing" style="width:430px;"/>
+</div>
+
 
 ---
 
@@ -381,9 +398,13 @@ export void lin_solve_rb_step(uniform int color,
 
 We use the profiler to see what was the most expensive routine in the program.
 
-PERF IMAGE
+<div align="center">
+  <img src="perf/linsolve.png" alt="drawing" style="width:450px;"/>  
+</div>
 
 ---
+
+## advect - ISPC
 
 ```c
 export void vel_advect_rb( ... ) {
@@ -391,18 +412,14 @@ export void vel_advect_rb( ... ) {
 
   uniform float dt0 = dt * n;
   for (uniform int i = 1; i <= n; i++, shift = -shift, start = 1 - start){
-    for (varying int j = programIndex + start;
-         j < width - (1 - start);
-         j += programCount){
-      varying int i0, j0, i1, j1;
-      varying float x, y, s0, t0, s1, t1;
-
+    for (varying int j = programIndex + start; j < width - (1 - start);
+                                               j += programCount){
+      ...
       varying int index = j + i * width;
       varying int gridi = i;
       varying int gridj = 2 * j + shift + start;
       x = gridj - dt0 * sameu0[index];
       y = gridi - dt0 * samev0[index];
-
       x = clamp(x, 0.5f, n + 0.5f);
       y = clamp(y, 0.5f, n + 0.5f);
 
@@ -422,6 +439,39 @@ export void vel_advect_rb( ... ) {
 
 ```
 
+---
+
+## advect - ISPC
+
+```c
+
+export void advect_rb( ... ){
+  ... 
+
+  for (uniform int i = 1; i <= n; i++, shift = -shift, start = 1 - start){
+    for (varying int j = programIndex + start; j < width - (1 - start);
+                                               j += programCount){
+      ...
+
+      varying int index = j + i * width;
+      varying int gridi = i;
+      varying int gridj = 2 * j + shift + start;
+      x = gridj - dt0 * sameu[index];
+      y = gridi - dt0 * samev[index];
+
+      x = clamp(x, 0.5f, n + 0.5f);
+      y = clamp(y, 0.5f, n + 0.5f);
+
+      ...
+
+      samed[index] = s0 * (t0 * d0[idx(j0, i0, n + 2)]  + 
+                           t1 * d0[idx(j0, i1, n + 2)]) +
+                     s1 * (t0 * d0[idx(j1, i0, n + 2)]  + 
+                           t1 * d0[idx(j1, i1, n + 2)]);
+    }
+  }
+}
+
 ```
 
 ---
@@ -432,22 +482,384 @@ export void vel_advect_rb( ... ) {
 </div>
 
 <div align="center">
-  <img src="graphs/nspcellgraph__linsolve __vs__advect .png" alt="drawing" style="width:550px;"/>
+  <img src="ispc_graphs/nspcellgraph__linsolve __vs__advect .png" alt="drawing" style="width:550px;"/>
 </div>
 
 ---
 <div align="center">
-  <img src="graphs/l1graph__linsolve __vs__advect .png" alt="drawing" style="width:430px;"/>
+  <img src="ispc_graphs/l1graph__linsolve __vs__advect .png" alt="drawing" style="width:430px;"/>
 
-  <img src="graphs/llcgraph__linsolve __vs__advect .png" alt="drawing" style="width:430px;"/>
+  <img src="ispc_graphs/llcgraph__linsolve __vs__advect .png" alt="drawing" style="width:430px;"/>
 </div>
 
 
 ---
 
-## advect: intrinsics
+## advect - Intrinsics
+
+intrinsics code
 
 ---
+
+<div align="center">
+  <h3> linsolve vs advect</h3>
+</div>
+
+<div align="center">
+  <img src="intrinsics_graphs/nspcellgraph__linsolve __vs__advect .png" alt="drawing" style="width:550px;"/>
+</div>
+
+---
+<div align="center">
+  <img src="intrinsics_graphs/l1graph__linsolve __vs__advect .png" alt="drawing" style="width:430px;"/>
+
+  <img src="intrinsics_graphs/llcgraph__linsolve __vs__advect .png" alt="drawing" style="width:430px;"/>
+</div>
+
+---
+
+## Conclusions
+
+---
+
+## Perf report after advect vectorization
+
+<div align="center">
+  <img src="perf/advect.png" alt="drawing" style="width:450px;"/>  
+</div>
+
+---
+## We got an improvement! Nevertheless...
+
+<div align="center">
+  <img src="perf/advectgatthers.png" alt="advectgatthers" style="width:500px"/>
+</div>
+
+---
+
+## project - ISPC
+
+```c
+
+export void project_rb_step1( ... ) {
+  ...
+
+  for (uniform unsigned int i = 1; i <= n; ++i, start = 1 - start) {
+    uniform unsigned int j = start;
+    for (j = start; j < width - programCount; j+=programCount) {
+      varying int index = (j + programIndex) + i * width;
+      samev0[index] = -0.5f *
+                      (neighu[index - start + 1] - neighu[index - start] +
+                       neighv[index + width] - neighv[index - width]) /
+                      n;
+      sameu0[index] = 0;
+    }
+    varying unsigned int jj = programIndex + j;
+    if(jj < width - (1 - start)){
+      varying int index = jj + i * width;
+      samev0[index] = -0.5f *
+                      (neighu[index - start + 1] - neighu[index - start] +
+                       neighv[index + width] - neighv[index - width]) /
+                      n;
+      sameu0[index] = 0;
+    }
+  }
+}
+
+```
+
+---
+
+## project - ISPC
+
+```c
+
+export void project_rb_step2( ... ) {
+  ...
+
+  for (uniform unsigned int i = 1; i <= n; ++i, start = 1 - start) {
+    uniform unsigned int j = start;
+    for (j = start; j < width - programCount; j+=programCount) {
+      varying int index = (j + programIndex) + i * width;
+      sameu[index] -=
+          0.5f * n * (neighu0[index - start + 1] - neighu0[index - start]);
+      samev[index] -=
+          0.5f * n * (neighu0[index + width] - neighu0[index - width]);
+    }
+    varying unsigned int jj = programIndex + j;
+    if(jj < width - (1 - start)){
+      varying int index = jj + i * width;
+      sameu[index] -=
+          0.5f * n * (neighu0[index - start + 1] - neighu0[index - start]);
+      samev[index] -=
+          0.5f * n * (neighu0[index + width] - neighu0[index - width]);
+    }
+  }
+}
+```
+
+---
+
+<div align="center">
+  <h3> advect vs project </h3>
+</div>
+
+<div align="center">
+  <img src="ispc_graphs/nspcellgraph__advect __vs__project .png" alt="drawing" style="width:550px;"/>
+</div>
+
+---
+<div align="center">
+  <img src="ispc_graphs/l1graph__advect __vs__project .png" alt="drawing" style="width:430px;"/>
+
+  <img src="ispc_graphs/llcgraph__advect __vs__project .png" alt="drawing" style="width:430px;"/>
+</div>
+
+---
+
+# project - Intrinsics
+
+project code
+
+---
+
+<div align="center">
+  <h3> advect vs project </h3>
+</div>
+
+<div align="center">
+  <img src="intrinsics_graphs/nspcellgraph__advect __vs__project .png" alt="drawing" style="width:550px;"/>
+</div>
+
+---
+<div align="center">
+  <img src="intrinsics_graphs/l1graph__advect __vs__project .png" alt="drawing" style="width:430px;"/>
+
+  <img src="intrinsics_graphs/llcgraph__advect __vs__project .png" alt="drawing" style="width:430px;"/>
+</div>
+
+---
+
+## Conclusions
+
+---
+
+## The real problem was linsolve
+
+<div align="center">
+  <img src="perf/project.png" alt="drawing" style="width:450px;"/>  
+</div>
+
+---
+
+## The real problem was linsolve
+
+<div align="center">
+  <img src="perf/project2.png" alt="drawing" style="width:450px;"/>  
+</div>
+
+---
+
+## Two heuristics:
+
+  - Blocking
+  - Reduce the number of reads
+---
+
+## Blocking - ISPC
+
+```c
+export void lin_solve_rb_step( ... ){
+  ...
+
+  uniform int tile_width = 2*programCount; // Multiple of programCount
+  uniform int tile_height = 2;
+  uniform int N = (int)n;
+
+  for(uniform int ty = 1; ty <= N; ty += tile_height) { 
+    for(uniform int tx = 0; tx < width - tile_width; tx += tile_width) {
+      for(uniform int yy = 0; yy < tile_height; ++yy, start = 1 - start){
+        for(uniform int xx = start; xx < tile_width + start; xx+=programCount){
+            varying int index = (xx + tx + programIndex) + (ty + yy) * width;
+            same[index] =
+                (same0[index] +
+                  a * (neigh[index - width] + neigh[index - start] +
+                      neigh[index - start + 1] + neigh[index + width])) *
+                invc;
+        }
+      }
+    }
+  }
+  // The last block must be updated separately
+  
+  ...
+
+}
+
+```
+---
+
+<div align="center">
+  <h3> project vs blocks </h3>
+</div>
+
+<div align="center">
+  <img src="ispc_graphs/nspcellgraph__project __vs__blocks .png" alt="drawing" style="width:550px;"/>
+</div>
+
+---
+<div align="center">
+  <img src="ispc_graphs/l1graph__project __vs__blocks .png" alt="drawing" style="width:430px;"/>
+
+  <img src="ispc_graphs/llcgraph__project __vs__blocks .png" alt="drawing" style="width:430px;"/>
+</div>
+
+---
+
+## Blocking - Intrinsics
+
+blocks code
+
+---
+
+<div align="center">
+  <h3> project vs blocks </h3>
+</div>
+
+<div align="center">
+  <img src="intrinsics_graphs/nspcellgraph__project __vs__blocks .png" alt="drawing" style="width:550px;"/>
+</div>
+
+---
+
+<div align="center">
+  <img src="intrinsics_graphs/l1graph__project __vs__blocks .png" alt="drawing" style="width:430px;"/>
+
+  <img src="intrinsics_graphs/llcgraph__project __vs__blocks .png" alt="drawing" style="width:430px;"/>
+</div>
+
+---
+
+## Conclusions
+
+
+---
+
+## shload - ISPC
+
+```c
+export void lin_solve_rb_step( ... ) {
+  ...
+
+  for (uniform int y = 1; y <= n; y++, start = 1 - start) {
+    varying int index_left = programIndex + y * width;
+    varying float left = neigh[index_left];
+    uniform int x;
+    for (x = start; x < width - programCount; x += programCount){
+      varying int index_next_left = programCount + index_left;
+      varying float next_left = neigh[index_next_left];
+      varying float right = insert(
+        shift(left, 1),
+        programCount - 1,
+        extract(next_left, 0)
+      );
+
+      varying int index = (x + programIndex) + y * width;
+      same[index] =
+          (same0[index] + a * (neigh[index - width] + left +
+                               right + neigh[index + width])) *
+          invc;
+      left = next_left;
+      index_left = index_next_left;
+    }
+    ...
+  }
+}
+
+```
+
+---
+<div align="center">
+  <h3> project vs shload </h3>
+</div>
+
+<div align="center">
+  <img src="ispc_graphs/nspcellgraph__project __vs__shload .png" alt="drawing" style="width:550px;"/>
+</div>
+
+---
+
+<div align="center">
+  <img src="ispc_graphs/l1graph__project __vs__shload .png" alt="drawing" style="width:430px;"/>
+
+  <img src="ispc_graphs/llcgraph__project __vs__shload .png" alt="drawing" style="width:430px;"/>
+</div>
+
+---
+
+## shload - Intrinsics
+
+shload code
+
+---
+<div align="center">
+  <h3> project vs shload </h3>
+</div>
+
+<div align="center">
+  <img src="intrinsics_graphs/nspcellgraph__project __vs__shload .png" alt="drawing" style="width:550px;"/>
+</div>
+
+---
+
+<div align="center">
+  <img src="intrinsics_graphs/l1graph__project __vs__shload .png" alt="drawing" style="width:430px;"/>
+
+  <img src="intrinsics_graphs/llcgraph__project __vs__shload .png" alt="drawing" style="width:430px;"/>
+</div>
+
+---
+
+## Expensive shuffles
+
+<div align="center">
+  <img src="perf/shload.png" alt="drawing" style="width:450px;"/>  
+</div>
+
+---
+
+## Conclusions
+
+---
+
+
+---
+
+## Using icc compiler - ISPC results
+
+---
+
+## Using icc compiler - Intrinsics results
+
+<div align="center">
+  <img src="intrinsics_graphs/nspcellgraph__project __vs__icc .png" alt="drawing" style="width:550px;"/>
+</div>
+---
+
+<div align="center">
+  <img src="intrinsics_graphs/l1graph__project __vs__icc .png" alt="drawing" style="width:430px;"/>
+
+  <img src="intrinsics_graphs/llcgraph__project __vs__icc .png" alt="drawing" style="width:430px;"/>
+</div>
+---
+
+
+## Things that ended under the table
+
+---
+
+
+
 
     </textarea>
     <script src="https://remarkjs.com/downloads/remark-latest.min.js">

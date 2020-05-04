@@ -283,11 +283,11 @@ The solver.c file with the entire migration to red-black traversal can be found 
 After doing these changes, a comparison with the red-black code given at the beggining of the lab was needed.
 In this comparison the new red-black version was called *baseline* on account of our new starting point.
 
-![rb__vs__baseline](graphs/nspcellgraph__rb __vs__baseline .png)
+![rb__vs__baseline](ispc_graphs/nspcellgraph__rb __vs__baseline .png)
 
-![rb__vs__baseline](graphs/l1graph__rb __vs__baseline .png)
+![rb__vs__baseline](ispc_graphs/l1graph__rb __vs__baseline .png)
 
-![rb__vs__baseline](graphs/llcgraph__rb __vs__baseline .png)
+![rb__vs__baseline](ispc_graphs/llcgraph__rb __vs__baseline .png)
 
 Clearly, there is an improvement not only in the number of ns needed to update a cell but also in the number of cache references
 per cell iteration needed. The *rb* needs six times more llcache references than *baseline*. The ratio of cache hits are 
@@ -296,7 +296,7 @@ were talked about above. Since cells are stored different in red-black, *rb* upd
 unfriendly cache accesses). It is algo interesting the *baseline* results resemblance to what was obtained at the end of lab 1.
 The comparison is the following:
 
-TODO CREATE GRAPHS lab1__vs__baseline
+TODO CREATE ispc_graphs lab1__vs__baseline
 
 # Vectorizing
 
@@ -310,5 +310,4 @@ TODO: USE PERF REPORT SCREENSHOT FROM BASELINE .
 In this case, perf told us that the greatest gains were in lin_solve. So, both of us tried to vectorize it by means of
 what it was teached in the stencil tutorial given in classes.
 
-
-
+# 
