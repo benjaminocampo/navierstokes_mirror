@@ -27,28 +27,24 @@ class: center, middle
 
     Mateo de Mayo - Benjamín Ocampo
 ---
-
-# Lab 1
-Recalling to the first laboratory, the maximum perfomance we have got:
- - N = 128  steps = 512 
- - nanoseconds per cell = 221
- - N = 512  steps = 128  
- - nanoseconds per cell = 232
- - N = 2048  steps = 32 
- - nanoseconds per cell = 268
- - N = 4096  steps = 16  
- - nanoseconds per cell = 267
- - N = 8192  steps = 8  
- - nanoseconds per cell = 265
- 
- USE A PLOT.
+class: center, middle
+# Lab 1, redblack and our baseline
 
 ---
 
-# What it remained under the table.
-Function *advect* is called twice in order to perform the function *vel_step*. 
+# Lab 1
+Recalling the first laboratory, the maximum perfomance we got:
+<div align="center">
+  <img src="other_imgs/initial_vs_lab1.png" alt="drawing" style="width:550px;" />
+</div>
+
+---
+
+# Some last sequencial optimizations
+
+Function *advect* is called twice in order to perform the function *vel_step*.
 Both of them called with u0 and v0 as parameters.
- 
+
 ```c
 void vel_step(unsigned int n, float *u, float *v, float *u0, float *v0,
               float visc, float dt) {
@@ -65,41 +61,41 @@ void vel_step(unsigned int n, float *u, float *v, float *u0, float *v0,
 
 ---
 
-# What it remained under the table.
- 
+# Some last sequencial optimizations
+
 If we get into the definition of advect:
 ```c
  static void advect(unsigned int n, boundary b, float *d, const float *d0,
                     const float *u0, const float *v0, float dt) {
    int i0, i1, j0, j1;
    float x, y, s0, t0, s1, t1;
- 
+
    float dt0 = dt * n;
    for (unsigned int i = 1; i <= n; i++) {
      for (unsigned int j = 1; j <= n; j++) {
        x = i - dt0 * u0[IX(i, j)];
        y = j - dt0 * v0[IX(i, j)];
-       
+
        ...
- 
+
        // compute i0, i1, j0, j1 by means of x and y.
- 
+
        ...
- 
+
        d[IX(i, j)] = s0 * (t0 * d0[IX(i0, j0)] + t1 * d0[IX(i0, j1)]) +
                      s1 * (t0 * d0[IX(i1, j0)] + t1 * d0[IX(i1, j1)]);
- 
+
 ```
- 
+
 *u0* and *v0* will be used to compute indexes *i0*, *i1*, *j0* and *j1* in order to update the array *d*.
- 
+
 *x* an *y* are computed twice!
 
 ---
 
 # Before getting covered in mud
 
-In order to take advantage of *red-black* approach and its profits, the **solver.c** file was re-written 
+In order to take advantage of *red-black* approach and its profits, the **solver.c** file was re-written
 
 Functions **advect** and **project** were re-written and the two expensive advect calls were
 changed to just one function call which updates *u* and *v*.
@@ -107,109 +103,28 @@ changed to just one function call which updates *u* and *v*.
 ---
 
 ```c
-static void project(unsigned int n, float *u, float *v, float *u0, float *v0) {
-  unsigned int color_size = (n + 2) * ((n + 2) / 2);
-  float *redu = u;
-  float *redv = v;
-  float *blku = u + color_size;
-  float *blkv = v + color_size;
-  float *redu0 = u0;
-  float *redv0 = v0;
-  float *blku0 = u0 + color_size;
-  float *blkv0 = v0 + color_size;
-  project_rb_step1(n, RED, redu0, redv0, blku, blkv);
-  project_rb_step1(n, BLACK, blku0, blkv0, redu, redv);
-  set_bnd(n, NONE, v0);
-  set_bnd(n, NONE, u0);
-  lin_solve(n, NONE, u0, v0, 1, 4);
-  project_rb_step2(n, RED, redu, redv, blku0);
-  project_rb_step2(n, BLACK, blku, blkv, redu0);
-  set_bnd(n, VERTICAL, u);
-  set_bnd(n, HORIZONTAL, v);
-}
-```
-```c
 static void advect(unsigned int n, boundary b, float *d, const float *d0,
                    const float *u, const float *v, float dt) {
-  unsigned int color_size = (n + 2) * ((n + 2) / 2);
-  float *redd = d;
-  const float *redu = u;
-  const float *redv = v;
-  float *blkd = d + color_size;
-  const float *blku = u + color_size;
-  const float *blkv = v + color_size;
+  ...
   advect_rb(RED, n, redd, d0, redu, redv, dt);
   advect_rb(BLACK, n, blkd, d0, blku, blkv, dt);
   set_bnd(n, b, d);
 }
 ```
 
----
-```c
-static void project_rb_step1(unsigned int n, grid_color color,
-                             float *restrict sameu0, float *restrict samev0,
-                             float *restrict neighu, float *restrict neighv) {
-  int shift = color == RED ? 1 : -1;
-  unsigned int start = color == RED ? 0 : 1;
-  unsigned int width = (n + 2) / 2;
-  for (unsigned int i = 1; i <= n; ++i, start = 1 - start) {
-    for (unsigned int j = start; j < width - (1 - start); ++j) {
-      int index = idx(j, i, width);
-      samev0[index] = -0.5f *
-                      (neighu[index - start + 1] - neighu[index - start] +
-                       neighv[index + width] - neighv[index - width]) /
-                      n;
-      sameu0[index] = 0;
-    }
-  }
-}
-```
-```c
-static void project_rb_step2(unsigned int n, grid_color color,
-                             float *restrict sameu, float *restrict samev,
-                             float *restrict neighu0) {
-  int shift = color == RED ? 1 : -1;
-  unsigned int start = color == RED ? 0 : 1;
-  unsigned int width = (n + 2) / 2;
-  for (unsigned int i = 1; i <= n; ++i, start = 1 - start) {
-    for (unsigned int j = start; j < width - (1 - start); ++j) {
-      int index = idx(j, i, width);
-      sameu[index] -=
-          0.5f * n * (neighu0[index - start + 1] - neighu0[index - start]);
-      samev[index] -=
-          0.5f * n * (neighu0[index + width] - neighu0[index - width]);
-    }
-  }
-}
-```
----
 ```c
 static void advect_rb(grid_color color, unsigned int n, float *samed,
                       const float *d0, const float *sameu, const float *samev,
                       float dt) {
-
-  ... 
-
+  ...
   for (unsigned int i = 1; i <= n; i++, shift = -shift, start = 1 - start) {
     for (unsigned int j = start; j < width - (1 - start); j++) {
-      int index = idx(j, i, width);
-      unsigned int gridi = i;
-      unsigned int gridj = 2 * j + shift + start;
+      ...
       x = gridj - dt0 * sameu[index];
       y = gridi - dt0 * samev[index];
 
-      ...
+      ... // lots of computations to get i0j0, j1j0, j0j1, j1j1
 
-      unsigned int i0j0 = IX(j0, i0);
-      unsigned int isblack = (j0 % 2) ^ (i0 % 2);
-      unsigned int isred = !isblack;
-      unsigned int iseven = (i0 % 2 == 0);
-      unsigned int isodd = !iseven;
-      unsigned int fstart = ((isred && iseven) || (isblack && isodd));
-      int fshift = isred ? 1 : -1;
-      unsigned int i1j1 = i0j0 + width + (1 - fstart);
-      unsigned int i0j1 = i0j0 + fshift * width * (n + 2) + (1 - fstart);
-      unsigned int i1j0 = i0j0 + fshift * width * (n + 2) + width;
       samed[index] = s0 * (t0 * d0[i0j0] + t1 * d0[i1j0]) +
                      s1 * (t0 * d0[i0j1] + t1 * d0[i1j1]);
     }
@@ -223,51 +138,25 @@ static void advect_rb(grid_color color, unsigned int n, float *samed,
 static void vel_advect(unsigned int n, float *restrict u, float *restrict v,
                        const float *restrict u0, const float *restrict v0,
                        float dt) {
-  unsigned int color_size = (n + 2) * ((n + 2) / 2);
-  float *redu = u;
-  float *redv = v;
-  float *blku = u + color_size;
-  float *blkv = v + color_size;
-  const float *redu0 = u0;
-  const float *redv0 = v0;
-  const float *blku0 = u0 + color_size;
-  const float *blkv0 = v0 + color_size;
   vel_advect_rb(RED, n, redu, redv, redu0, redv0, u0, v0, dt);
   vel_advect_rb(BLACK, n, blku, blkv, blku0, blkv0, u0, v0, dt);
   set_bnd(n, VERTICAL, u);
   set_bnd(n, HORIZONTAL, v);
 }
 ```
----
+
 ```c
 static void vel_advect_rb(grid_color color, unsigned int n,
                           float *restrict sameu, float *restrict samev,
                           const float *sameu0, const float *samev0,
                           const float *u0, const float *v0, float dt) {
-
-  ...
-
-  float dt0 = dt * n;
   for (unsigned int i = 1; i <= n; i++, shift = -shift, start = 1 - start) {
     for (unsigned int j = start; j < width - (1 - start); j++) {
-      int index = idx(j, i, width);
-      unsigned int gridi = i;
-      unsigned int gridj = 2 * j + shift + start;
+      ...
       x = gridj - dt0 * sameu0[index];
       y = gridi - dt0 * samev0[index];
 
-      ...
-
-      unsigned int i0j0 = IX(j0, i0);
-      unsigned int isblack = (j0 % 2) ^ (i0 % 2);
-      unsigned int isred = !isblack;
-      unsigned int iseven = (i0 % 2 == 0);
-      unsigned int isodd = !iseven;
-      unsigned int fstart = ((isred && iseven) || (isblack && isodd));
-      int fshift = isred ? 1 : -1;
-      unsigned int i1j1 = i0j0 + width + (1 - fstart);
-      unsigned int i0j1 = i0j0 + fshift * width * (n + 2) + (1 - fstart);
-      unsigned int i1j0 = i0j0 + fshift * width * (n + 2) + width;
+      ... // lots of computations to get i0j0, j1j0, j0j1, j1j1
 
       sameu[index] = s0 * (t0 * u0[i0j0] + t1 * u0[i1j0]) +
                      s1 * (t0 * u0[i0j1] + t1 * u0[i1j1]);
@@ -280,11 +169,47 @@ static void vel_advect_rb(grid_color color, unsigned int n,
 ```
 ---
 
+```c
+static void project(unsigned int n, float *u, float *v, float *u0, float *v0) {
+  project_rb_step1(n, RED, redu0, redv0, blku, blkv);
+  project_rb_step1(n, BLACK, blku0, blkv0, redu, redv);
+  lin_solve(n, NONE, u0, v0, 1, 4);
+  project_rb_step2(n, RED, redu, redv, blku0);
+  project_rb_step2(n, BLACK, blku, blkv, redu0);
+}
+```
+
+```c
+static void project_rb_step1(unsigned int n, grid_color color, float *sameu0,
+                             float *samev0, float *neighu, float *neighv) {
+  for (unsigned int i = 1; i <= n; ++i, start = 1 - start)
+    for (unsigned int j = start; j < width - (1 - start); ++j) {
+      int index = idx(j, i, width);
+      samev0[index] = constant * (neighu[r] - neighu[l] + neighv[d] - neighv[u]);
+      sameu0[index] = 0;
+    }
+}
+```
+
+```c
+static void project_rb_step2(unsigned int n, grid_color color, float *sameu,
+                             float *samev, float *neighu0) {
+  for (unsigned int i = 1; i <= n; ++i, start = 1 - start)
+    for (unsigned int j = start; j < width - (1 - start); ++j) {
+      int index = idx(j, i, width);
+      sameu[index] -= constant * (neighu0[r] - neighu0[l]);
+      samev[index] -= constant * (neighu0[u] - neighu0[d]);
+    }
+}
+```
+
+---
+
 <div align="center">
   <h3>rb vs baseline</h3>
 </div>
 
-Comparison between the red-black code given at the beggining of the lab and new red-black version 
+Comparison between the red-black code given at the beggining of the lab and new red-black version
 was called *baseline* on account of our new starting point.
 
 <div align="center">
@@ -303,7 +228,7 @@ was called *baseline* on account of our new starting point.
   <h3>lab1 vs baseline</h3>
 </div>
 
-PUT RESULTS
+<!-- TODO: PUT RESULTS -->
 
 ---
 
@@ -315,8 +240,12 @@ Up to this point we needed to take different paths, one of us worked with *intri
 Both of us tried to take the same approaches in order to compare how much performance we got with different paths.
 
 ---
+class: center, middle
+# linsolve
 
-## linsolve - ISPC
+---
+
+# linsolve - ISPC
 
 ```c
 export void lin_solve_rb_step(uniform int color,
@@ -330,7 +259,7 @@ export void lin_solve_rb_step(uniform int color,
 
   for (uniform int y = 1; y <= n; y++, shift = -shift, start = 1 - start) {
     for (uniform int x = start; x < width - programCount; x+= programCount) {
-      
+
       varying int index = x + programIndex + y * width;
       same[index] =
           (same0[index] + a * (neigh[index - width] + neigh[index] +
@@ -350,7 +279,7 @@ export void lin_solve_rb_step(uniform int color,
 ```
 ---
 <div align="center">
-  <h3>baseline vs linsolve</h3>
+  <h3>baseline vs linsolve (ispc)</h3>
 </div>
 
 <div align="center">
@@ -366,14 +295,35 @@ export void lin_solve_rb_step(uniform int color,
 
 ---
 
-## linsolve - intrinsics
+# linsolve - intrinsics
 
-linsolve code 
+```c
+static void lin_solve_rb_step(...) {
+  const __m256 pinvc = fset1(invc);
+  const __m256 pa = fset1(a);
+  for (unsigned int y = 1; y <= n; ++y, start = 1 - start)
+    for (unsigned int x = start; x < width - (1 - start); x += 8) {
+      int index = idx(x, y, width);
+      __m256 f = fload2x4(&same0[index]);
+      __m256 u = fload2x4(&neigh[up]);
+      __m256 r = fload2x4(&neigh[right]);
+      __m256 d = fload2x4(&neigh[down]);
+      __m256 l = fload2x4(&neigh[left]);
+      __m256 t = fmul(ffmadd(pa, fadd(u, fadd(r, fadd(d, l))), f), pinvc);
+      fstoreu(&same[index], t);
+    }
+}
+```
+Ideas:
+- `fload2x4` (intel optimization manual (14.6.2), prior to skylake)
+- Delayed iterations: how imprecise can we go?
+- `float16`: on IA-64 only support for conversion `vcvtps2ph` and `vcvtph2ps`
+- Aligned memory. More on this with `stream`
 
 ---
 
 <div align="center">
-  <h3>baseline vs linsolve</h3>
+  <h3>baseline vs linsolve (intrinsics)</h3>
 </div>
 
 <div align="center">
@@ -392,19 +342,29 @@ linsolve code
 
 # Conclusions
 
+<!-- TODO: What goes in here? -->
+<!-- TODO: will we do an ispc vs intrinsics comparisson? -->
+
 ---
 
-## And Now What?
+# And Now What?
 
-We use the profiler to see what was the most expensive routine in the program.
+We used `perf` along with `coz-profiler` and `toplev` to see where to focus our
+attention.
+
+<!-- TODO: We didn't saw this, we saw 30% linsolve 30% advect and 30% project -->
 
 <div align="center">
-  <img src="perf/linsolve.png" alt="drawing" style="width:450px;"/>  
+  <img src="perf/linsolve.png" alt="drawing" style="width:450px;"/>
 </div>
 
 ---
+class: center, middle
+# advect
 
-## advect - ISPC
+---
+
+# advect - ISPC
 
 ```c
 export void vel_advect_rb( ... ) {
@@ -425,13 +385,13 @@ export void vel_advect_rb( ... ) {
 
       ...
 
-      sameu[index] = s0 * (t0 * u0[idx(j0, i0, n + 2)]  + 
+      sameu[index] = s0 * (t0 * u0[idx(j0, i0, n + 2)]  +
                            t1 * u0[idx(j0, i1, n + 2)]) +
-                     s1 * (t0 * u0[idx(j1, i0, n + 2)]  + 
+                     s1 * (t0 * u0[idx(j1, i0, n + 2)]  +
                            t1 * u0[idx(j1, i1, n + 2)]);
-      samev[index] = s0 * (t0 * v0[idx(j0, i0, n + 2)]  + 
+      samev[index] = s0 * (t0 * v0[idx(j0, i0, n + 2)]  +
                            t1 * v0[idx(j0, i1, n + 2)]) +
-                     s1 * (t0 * v0[idx(j1, i0, n + 2)]  + 
+                     s1 * (t0 * v0[idx(j1, i0, n + 2)]  +
                            t1 * v0[idx(j1, i1, n + 2)]);
     }
   }
@@ -441,12 +401,12 @@ export void vel_advect_rb( ... ) {
 
 ---
 
-## advect - ISPC
+# advect - ISPC
 
 ```c
 
 export void advect_rb( ... ){
-  ... 
+  ...
 
   for (uniform int i = 1; i <= n; i++, shift = -shift, start = 1 - start){
     for (varying int j = programIndex + start; j < width - (1 - start);
@@ -464,9 +424,9 @@ export void advect_rb( ... ){
 
       ...
 
-      samed[index] = s0 * (t0 * d0[idx(j0, i0, n + 2)]  + 
+      samed[index] = s0 * (t0 * d0[idx(j0, i0, n + 2)]  +
                            t1 * d0[idx(j0, i1, n + 2)]) +
-                     s1 * (t0 * d0[idx(j1, i0, n + 2)]  + 
+                     s1 * (t0 * d0[idx(j1, i0, n + 2)]  +
                            t1 * d0[idx(j1, i1, n + 2)]);
     }
   }
@@ -478,7 +438,7 @@ export void advect_rb( ... ){
 
 
 <div align="center">
-  <h3> linsolve vs advect</h3>
+  <h3> linsolve vs advect (ispc)</h3>
 </div>
 
 <div align="center">
@@ -495,14 +455,17 @@ export void advect_rb( ... ){
 
 ---
 
-## advect - Intrinsics
+# advect - intrinsics
 
-intrinsics code
+- very long and difficult to read code, the same is expressed in 4x size.
+- Debugging edge cases is hard, debugging vectorized edge cases is harder.
+- `_mm256_mul_ps` multiplies 8 floats. What `_mm256_mul_epi32` does?
+- `_mm256_cvtps_epi32` are not C casts
 
 ---
 
 <div align="center">
-  <h3> linsolve vs advect</h3>
+  <h3> linsolve vs advect (intrinsics)</h3>
 </div>
 
 <div align="center">
@@ -518,26 +481,36 @@ intrinsics code
 
 ---
 
-## Conclusions
+# Conclusions
+
+<!-- TODO: maybe we should remove these "conclusions" they are adding work and
+they consume presentation time -->
 
 ---
 
-## Perf report after advect vectorization
+# Perf report after advect vectorization
+
+<!-- TODO: Again, this is not true, after advect optimization, 30% was eaten by
+project, and this does not reflect that -->
 
 <div align="center">
-  <img src="perf/advect.png" alt="drawing" style="width:450px;"/>  
+  <img src="perf/advect.png" alt="drawing" style="width:450px;"/>
 </div>
 
 ---
-## We got an improvement! Nevertheless...
+# We got an improvement! Nevertheless...
 
 <div align="center">
   <img src="perf/advectgatthers.png" alt="advectgatthers" style="width:500px"/>
 </div>
 
 ---
+class: center, middle
+# project
 
-## project - ISPC
+---
+
+# project - ISPC
 
 ```c
 
@@ -570,7 +543,7 @@ export void project_rb_step1( ... ) {
 
 ---
 
-## project - ISPC
+# project - ISPC
 
 ```c
 
@@ -601,7 +574,7 @@ export void project_rb_step2( ... ) {
 ---
 
 <div align="center">
-  <h3> advect vs project </h3>
+  <h3> advect vs project (ispc)</h3>
 </div>
 
 <div align="center">
@@ -617,14 +590,15 @@ export void project_rb_step2( ... ) {
 
 ---
 
-# project - Intrinsics
+# project - intrinsics
 
-project code
+Not much to say, straightforward vectorization.
+Again using `fload2x4`.
 
 ---
 
 <div align="center">
-  <h3> advect vs project </h3>
+  <h3> advect vs project (intrinsics) </h3>
 </div>
 
 <div align="center">
@@ -640,33 +614,35 @@ project code
 
 ---
 
-## Conclusions
+# Conclusions
+
+<!-- TODO: again -->
 
 ---
 
-## The real problem was linsolve
+# The real problem was linsolve
 
 <div align="center">
-  <img src="perf/project.png" alt="drawing" style="width:450px;"/>  
+  <img src="perf/project.png" alt="drawing" style="width:450px;"/>
 </div>
 
 ---
 
-## The real problem was linsolve
+# The real problem was linsolve
 
 <div align="center">
-  <img src="perf/project2.png" alt="drawing" style="width:450px;"/>  
+  <img src="perf/project2.png" alt="drawing" style="width:450px;"/>
 </div>
 
+*Two ideas on this next...*
+
+---
+class: center, middle
+# blocking
+
 ---
 
-## Two heuristics:
-
-  - Blocking
-  - Reduce the number of reads
----
-
-## Blocking - ISPC
+# blocking - ISPC
 
 ```c
 export void lin_solve_rb_step( ... ){
@@ -676,7 +652,7 @@ export void lin_solve_rb_step( ... ){
   uniform int tile_height = 2;
   uniform int N = (int)n;
 
-  for(uniform int ty = 1; ty <= N; ty += tile_height) { 
+  for(uniform int ty = 1; ty <= N; ty += tile_height) {
     for(uniform int tx = 0; tx < width - tile_width; tx += tile_width) {
       for(uniform int yy = 0; yy < tile_height; ++yy, start = 1 - start){
         for(uniform int xx = start; xx < tile_width + start; xx+=programCount){
@@ -691,7 +667,7 @@ export void lin_solve_rb_step( ... ){
     }
   }
   // The last block must be updated separately
-  
+
   ...
 
 }
@@ -700,7 +676,7 @@ export void lin_solve_rb_step( ... ){
 ---
 
 <div align="center">
-  <h3> project vs blocks </h3>
+  <h3> project vs blocks (ispc) </h3>
 </div>
 
 <div align="center">
@@ -716,9 +692,33 @@ export void lin_solve_rb_step( ... ){
 
 ---
 
-## Blocking - Intrinsics
+# blocking - intrinsics
 
-blocks code
+```c
+const uint tile_width = 8;
+const uint tile_height = 8;
+for (uint ti = 1; ti <= n; ti += tile_height)
+  for (uint tj = 0; tj < width - 1; tj += tile_width)
+    for (uint iy = 0; iy < tile_height; ++iy, shift = -shift, start = 1 - start)
+      for (uint ix = start; ix < tile_width - (1 - start); ix += 8) {
+        int x = tj + ix;
+        int y = ti + iy;
+        int index = idx(x, y, width);
+        // Load two 2x128b instead of 1x256b, haswell peculiarity
+        __m256 f = fload2x4(&same0[index]);
+        __m256 u = fload2x4(&neigh[index - width]);
+        __m256 r = fload2x4(&neigh[index + shift]);
+        __m256 d = fload2x4(&neigh[index + width]);
+        __m256 l = fload2x4(&neigh[index]);
+        // t = (f + a * (u + r + d + l)) / c
+        __m256 t = fmul(ffmadd(pa, fadd(u, fadd(r, fadd(d, l))), f), pinvc);
+        _mm256_storeu_ps(&same[index], t);
+      }
+```
+- We are having trouble making sense of cache behaviour.
+- The need for more refined ways to analyze cache usage patterns.
+- Maybe we should take a second look at cachegrind.
+
 
 ---
 
@@ -740,12 +740,17 @@ blocks code
 
 ---
 
-## Conclusions
+# Conclusions
 
+<!-- TODO: and again... -->
+
+---
+class: center, middle
+# shload
 
 ---
 
-## shload - ISPC
+# shload - ISPC
 
 ```c
 export void lin_solve_rb_step( ... ) {
@@ -780,7 +785,7 @@ export void lin_solve_rb_step( ... ) {
 
 ---
 <div align="center">
-  <h3> project vs shload </h3>
+  <h3> project vs shload (ispc) </h3>
 </div>
 
 <div align="center">
@@ -797,18 +802,47 @@ export void lin_solve_rb_step( ... ) {
 
 ---
 
-## shload - Intrinsics
+# Expensive shuffles
 
-shload code
+<div align="center">
+  <img src="perf/shload.png" alt="drawing" style="width:450px;"/>
+</div>
+
+---
+
+# shload - Intrinsics
+
+A little different than previous idea.
+
+```c
+for (unsigned int y = 1; y <= n; ++y, start = 1 - start) {
+  leftmost = neigh[idx(0, y, width)];
+  for (unsigned int x = start; x < width - (1 - start); x += 8) {
+    ... // load f, u, r, d but not l
+
+    // 2x blends, 2x permutes, set1
+    __m256 l = append_left(leftmost, shift_right(r));
+
+    ... // compute and save result
+
+    // One extract and cast
+    leftmost = extract_rightmost(r);
+  }
+}
+```
 
 ---
 <div align="center">
-  <h3> project vs shload </h3>
+  <h3> project vs shload (intrinsics) </h3>
 </div>
 
 <div align="center">
   <img src="intrinsics_graphs/nspcellgraph__project __vs__shload .png" alt="drawing" style="width:550px;"/>
 </div>
+
+*Didn't expect that.*
+
+<!-- TODO: What? I thought it had improved -->
 
 ---
 
@@ -820,30 +854,31 @@ shload code
 
 ---
 
-## Expensive shuffles
+# Conclusions
+<!-- TODO: -->
 
-<div align="center">
-  <img src="perf/shload.png" alt="drawing" style="width:450px;"/>  
-</div>
+---
+class: center, middle
+# advect
 
 ---
 
-## Conclusions
+# icc - ISPC results
+
+<!-- TODO: Put the chart with the results -->
 
 ---
 
-
----
-
-## Using icc compiler - ISPC results
-
----
-
-## Using icc compiler - Intrinsics results
+# icc - Intrinsics results
 
 <div align="center">
   <img src="intrinsics_graphs/nspcellgraph__project __vs__icc .png" alt="drawing" style="width:550px;"/>
 </div>
+
+*Again, didn't expect that.*
+
+<!-- TODO: What? again -->
+
 ---
 
 <div align="center">
@@ -851,15 +886,57 @@ shload code
 
   <img src="intrinsics_graphs/llcgraph__project __vs__icc .png" alt="drawing" style="width:430px;"/>
 </div>
----
-
-
-## Things that ended under the table
 
 ---
+class: center, middle
+# stream
 
+---
+# stream - intrinsics
 
+```c
+static void lin_solve_rb_step(...) {
+  const __m256 pinvc = fset1(invc);
+  const __m256 pa = fset1(a);
+  for (unsigned int y = 1; y <= n; ++y, start = 1 - start)
+    for (unsigned int x = start; x < width - (1 - start); x += 8) {
+      int index = idx(x, y, width);
+      __m256 f = fload2x4(&same0[index]);
+      __m256 u = fload2x4(&neigh[up]);
+      __m256 r = fload2x4(&neigh[right]);
+      __m256 d = fload2x4(&neigh[down]);
+      __m256 l = fload2x4(&neigh[left]);
+      __m256 t = fmul(ffmadd(pa, fadd(u, fadd(r, fadd(d, l))), f), pinvc);
+      fstoreu(&same[index], t);
+    }
+}
+```
 
+- writes fills cache
+- non temporals `movnt`, `stream`
+- lots of non temporal opportunities and aligned stores in code
+- memory alignment with short time
+- results. again. underwhelming.
+- don't base your hopes on isolated experiments.
+
+---
+
+# stream - intrinsics results
+
+<!-- TODO: graphs -->
+
+---
+
+# Resources
+
+- [Intel optimization manual](https://software.intel.com/sites/default/files/managed/9e/bc/64-ia-32-architectures-optimization-manual.pd)
+- [Agner fog optimization manuals](https://www.agner.org/optimize/)
+- [Peter Cordes](https://stackoverflow.com/users/224132/peter-cordes) on stack overflow.
+- [Nvidia gpu gems](https://developer.nvidia.com/gpugems/gpugems3/part-v-physics-simulation/chapter-30-real-time-simulation-and-rendering-3d-fluids)
+
+---
+class: middle, center
+# End of presentation
 
     </textarea>
     <script src="https://remarkjs.com/downloads/remark-latest.min.js">
