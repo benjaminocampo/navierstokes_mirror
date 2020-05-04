@@ -54,6 +54,8 @@ def batch(branch, flags, n, steps):
     #SBATCH -o runs/slurmout/{run_name}.out
     #SBATCH -e runs/slurmerr/{run_name}.err
 
+    source /opt/ipsxe/2019u1/bin/compilervars.sh intel64
+
     git checkout l2/intrinsics/{branch} &&
     make clean &&
     make headless CFLAGS='-g {flags}' &&
