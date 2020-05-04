@@ -274,6 +274,11 @@ was called *baseline* on account of our new starting point.
 </div>
 
 ---
+class: center, middle
+# Standarized Simulation Parameters
+## Demo if not shown already
+
+---
 
 # Different Paths: Instrinsics and ISPC
 
@@ -296,24 +301,24 @@ export void lin_solve_rb_step( ... ) {
 
   for (uniform int y = 1; y <= n; y++, shift = -shift, start = 1 - start) {
     uniform int x;
-    for (x = start; x < width - programCount; x+= programCount) { 
+    for (x = start; x < width - programCount; x+= programCount) {
       varying int index = (x + programIndex) + y * width;
       same[index] =
-          (same0[index] + a * (neigh[index - width]     + 
+          (same0[index] + a * (neigh[index - width]     +
                                neigh[index - start]     +
-                               neigh[index - start + 1] + 
+                               neigh[index - start + 1] +
                                neigh[index + width])) *
           invc;
     }
     varying int xx = programIndex + x;
     if(xx < width - (1 - start)){
       varying int index = xx + y * width;
-    
+
       ... // Repeat the statements as above.
     }
 }
 ```
-Ideas: 
+Ideas:
 - Loop iterators as uniform values (Avoid the use of vmaskmovps).
 - Another possibility: use of *cfor* clauses.
 ---
@@ -512,7 +517,7 @@ class: center, middle
 
 ---
 
-# project 
+# project
 
 Not much to say, straightforward vectorization. On one hand, using `fload2x4` in the case of intrinsics.
 On the other hand, by means of *programIndex* and stopping an iteration before to avoid de use
@@ -910,6 +915,31 @@ Not as conservative, but good enough results.
   <img src="intrinsics_graphs/l1graph__shload __vs__stream .png" alt="drawing" style="width:430px;"/>
 
   <img src="intrinsics_graphs/llcgraph__shload __vs__stream .png" alt="drawing" style="width:430px;"/>
+</div>
+
+---
+class: center, middle
+# Final results
+
+---
+# baseline vs stream
+
+<div align="center">
+  <img src="other_imgs/nspcellgraph__baseline __vs__stream .png" alt="drawing" style="width:550px;"/>
+</div>
+
+---
+<div align="center">
+  <img src="other_imgs/l1graph__baseline __vs__stream .png" alt="drawing" style="width:430px;"/>
+
+  <img src="other_imgs/llcgraph__baseline __vs__stream .png" alt="drawing" style="width:430px;"/>
+</div>
+---
+
+# lab1 vs stream
+
+<div align="center">
+  <img src="other_imgs/nspcellgraph__lab1 __vs__stream .png" alt="drawing" style="width:550px;"/>
 </div>
 
 ---
