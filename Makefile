@@ -2,9 +2,9 @@
 # TODO: For some reason BUILD initialization needs to be done explicitly in args
 BUILD=fast
 cflags.common:=
-cflags.fast:=-Ofast -march=native -floop-nest-optimize -funroll-loops -flto -g
+cflags.fast:=-O3 -xHost -fp-model fast=2 -no-prec-div
 
-CC=cc
+CC=icc
 override CFLAGS:=-std=c99 -Wall -Wextra -Werror -Wshadow -Wno-unused-parameter $(cflags.$(BUILD)) $(CFLAGS)
 LDFLAGS=
 
@@ -14,6 +14,7 @@ COMMON_OBJECTS=timing.o solver.o
 
 .PHONY: clean
 all: $(TARGETS)
+	source /opt/ipsxe/2019u1/bin/compilervars.sh intel64
 
 demo: demo.o $(COMMON_OBJECTS)
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS) -lGL -lGLU -lglut
