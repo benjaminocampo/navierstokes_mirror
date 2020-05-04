@@ -19,9 +19,6 @@
   <body>
     <textarea id="source">
 
-
-<!-- TODO: agregar advect vs project graficos de intrinsics -->
-
 class: center, middle
 
 # Lab 2 - Vectorization
@@ -785,6 +782,22 @@ for (unsigned int y = 1; y <= n; ++y, start = 1 - start) {
 ---
 class: center, middle
 # icc
+
+---
+
+# icc - ispc results
+
+<div align="center">
+  <img src="ispc_graphs/nspcellgraph__shload __vs__icc .png" alt="drawing" style="width:550px;"/>
+</div>
+
+---
+
+<div align="center">
+  <img src="ispc_graphs/l1graph__shload __vs__icc .png" alt="drawing" style="width:430px;"/>
+
+  <img src="ispc_graphs/llcgraph__shload __vs__icc .png" alt="drawing" style="width:430px;"/>
+</div>
 
 ---
 # icc - Intrinsics results
