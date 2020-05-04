@@ -14,13 +14,11 @@ COMMON_OBJECTS=timing.o solver.o
 
 .PHONY: clean
 all: $(TARGETS)
-	source /opt/ipsxe/2019u1/bin/compilervars.sh intel64
 
 demo: demo.o $(COMMON_OBJECTS)
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS) -lGL -lGLU -lglut
 
 headless: headless.o $(COMMON_OBJECTS)
-	source /opt/ipsxe/2019u1/bin/compilervars.sh intel64
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
 asm: solver.o
