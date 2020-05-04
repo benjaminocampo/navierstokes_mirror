@@ -3,6 +3,7 @@
 #include <x86intrin.h>
 #include <stddef.h>
 #include "indices.h"
+#include "intrinsics_helpers.h"
 
 #define IX(x, y) (rb_idx((x), (y), (n + 2)))
 #define SWAP(x0, x)  \
@@ -40,35 +41,22 @@ static void lin_solve_rb_step(grid_color color, unsigned int n, float a,
                               const float *restrict neigh,
                               float *restrict same) {
   const float invc = 1 / c;
-  int shift = color == RED ? 1 : -1;
   unsigned int start = color == RED ? 0 : 1;
-
   unsigned int width = (n + 2) / 2;
-
   const __m256 pinvc = _mm256_set1_ps(invc);
   const __m256 pa = _mm256_set1_ps(a);
-  for (unsigned int y = 1 + 8; y <= n - 8; ++y, shift = -shift, start = 1 - start) {
-    for (unsigned int x = start + 8; x < width - 8 - (1 - start); x += 8) {
-      // TODO: Make clear that row width should be a multiple of 8 (8|width=s(n/2))
-      // TODO: start should get you to the next multiple of 8
+  for (unsigned int y = 1; y <= n; ++y, start = 1 - start) {
+    for (unsigned int x = start; x < width - (1 - start); x += 8) {
       int index = idx(x, y, width);
-      __m256 f = _mm256_loadu_ps(&same0[index]);
-      __m256 u = _mm256_loadu_ps(&neigh[index - width]);
-      __m256 r = _mm256_loadu_ps(&neigh[index + shift]);
-      __m256 d = _mm256_loadu_ps(&neigh[index + width]);
-      __m256 l = _mm256_loadu_ps(&neigh[index]);
-      // TODO: Try fmadd
-      // TODO: Align loads and store
-      __m256 t = _mm256_mul_ps(( // (f + a * (u + r + d + l)) / c
-        _mm256_add_ps(( // f + a * (u + r + d + l)
-          _mm256_mul_ps(( // a * (u + r + d + l)
-            _mm256_add_ps( // u + r + d + l
-              _mm256_add_ps(u, r), // u + r
-              _mm256_add_ps(l, d) // d + l
-            )
-          ), pa)
-        ), f)
-      ), pinvc);
+      // In haswell it is a tad better to load two 128 vectors when unaligned
+      // See 14.6.2 at intel IA-32 Architectures Optimization Reference Manual
+      __m256 f = fload2x4(&same0[index]);
+      __m256 u = fload2x4(&neigh[index - width]);
+      __m256 r = fload2x4(&neigh[index - start + 1]);
+      __m256 d = fload2x4(&neigh[index + width]);
+      __m256 l = fload2x4(&neigh[index - start]);
+      // t = (f + a * (u + r + d + l)) / c
+      __m256 t = fmul(ffmadd(pa, fadd(u, fadd(r, fadd(d, l))), f), pinvc);
       _mm256_storeu_ps(&same[index], t);
     }
   }
