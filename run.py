@@ -27,7 +27,7 @@ def cmd(c):
 def run(branch, flags, n, steps):
     underscored = lambda s: "_".join(s.split())
     run_name = f"{branch}_n{n}_steps{steps}_{underscored(flags)}"
-    run_cmd = f"./headless {n} 0.1 0.001 0.0001 5.0 100.0 {steps} > runs/stdouts/{run_name}.output"
+    run_cmd = f"./headless {n} 0.1 0.0001 0.0001 5.0 100.0 {steps} > runs/stdouts/{run_name}.output"
     perfstat_cmd = f"perf stat -o runs/perfstats/{run_name}.output -e cache-references,cache-misses,L1-dcache-stores,L1-dcache-store-misses,LLC-stores,LLC-store-misses,page-faults,cycles,instructions,branches,branch-misses -ddd"
     perfstat_run_cmd = f"{perfstat_cmd} {run_cmd}"
 
@@ -41,7 +41,7 @@ def run(branch, flags, n, steps):
 def batch(branch, flags, n, steps):
     underscored = lambda s: "_".join(s.split())
     run_name = f"{branch}_n{n}_steps{steps}_{underscored(flags)}"
-    run_cmd = f"./headless {n} 0.1 0.001 0.0001 5.0 100.0 {steps} > runs/stdouts/{run_name}.output"
+    run_cmd = f"./headless {n} 0.1 0.0001 0.0001 5.0 100.0 {steps} > runs/stdouts/{run_name}.output"
     perfstat_cmd = f"perf stat -o runs/perfstats/{run_name}.output -e cache-references,cache-misses,L1-dcache-stores,L1-dcache-store-misses,LLC-stores,LLC-store-misses,page-faults,cycles,instructions,branches,branch-misses -ddd"
     perfstat_run_cmd = f"{perfstat_cmd} {run_cmd}"
     submission_filename = f"runs/submissions/{run_name}.sh"
@@ -54,7 +54,7 @@ def batch(branch, flags, n, steps):
     #SBATCH -o runs/slurmout/{run_name}.out
     #SBATCH -e runs/slurmerr/{run_name}.err
 
-    git checkout l1-{branch} &&
+    git checkout l2/intrinsics/{branch} &&
     make clean &&
     make headless CFLAGS='-g {flags}' &&
     {perfstat_run_cmd} ||
@@ -87,30 +87,18 @@ def main():
     repo, initial_branch = save_git_state()
     itime = time()
     printf(">>> [START]")
-    for n, steps in [(128, 512), (512, 128), (2048, 32)]:
-        prun("baseline", "-O0", n, steps)
-        prun("baseline", "-O1", n, steps)
-        prun("baseline", "-O2", n, steps)
-        prun("baseline", "-O3", n, steps)
-        prun("baseline", "-Ofast", n, steps)
-        prun("baseline", "-Os", n, steps)
-        prun("baseline", "-O3 -floop-interchange -floop-nest-optimize", n, steps)
-        prun("ijswap", "-O3", n, steps)
-
-        prun("invc", "-O3", n, steps)
-        prun("ijswap", "-O3 -freciprocal-math", n, steps)
-        prun("ijswap", "-Ofast", n, steps)
-
-        prun("invc", "-Ofast", n, steps)
-        prun("invc", "-Ofast -march=native", n, steps)
-        prun("invc", "-Ofast -march=native -funroll-loops", n, steps)
-        prun("invc", "-Ofast -march=native -funroll-loops -floop-nest-optimize", n, steps)
-        prun("invc", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto", n, steps)
-
-        prun("bblocks", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto", n, steps)
-
-        prun(f"constn{n}", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto", n, steps)
-        prun(f"zdiffvisc{n}", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto", n, steps)
+    for n, steps in [(128, 512), (512, 128), (2048, 32), (4096, 16), (8192, 8)]:
+        prun("lab1", "", n, steps)
+        prun("rb", "", n, steps)
+        prun("baseline", "", n, steps)
+        prun("linsolve", "", n, steps)
+        prun("addsource", "", n, steps)
+        prun("advect", "", n, steps)
+        prun("project", "", n, steps)
+        prun("blocks", "", n, steps)
+        prun("shload", "", n, steps)
+        prun("icc", "", n, steps)
+        prun("stream", "", n, steps)
 
     if no_batch:
         restore_git_state(repo, initial_branch)
