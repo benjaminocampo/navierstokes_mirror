@@ -407,17 +407,24 @@ static void vel_advect(unsigned int n, float *restrict u, float *restrict v,
 static void project_rb_step1(unsigned int n, grid_color color,
                              float *restrict sameu0, float *restrict samev0,
                              float *restrict neighu, float *restrict neighv) {
-  int shift = color == RED ? 1 : -1;
   unsigned int start = color == RED ? 0 : 1;
   unsigned int width = (n + 2) / 2;
-  for (unsigned int i = 1; i <= n; ++i, shift = -shift, start = 1 - start) {
-    for (unsigned int j = start; j < width - (1 - start); ++j) {
+
+  const __m256 zeros = fset1(0.0f);
+  for (unsigned int i = 1; i <= n; ++i, start = 1 - start)
+    for (unsigned int j = start; j < width - (1 - start); j += 8)
+      _mm256_storeu_ps(&sameu0[idx(j, i, width)], zeros);
+
+  const __m256 ratio = fset1(-0.5f / n);
+  for (unsigned int i = 1; i <= n; ++i, start = 1 - start) {
+    for (unsigned int j = start; j < width - (1 - start); j += 8) {
       int index = idx(j, i, width);
-      samev0[index] = -0.5f *
-                      (neighu[index - start + 1] - neighu[index - start] +
-                       neighv[index + width] - neighv[index - width]) /
-                      n;
-      sameu0[index] = 0;
+      __m256 u = fload2x4(&neighv[index - width]);
+      __m256 r = fload2x4(&neighu[index - start + 1]);
+      __m256 d = fload2x4(&neighv[index + width]);
+      __m256 l = fload2x4(&neighu[index - start]);
+      __m256 result = fmul(ratio, fadd(fsub(r, l), fsub(d, u)));
+      _mm256_storeu_ps(&samev0[index], result);
     }
   }
 }
@@ -425,17 +432,22 @@ static void project_rb_step1(unsigned int n, grid_color color,
 static void project_rb_step2(unsigned int n, grid_color color,
                              float *restrict sameu, float *restrict samev,
                              float *restrict neighu0) {
-  int shift = color == RED ? 1 : -1;
   unsigned int start = color == RED ? 0 : 1;
   unsigned int width = (n + 2) / 2;
-
-  for (unsigned int i = 1; i <= n; ++i, shift = -shift, start = 1 - start) {
-    for (unsigned int j = start; j < width - (1 - start); ++j) {
+  const __m256 ratio = fset1(0.5f * n);
+  for (unsigned int i = 1; i <= n; ++i, start = 1 - start) {
+    for (unsigned int j = start; j < width - (1 - start); j += 8) {
       int index = idx(j, i, width);
-      sameu[index] -=
-          0.5f * n * (neighu0[index - start + 1] - neighu0[index - start]);
-      samev[index] -=
-          0.5f * n * (neighu0[index + width] - neighu0[index - width]);
+      __m256 oldu = fload2x4(&sameu[index]);
+      __m256 oldv = fload2x4(&samev[index]);
+      __m256 u = fload2x4(&neighu0[index - width]);
+      __m256 r = fload2x4(&neighu0[index - start + 1]);
+      __m256 d = fload2x4(&neighu0[index + width]);
+      __m256 l = fload2x4(&neighu0[index - start]);
+      __m256 newu = _mm256_fnmadd_ps(ratio, fsub(r, l), oldu);
+      __m256 newv = _mm256_fnmadd_ps(ratio, fsub(d, u), oldv);
+      _mm256_storeu_ps(&sameu[index], newu);
+      _mm256_storeu_ps(&samev[index], newv);
     }
   }
 }
