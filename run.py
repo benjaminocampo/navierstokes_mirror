@@ -98,7 +98,7 @@ def main():
         prun("blocks", "", n, steps)
         prun("shload", "", n, steps)
         prun("icc", "", n, steps)
-        prun("stream", "", n, steps)
+        prun("stream", "", n + 16 - 2, steps)
 
     if no_batch:
         restore_git_state(repo, initial_branch)
