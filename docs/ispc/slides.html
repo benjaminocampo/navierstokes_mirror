@@ -840,18 +840,18 @@ for (unsigned int y = 1; y <= n; ++y, start = 1 - start) {
   <img src="intrinsics_graphs/nspcellgraph__project __vs__shload .png" alt="drawing" style="width:550px;"/>
 </div>
 
-*Didn't expect that.*
-
-<!-- TODO: What? I thought it had improved -->
-
 ---
 
+*Note that while cache accesses are less, cache misses remain constant*
+
 <div align="center">
-  <img src="intrinsics_graphs/l1graph__project __vs__shload .png" alt="drawing" style="width:430px;"/>
-
-  <img src="intrinsics_graphs/llcgraph__project __vs__shload .png" alt="drawing" style="width:430px;"/>
+  <img src="intrinsics_graphs/l1graph__project __vs__shload .png" alt="drawing" style="width:600px;"/>
 </div>
-
+---
+.
+<div align="center">
+  <img src="intrinsics_graphs/llcgraph__project __vs__shload .png" alt="drawing" style="width:600px;"/>
+</div>
 ---
 
 # Conclusions
@@ -872,19 +872,15 @@ class: center, middle
 # icc - Intrinsics results
 
 <div align="center">
-  <img src="intrinsics_graphs/nspcellgraph__project __vs__icc .png" alt="drawing" style="width:550px;"/>
+  <img src="intrinsics_graphs/nspcellgraph__shload __vs__icc .png" alt="drawing" style="width:550px;"/>
 </div>
-
-*Again, didn't expect that.*
-
-<!-- TODO: What? again -->
 
 ---
 
 <div align="center">
-  <img src="intrinsics_graphs/l1graph__project __vs__icc .png" alt="drawing" style="width:430px;"/>
+  <img src="intrinsics_graphs/l1graph__shload __vs__icc .png" alt="drawing" style="width:430px;"/>
 
-  <img src="intrinsics_graphs/llcgraph__project __vs__icc .png" alt="drawing" style="width:430px;"/>
+  <img src="intrinsics_graphs/llcgraph__shload __vs__icc .png" alt="drawing" style="width:430px;"/>
 </div>
 
 ---
@@ -892,7 +888,7 @@ class: center, middle
 # stream
 
 ---
-# stream - intrinsics
+# stream - analysis
 
 ```c
 static void lin_solve_rb_step(...) {
@@ -913,17 +909,77 @@ static void lin_solve_rb_step(...) {
 ```
 
 - writes fills cache
-- non temporals `movnt`, `stream`
+- non temporals `movnt` intstructions, `stream` intrinsic
 - lots of non temporal opportunities and aligned stores in code
 - memory alignment with short time
-- results. again. underwhelming.
-- don't base your hopes on isolated experiments.
+
+---
+# stream - non temporal writes
+
+```c
+static void lin_solve_rb_step(...) {
+  const __m256 pinvc = fset1(invc);
+  const __m256 pa = fset1(a);
+  for (unsigned int y = 1; y <= n; ++y, start = 1 - start)
+    for (unsigned int x = 0; x < width; x += 8) {
+      int index = idx(x, y, width);
+      __m256 f = fload2x4(&same0[index]);
+      __m256 u = fload2x4(&neigh[up]);
+      __m256 r = fload2x4(&neigh[right]);
+      __m256 d = fload2x4(&neigh[down]);
+      __m256 l = fload2x4(&neigh[left]);
+      __m256 t = fmul(ffmadd(pa, fadd(u, fadd(r, fadd(d, l))), f), pinvc);
+      fstream(&same[index], t);
+    }
+}
+```
+
+- Main improvement, but advect and project writes were benefited as well
+- It needed a new memory layout, it wasn't as simple as it appears.
+
+---
+# stream - old mem alignment
+<div align="center">
+  <img src="other_imgs/regular_mem.png" alt="drawing" style="width:400px;"/>
+</div>
+
+---
+# stream - redblack alignment
+We need to align the color grids so our writes can be aligned as well.
+<div align="center">
+  <img src="other_imgs/redblack_mem.png" alt="drawing" style="width:400px;"/>
+</div>
+
+---
+# stream - padding
+Not feasible due to development time constraints.
+<div align="center">
+  <img src="other_imgs/padding_mem.png" alt="drawing" style="width:400px;"/>
+</div>
+
+---
+# stream - merge borders
+Not as conservative, but good enough results.
+
+<div align="center">
+  <img src="other_imgs/stream_mem.png" alt="drawing" style="width:400px;"/>
+</div>
 
 ---
 
 # stream - intrinsics results
 
-<!-- TODO: graphs -->
+<div align="center">
+  <img src="intrinsics_graphs/nspcellgraph__shload __vs__stream .png" alt="drawing" style="width:550px;"/>
+</div>
+
+---
+
+<div align="center">
+  <img src="intrinsics_graphs/l1graph__shload __vs__stream .png" alt="drawing" style="width:430px;"/>
+
+  <img src="intrinsics_graphs/llcgraph__shload __vs__stream .png" alt="drawing" style="width:430px;"/>
+</div>
 
 ---
 
