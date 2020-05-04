@@ -93,6 +93,40 @@ If we get into the definition of advect:
 
 ---
 
+
+# Before getting covered in mud
+
+By means of coz profiler and perf we decided where to put focus on. They revealed that the performance
+was taken by the function IX in the functions *advect* and *project*.
+
+<div align="center">
+  <img src="other_imgs/coz_ix_edited.jpeg" alt="drawing" style="width:700px;" />
+</div>
+
+---
+
+# Before getting covered in mud
+
+By means of coz profiler and perf we decided where to put focus on. They revealed that the performance
+was taken by the function IX in the functions *advect* and *project*.
+
+<div align="center">
+  <img src="other_imgs/coz_advect_project_edited.jpeg" alt="drawing" style="width:700px;" />
+</div>
+
+---
+# Before getting covered in mud
+
+By means of coz profiler and perf we decided where to put focus on. They revealed that the performance
+was taken by the function IX in the functions *advect* and *project*.
+
+<div align="center">
+  <img src="perf/rb_edited.png" alt="drawing" style="width:700px;" />
+</div>
+
+
+---
+
 # Before getting covered in mud
 
 In order to take advantage of *red-black* approach and its profits, the **solver.c** file was re-written
@@ -228,7 +262,16 @@ was called *baseline* on account of our new starting point.
   <h3>lab1 vs baseline</h3>
 </div>
 
-<!-- TODO: PUT RESULTS -->
+<div align="center">
+  <img src="ispc_graphs/nspcellgraph__lab1 __vs__baseline .png" alt="drawing" style="width:550px;"/>
+</div>
+
+---
+<div align="center">
+  <img src="ispc_graphs/l1graph__lab1 __vs__baseline .png" alt="drawing" style="width:430px;"/>
+
+  <img src="ispc_graphs/llcgraph__lab1 __vs__baseline .png" alt="drawing" style="width:430px;"/>
+</div>
 
 ---
 
@@ -248,35 +291,31 @@ class: center, middle
 # linsolve - ISPC
 
 ```c
-export void lin_solve_rb_step(uniform int color,
-                              uniform int n,
-                              uniform float a,
-                              uniform float c,
-                              const uniform float * uniform same0,
-                              const uniform float * uniform neigh,
-                              uniform float * uniform same) {
+export void lin_solve_rb_step( ... ) {
   ...
 
   for (uniform int y = 1; y <= n; y++, shift = -shift, start = 1 - start) {
-    for (uniform int x = start; x < width - programCount; x+= programCount) {
-
-      varying int index = x + programIndex + y * width;
+    uniform int x;
+    for (x = start; x < width - programCount; x+= programCount) { 
+      varying int index = (x + programIndex) + y * width;
       same[index] =
-          (same0[index] + a * (neigh[index - width] + neigh[index] +
-                                neigh[index + shift] + neigh[index + width])) /
-          c;
+          (same0[index] + a * (neigh[index - width]     + 
+                               neigh[index - start]     +
+                               neigh[index - start + 1] + 
+                               neigh[index + width])) *
+          invc;
     }
-    varying int xx = programIndex + width - programCount;
+    varying int xx = programIndex + x;
     if(xx < width - (1 - start)){
       varying int index = xx + y * width;
-      same[index] =
-          (same0[index] + a * (neigh[index - width] + neigh[index] +
-                                neigh[index + shift] + neigh[index + width])) /
-          c;
+    
+      ... // Repeat the statements as above.
     }
-  }
 }
 ```
+Ideas: 
+- Loop iterators as uniform values (Avoid the use of vmaskmovps).
+- Another possibility: use of *cfor* clauses.
 ---
 <div align="center">
   <h3>baseline vs linsolve (ispc)</h3>
@@ -292,6 +331,7 @@ export void lin_solve_rb_step(uniform int color,
 
   <img src="ispc_graphs/llcgraph__baseline __vs__linsolve .png" alt="drawing" style="width:430px;"/>
 </div>
+
 
 ---
 
@@ -337,26 +377,6 @@ Ideas:
   <img src="intrinsics_graphs/llcgraph__baseline __vs__linsolve .png" alt="drawing" style="width:430px;"/>
 </div>
 
-
----
-
-# Conclusions
-
-<!-- TODO: What goes in here? -->
-<!-- TODO: will we do an ispc vs intrinsics comparisson? -->
-
----
-
-# And Now What?
-
-We used `perf` along with `coz-profiler` and `toplev` to see where to focus our
-attention.
-
-<!-- TODO: We didn't saw this, we saw 30% linsolve 30% advect and 30% project -->
-
-<div align="center">
-  <img src="perf/linsolve.png" alt="drawing" style="width:450px;"/>
-</div>
 
 ---
 class: center, middle
@@ -480,24 +500,6 @@ export void advect_rb( ... ){
 </div>
 
 ---
-
-# Conclusions
-
-<!-- TODO: maybe we should remove these "conclusions" they are adding work and
-they consume presentation time -->
-
----
-
-# Perf report after advect vectorization
-
-<!-- TODO: Again, this is not true, after advect optimization, 30% was eaten by
-project, and this does not reflect that -->
-
-<div align="center">
-  <img src="perf/advect.png" alt="drawing" style="width:450px;"/>
-</div>
-
----
 # We got an improvement! Nevertheless...
 
 <div align="center">
@@ -510,66 +512,11 @@ class: center, middle
 
 ---
 
-# project - ISPC
+# project 
 
-```c
-
-export void project_rb_step1( ... ) {
-  ...
-
-  for (uniform unsigned int i = 1; i <= n; ++i, start = 1 - start) {
-    uniform unsigned int j = start;
-    for (j = start; j < width - programCount; j+=programCount) {
-      varying int index = (j + programIndex) + i * width;
-      samev0[index] = -0.5f *
-                      (neighu[index - start + 1] - neighu[index - start] +
-                       neighv[index + width] - neighv[index - width]) /
-                      n;
-      sameu0[index] = 0;
-    }
-    varying unsigned int jj = programIndex + j;
-    if(jj < width - (1 - start)){
-      varying int index = jj + i * width;
-      samev0[index] = -0.5f *
-                      (neighu[index - start + 1] - neighu[index - start] +
-                       neighv[index + width] - neighv[index - width]) /
-                      n;
-      sameu0[index] = 0;
-    }
-  }
-}
-
-```
-
----
-
-# project - ISPC
-
-```c
-
-export void project_rb_step2( ... ) {
-  ...
-
-  for (uniform unsigned int i = 1; i <= n; ++i, start = 1 - start) {
-    uniform unsigned int j = start;
-    for (j = start; j < width - programCount; j+=programCount) {
-      varying int index = (j + programIndex) + i * width;
-      sameu[index] -=
-          0.5f * n * (neighu0[index - start + 1] - neighu0[index - start]);
-      samev[index] -=
-          0.5f * n * (neighu0[index + width] - neighu0[index - width]);
-    }
-    varying unsigned int jj = programIndex + j;
-    if(jj < width - (1 - start)){
-      varying int index = jj + i * width;
-      sameu[index] -=
-          0.5f * n * (neighu0[index - start + 1] - neighu0[index - start]);
-      samev[index] -=
-          0.5f * n * (neighu0[index + width] - neighu0[index - width]);
-    }
-  }
-}
-```
+Not much to say, straightforward vectorization. On one hand, using `fload2x4` in the case of intrinsics.
+On the other hand, by means of *programIndex* and stopping an iteration before to avoid de use
+of *masks.*
 
 ---
 
@@ -588,14 +535,6 @@ export void project_rb_step2( ... ) {
   <img src="ispc_graphs/llcgraph__advect __vs__project .png" alt="drawing" style="width:430px;"/>
 </div>
 
----
-
-# project - intrinsics
-
-Not much to say, straightforward vectorization.
-Again using `fload2x4`.
-
----
 
 <div align="center">
   <h3> advect vs project (intrinsics) </h3>
@@ -611,12 +550,6 @@ Again using `fload2x4`.
 
   <img src="intrinsics_graphs/llcgraph__advect __vs__project .png" alt="drawing" style="width:430px;"/>
 </div>
-
----
-
-# Conclusions
-
-<!-- TODO: again -->
 
 ---
 
@@ -739,12 +672,6 @@ for (uint ti = 1; ti <= n; ti += tile_height)
 </div>
 
 ---
-
-# Conclusions
-
-<!-- TODO: and again... -->
-
----
 class: center, middle
 # shload
 
@@ -852,11 +779,6 @@ for (unsigned int y = 1; y <= n; ++y, start = 1 - start) {
 <div align="center">
   <img src="intrinsics_graphs/llcgraph__project __vs__shload .png" alt="drawing" style="width:600px;"/>
 </div>
----
-
-# Conclusions
-<!-- TODO: -->
-
 ---
 class: center, middle
 # advect
