@@ -64,7 +64,7 @@ static void lin_solve_rb_step(grid_color color, unsigned int n, float a,
       __m256 l = fload2x4(&neigh[index + start - 1]);
       // t = (f + a * (u + r + d + l)) / c
       __m256 t = fmul(ffmadd(pa, fadd(u, fadd(r, fadd(d, l))), f), pinvc);
-      _mm256_storeu_ps(&same[index], t);
+      _mm256_stream_ps(&same[index], t);
     }
   }
 }
