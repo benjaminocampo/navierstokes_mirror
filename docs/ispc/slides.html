@@ -360,7 +360,7 @@ static void lin_solve_rb_step(...) {
 }
 ```
 Ideas:
-- `fload2x4` (intel optimization manual (14.6.2), prior to skylake)
+- `fload2x4` (intel optimization manual (14.6.2) coding rule 66, prior to skylake)
 - Delayed iterations: how imprecise can we go?
 - `float16`: on IA-64 only support for conversion `vcvtps2ph` and `vcvtph2ps`
 - Aligned memory. More on this with `stream`
@@ -950,6 +950,7 @@ static void lin_solve_rb_step(...) {
 ```
 
 - Main improvement, but advect and project writes were benefited as well
+- Coding rule 67 of the IOM: aligned stores over aligned loads
 - It needed a new memory layout, it wasn't as simple as it appears.
 
 ---
