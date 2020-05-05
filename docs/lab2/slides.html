@@ -482,10 +482,13 @@ export void advect_rb( ... ){
 
 # advect - intrinsics
 
-- very long and difficult to read code, the same is expressed in 4x size.
+- Very long and difficult to read code, the same is expressed in 4x size.
 - Debugging edge cases is hard, debugging vectorized edge cases is harder.
 - `_mm256_mul_ps` multiplies 8 floats. What `_mm256_mul_epi32` does?
 - `_mm256_cvtps_epi32` are not C casts
+- [Linus tordvalds on cmov](https://yarchive.net/comp/linux/cmov.html)
+- On haswell, don't use gather, [use single loads instead](https://stackoverflow.com/questions/24756534/in-what-situation-would-the-avx2-gather-instructions-be-faster-than-individually) (fixed on skylake)
+
 
 ---
 
