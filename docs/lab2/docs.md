@@ -1,11 +1,11 @@
 # Before getting into the mud
 
-In order to improve the performance obtained in the first laboratory and take advantage of SIMD, 
+In order to improve the performance obtained in the first laboratory and take advantage of SIMD,
 the entire project was migrated to the redblack traversal.
 Similar to a checkerboard, cells are going to be colored and separated in RED
-and BLACK squares. Then, cells will be updated separately by means of its color, 
+and BLACK squares. Then, cells will be updated separately by means of its color,
 leading to independent loads and writes. In order to improve the spatial and temporal locality,
-cells of one color must be stored together. 
+cells of one color must be stored together.
 
 One improvement that we were not aware of in the previous lab, was that the function *advect* is called
 twice in order to perform the function *vel_step*. Both of them called with u0 and v0 as parameters.
@@ -39,7 +39,7 @@ static void advect(unsigned int n, boundary b, float *d, const float *d0,
     for (unsigned int j = 1; j <= n; j++) {
       x = i - dt0 * u0[IX(i, j)];
       y = j - dt0 * v0[IX(i, j)];
-      
+
       ...
       d[IX(i, j)] = s0 * (t0 * d0[IX(i0, j0)] + t1 * d0[IX(i0, j1)]) +
                     s1 * (t0 * d0[IX(i1, j0)] + t1 * d0[IX(i1, j1)]);
@@ -47,12 +47,12 @@ static void advect(unsigned int n, boundary b, float *d, const float *d0,
 ```
 
 Here, u0 and v0 will be used to compute **x** and **y** (which will be needed
-to reach the indexes i0, i1, j0, and j1). All of these in order to update the 
+to reach the indexes i0, i1, j0, and j1). All of these in order to update the
 array **d** (which will be **u** and **v** as real values in the vel_step called).
 If we look at the indexes, they are the same for the update of **u** and **v**.
 Therefore,  **x** an **y** will be computed twice!, leading to unnecessary
 (and expensive) reads and mults. So, we decided to implement a version of advect
-for *vel_step* (which we called *vel_advect*) that updates the arrays **u** and 
+for *vel_step* (which we called *vel_advect*) that updates the arrays **u** and
 **v** in just one call of advect.
 
 The entire migration to red-black traversal can be found in the slides.
@@ -64,11 +64,11 @@ was called *baseline* on account of our new starting point.
 If we look at the images posted in the slides, there is an improvement not only
 in the number of ns needed to update a cell but also in the number of cache
 references per cell iteration needed. The *rb* needs six times more llcache
-references than *baseline*. The ratio of cache hits are similar, but always 
+references than *baseline*. The ratio of cache hits are similar, but always
 avoid referencing to the llcache is better. This improvement is
 related to the independent updates which were talked about above. Since cells are stored
 differently in red-black, *rb* updates interpersed cells (which leads to
-unfriendly cache accesses). It is also interesting that *baseline* results resemblance 
+unfriendly cache accesses). It is also interesting that *baseline* results resemblance
 to what was obtained at the end of lab 1.
 
 
@@ -126,7 +126,7 @@ Details of the ispc implementation are as follow:
 - Loop iterators are uniform values. If this is not the case, ispc uses *vmaskmovps*
   in order to evaluate the loop condition (Which is usually true every iteration).
 
-- How can we avoid the use of masks? Some ideas came into our minds. 
+- How can we avoid the use of masks? Some ideas came into our minds.
   One possibility would be the use of cfor, which tells the compiler that the loop
   condition would be usually true.
   Another possibility is stopping at the position *width - programCount + start* and use
@@ -212,8 +212,7 @@ As we had not much time for doing a full rewrite of the program we came up with
 an idea in which we merge the right and left borders of the grid so as to make
 all non-boundary cells be aligned. In this way, we were able to make a lot of
 write-only loops be streamed directly into main memory freeing the cache for
-other addresses. Unfortunately, this seemed to be not enough to prevent the
-thrashing as the gains were again small.
+other addresses. This increased performance a fair bit, about 20~30%.
 
 ## Resources
 
