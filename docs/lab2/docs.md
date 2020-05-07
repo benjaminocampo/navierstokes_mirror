@@ -1,14 +1,20 @@
-# Before getting into the mud
+# Parallel Computing - Lab 2: Vectorization
 
-In order to improve the performance obtained in the first laboratory and take advantage of SIMD,
-the entire project was migrated to the redblack traversal.
+- Benjamín Ocampo: nicolasbenjaminocampo@gmail.com
+- Mateo de Mayo: mateodemayo@gmail.com
+
+## Before getting into the mud
+
+In order to improve the performance obtained in the first laboratory and take
+advantage of SIMD, the entire project was migrated to the redblack traversal.
 Similar to a checkerboard, cells are going to be colored and separated in RED
 and BLACK squares. Then, cells will be updated separately by means of its color,
-leading to independent loads and writes. In order to improve the spatial and temporal locality,
-cells of one color must be stored together.
+leading to independent loads and writes. In order to improve the spatial and
+temporal locality, cells of one color must be stored together.
 
-One improvement that we were not aware of in the previous lab, was that the function *advect* is called
-twice in order to perform the function *vel_step*. Both of them called with u0 and v0 as parameters.
+One improvement that we were not aware of in the previous lab, was that the
+function *advect* is called twice in order to perform the function *vel_step*.
+Both of them called with u0 and v0 as parameters.
 
 ```c
 void vel_step(unsigned int n, float *u, float *v, float *u0, float *v0,
@@ -46,13 +52,13 @@ static void advect(unsigned int n, boundary b, float *d, const float *d0,
 
 ```
 
-Here, u0 and v0 will be used to compute **x** and **y** (which will be needed
-to reach the indexes i0, i1, j0, and j1). All of these in order to update the
-array **d** (which will be **u** and **v** as real values in the vel_step called).
-If we look at the indexes, they are the same for the update of **u** and **v**.
-Therefore,  **x** an **y** will be computed twice!, leading to unnecessary
-(and expensive) reads and mults. So, we decided to implement a version of advect
-for *vel_step* (which we called *vel_advect*) that updates the arrays **u** and
+Here, u0 and v0 will be used to compute **x** and **y** (which will be needed to
+reach the indexes i0, i1, j0, and j1). All of these in order to update the array
+**d** (which will be **u** and **v** as real values in the vel_step called). If
+we look at the indexes, they are the same for the update of **u** and **v**.
+Therefore,  **x** an **y** will be computed twice!, leading to unnecessary (and
+expensive) reads and mults. So, we decided to implement a version of advect for
+*vel_step* (which we called *vel_advect*) that updates the arrays **u** and
 **v** in just one call of advect.
 
 The entire migration to red-black traversal can be found in the slides.
@@ -65,20 +71,17 @@ If we look at the images posted in the slides, there is an improvement not only
 in the number of ns needed to update a cell but also in the number of cache
 references per cell iteration needed. The *rb* needs six times more llcache
 references than *baseline*. The ratio of cache hits are similar, but always
-avoid referencing to the llcache is better. This improvement is
-related to the independent updates which were talked about above. Since cells are stored
+avoid referencing to the llcache is better. This improvement is related to the
+independent updates which were talked about above. Since cells are stored
 differently in red-black, *rb* updates interpersed cells (which leads to
-unfriendly cache accesses). It is also interesting that *baseline* results resemblance
-to what was obtained at the end of lab 1.
+unfriendly cache accesses). It is also interesting that *baseline* results
+resemblance to what was obtained at the end of lab 1.
 
+## Optimizations
 
-## Ispc and Intrinsics
-
-Up to this point, we needed to take different paths, one of us worked with *intrinsics*
-and the other one with *ispc*.
-Nevertheless, both of us tried take the same approaches in order to compare their outcomes.
-
-# Optimizations
+Up to this point, we needed to take different paths, one of us worked with
+*intrinsics* and the other one with *ispc*. Nevertheless, both of us tried take
+the same approaches in order to compare their outcomes.
 
 In each of the following titles, we briefly describe how the modification was
 done along with some implementations details that may be relevant. The four next
@@ -106,10 +109,10 @@ the iterative method, for the record we will list some of those:
   iteration, all the neighbours of the red cells are an iteration behind,
   compared to the previous method in which only half neighbours were behind.
   What would happen if you have neighbors that are 2, 3 or more iterations
-  behind? This idea does, in fact, improve spatial and temporal locality, and thus
-  the performance, but we ended up not using it as it needed more iterations of
-  grace than what we thought was acceptable for the visual quality of the
-  simulation.
+  behind? This idea does, in fact, improve spatial and temporal locality, and
+  thus the performance, but we ended up not using it as it needed more
+  iterations of grace than what we thought was acceptable for the visual quality
+  of the simulation.
 - The idea of using float16 to compute over 16 elements instead of 8 was
   tempting. However, we discovered that intel does not provide more than two
   operations on float16: encoding and decoding, you can't do arithmetic or
@@ -119,28 +122,30 @@ the iterative method, for the record we will list some of those:
   drawbacks. However, we bring this idea back again in the `stream` section.
 
 In the case of ispc, it was mostly the same, but we applied the vectorization
-scheme by means of *programCount* which can be a multiple of the vector unit size.
+scheme by means of *programCount* which can be a multiple of the vector unit
+size.
 
 Details of the ispc implementation are as follow:
 
-- Loop iterators are uniform values. If this is not the case, ispc uses *vmaskmovps*
-  in order to evaluate the loop condition (Which is usually true every iteration).
+- Loop iterators are uniform values. If this is not the case, ispc uses
+  *vmaskmovps* in order to evaluate the loop condition (Which is usually true
+  every iteration).
 
-- How can we avoid the use of masks? Some ideas came into our minds.
-  One possibility would be the use of cfor, which tells the compiler that the loop
-  condition would be usually true.
-  Another possibility is stopping at the position *width - programCount + start* and use
-  an if clause to check boundaries (Which will be compiled as just one *vmaskmovps* at
-  the end of updating a row of the grid).
+- How can we avoid the use of masks? Some ideas came into our minds. One
+  possibility would be the use of cfor, which tells the compiler that the loop
+  condition would be usually true. Another possibility is stopping at the
+  position *width - programCount + start* and use an if clause to check
+  boundaries (Which will be compiled as just one *vmaskmovps* at the end of
+  updating a row of the grid).
 
-- Anyway, these *vmaskmovps* were not so problematic. Just a few nanoseconds were
-  gained at the expense of readability.
+- Anyway, these *vmaskmovps* were not so problematic. Just a few nanoseconds
+  were gained at the expense of readability.
 
 ## addsource
 
 There is not much to say here, a plain vectorization with loop peeling to sum
+over all the grid elements. In the case of ispc, We just used a foreach clause
 over all the grid elements.
-In the case of ispc, We just used a foreach clause over all the grid elements.
 
 ## advect
 
@@ -162,9 +167,10 @@ Two insights that came from the tortuous debuggin were:
 On the other hand, The ispc version of advect was straightforward, there was no
 necessity of a thoroughly debugging as in the case of intrinsics.
 
-Unfortunately, there is an issue in the vectorization of both versions. It is the use of
-gathers because of indexes that were calculated by means of velocity values. Since these
-accesses would be unpredictable we did not found a way to vectorize advect without this drawback.
+Unfortunately, there is an issue in the vectorization of both versions. It is
+the use of gathers because of indexes that were calculated by means of velocity
+values. Since these accesses would be unpredictable we did not found a way to
+vectorize advect without this drawback.
 
 ## project
 
