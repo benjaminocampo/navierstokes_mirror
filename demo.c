@@ -15,15 +15,18 @@
 */
 
 #include <GL/glut.h>
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <x86intrin.h>
 
+#include "indices.h"
 #include "solver.h"
 #include "timing.h"
 
 /* macros */
 
-#define IX(i, j) ((i) + (N + 2) * (j))
+#define IX(x, y) (rb_idx((x), (y), (N + 2)))
 
 /* global variables */
 
@@ -47,12 +50,12 @@ static int omx, omy, mx, my;
 */
 
 static void free_data(void) {
-  if (u) free(u);
-  if (v) free(v);
-  if (u_prev) free(u_prev);
-  if (v_prev) free(v_prev);
-  if (dens) free(dens);
-  if (dens_prev) free(dens_prev);
+  if (u) _mm_free(u);
+  if (v) _mm_free(v);
+  if (u_prev) _mm_free(u_prev);
+  if (v_prev) _mm_free(v_prev);
+  if (dens) _mm_free(dens);
+  if (dens_prev) _mm_free(dens_prev);
 }
 
 static void clear_data(void) {
@@ -66,12 +69,12 @@ static void clear_data(void) {
 static int allocate_data(void) {
   int size = (N + 2) * (N + 2);
 
-  u = (float *)malloc(size * sizeof(float));
-  v = (float *)malloc(size * sizeof(float));
-  u_prev = (float *)malloc(size * sizeof(float));
-  v_prev = (float *)malloc(size * sizeof(float));
-  dens = (float *)malloc(size * sizeof(float));
-  dens_prev = (float *)malloc(size * sizeof(float));
+  u = (float *)_mm_malloc(size * sizeof(float), 32);
+  v = (float *)_mm_malloc(size * sizeof(float), 32);
+  u_prev = (float *)_mm_malloc(size * sizeof(float), 32);
+  v_prev = (float *)_mm_malloc(size * sizeof(float), 32);
+  dens = (float *)_mm_malloc(size * sizeof(float), 32);
+  dens_prev = (float *)_mm_malloc(size * sizeof(float), 32);
 
   if (!u || !v || !u_prev || !v_prev || !dens || !dens_prev) {
     fprintf(stderr, "cannot allocate data\n");
@@ -268,30 +271,25 @@ static void idle_func(void) {
   static double start_t = 0.0;
   static double one_second = 0.0;
   static double react_ns_p_cell = 0.0;
-  static double vel_ns_p_cell = 0.0;
-  static double dens_ns_p_cell = 0.0;
+  static double step_ns_p_cell = 0.0;
 
   start_t = wtime();
   react(dens_prev, u_prev, v_prev);
   react_ns_p_cell += 1.0e9 * (wtime() - start_t) / (N * N);
 
   start_t = wtime();
-  vel_step(N, u, v, u_prev, v_prev, visc, dt);
-  vel_ns_p_cell += 1.0e9 * (wtime() - start_t) / (N * N);
-
-  start_t = wtime();
-  dens_step(N, dens, dens_prev, u, v, diff, dt);
-  dens_ns_p_cell += 1.0e9 * (wtime() - start_t) / (N * N);
+  step(N, dens, u, v, dens_prev, u_prev, v_prev, diff, visc, dt);
+  step_ns_p_cell += 1.0e9 * (wtime() - start_t) / (N * N);
 
   if (1.0 < wtime() - one_second) { /* at least 1s between stats */
     printf(
         "%lf, %lf, %lf, %lf: ns per cell total, react, vel_step, dens_step\n",
-        (react_ns_p_cell + vel_ns_p_cell + dens_ns_p_cell) / times,
-        react_ns_p_cell / times, vel_ns_p_cell / times, dens_ns_p_cell / times);
+        (react_ns_p_cell + step_ns_p_cell) / times,
+        react_ns_p_cell / times, step_ns_p_cell / times, step_ns_p_cell / times);
     one_second = wtime();
     react_ns_p_cell = 0.0;
-    vel_ns_p_cell = 0.0;
-    dens_ns_p_cell = 0.0;
+    step_ns_p_cell = 0.0;
+    step_ns_p_cell = 0.0;
     times = 1;
   } else {
     times++;
@@ -370,6 +368,7 @@ int main(int argc, char **argv) {
     visc = 0.0001f;
     force = 5.0f;
     source = 100.0f;
+    assert((N / 2) % 8 == 0 && "N/2 must be divisible by avx vector size of 8");
     fprintf(
         stderr,
         "Using defaults : N=%d dt=%g diff=%g visc=%g force = %g source=%g\n", N,
