@@ -437,17 +437,15 @@ static void project(unsigned int n, float *u, float *v, float *u0, float *v0) {
   set_bnd(n, HORIZONTAL, v);
 }
 
-void dens_step(unsigned int n, float *x, float *x0, float *u, float *v,
-               float diff, float dt) {
-  add_source(n, x, x0, dt);
-  SWAP(x0, x);
-  diffuse(n, NONE, x, x0, diff, dt);
-  SWAP(x0, x);
-  advect(n, NONE, x, x0, u, v, dt);
-}
-
-void vel_step(unsigned int n, float *u, float *v, float *u0, float *v0,
-              float visc, float dt) {
+void step(unsigned int n, float *dens, float *u, float *v, float *dens0,
+          float *u0, float *v0, float diff, float visc, float dt) {
+  // Density update
+  add_source(n, dens, dens0, dt);
+  SWAP(dens0, dens);
+  diffuse(n, NONE, dens, dens0, diff, dt);
+  SWAP(dens0, dens);
+  advect(n, NONE, dens, dens0, u, v, dt);
+  // Velocity update
   add_source(n, u, u0, dt);
   add_source(n, v, v0, dt);
   SWAP(u0, u);
