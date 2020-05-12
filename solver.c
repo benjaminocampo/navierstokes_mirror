@@ -96,10 +96,10 @@ static void diffuse(unsigned int n, boundary b, float *x, const float *x0,
   lin_solve(n, b, x, x0, a, 1 + 4 * a);
 }
 
-static void advect_rb(grid_color color, unsigned int n, float *samedens,
-                      float *sameu, float *samev, const float *samedens0,
+static void advect_rb(grid_color color, unsigned int n, float *samed,
+                      float *sameu, float *samev, const float *samed0,
                       const float *sameu0, const float *samev0,
-                      const float *dens0, const float *u0, const float *v0,
+                      const float *d0, const float *u0, const float *v0,
                       float dt) {
   int shift = color == RED ? 1 : -1;
   int start = color == RED ? 0 : 1;
@@ -195,15 +195,15 @@ static void advect_rb(grid_color color, unsigned int n, float *samedens,
       // Read and test with:
       // https://stackoverflow.com/questions/24756534/in-what-situation-would-the-avx2-gather-instructions-be-faster-than-individually
       // So maybe we shouldn't use gather
-      const __m256 pdens0i0j0 = _mm256_i32gather_ps(dens0, pi0j0, 4);
-      const __m256 pdens0i0j1 = _mm256_i32gather_ps(dens0, pi0j1, 4);
-      const __m256 pdens0i1j0 = _mm256_i32gather_ps(dens0, pi1j0, 4);
-      const __m256 pdens0i1j1 = _mm256_i32gather_ps(dens0, pi1j1, 4);
-      // s0 * (t0 * dens0[i0j0] + t1 * dens0[i1j0]) +
-      // s1 * (t0 * dens0[i0j1] + t1 * dens0[i1j1])
-      const __m256 psamedens =
-          fadd(fmul(ps0, fadd(fmul(pt0, pdens0i0j0), fmul(pt1, pdens0i1j0))),
-               fmul(ps1, fadd(fmul(pt0, pdens0i0j1), fmul(pt1, pdens0i1j1))));
+      const __m256 pd0i0j0 = _mm256_i32gather_ps(d0, pi0j0, 4);
+      const __m256 pd0i0j1 = _mm256_i32gather_ps(d0, pi0j1, 4);
+      const __m256 pd0i1j0 = _mm256_i32gather_ps(d0, pi1j0, 4);
+      const __m256 pd0i1j1 = _mm256_i32gather_ps(d0, pi1j1, 4);
+      // s0 * (t0 * d0[i0j0] + t1 * d0[i1j0]) +
+      // s1 * (t0 * d0[i0j1] + t1 * d0[i1j1])
+      const __m256 psamed =
+          fadd(fmul(ps0, fadd(fmul(pt0, pd0i0j0), fmul(pt1, pd0i1j0))),
+               fmul(ps1, fadd(fmul(pt0, pd0i0j1), fmul(pt1, pd0i1j1))));
 
       const __m256 pu0i0j0 = _mm256_i32gather_ps(u0, pi0j0, 4);
       const __m256 pu0i0j1 = _mm256_i32gather_ps(u0, pi0j1, 4);
@@ -225,32 +225,32 @@ static void advect_rb(grid_color color, unsigned int n, float *samedens,
           fadd(fmul(ps0, fadd(fmul(pt0, pv0i0j0), fmul(pt1, pv0i1j0))),
                fmul(ps1, fadd(fmul(pt0, pv0i0j1), fmul(pt1, pv0i1j1))));
 
-      fstore(&samedens[index], psamedens);
+      fstore(&samed[index], psamed);
       fstore(&sameu[index], psameu);
       fstore(&samev[index], psamev);
     }
   }
 }
 
-static void advect(unsigned int n, float *dens, float *u, float *v,
-                   const float *dens0, const float *u0, const float *v0,
+static void advect(unsigned int n, float *d, float *u, float *v,
+                   const float *d0, const float *u0, const float *v0,
                    float dt) {
   unsigned int color_size = (n + 2) * ((n + 2) / 2);
-  float *reddens = dens;
+  float *redd = d;
   float *redu = u;
   float *redv = v;
-  float *blkdens = dens + color_size;
+  float *blkd = d + color_size;
   float *blku = u + color_size;
   float *blkv = v + color_size;
-  const float *reddens0 = dens0;
+  const float *redd0 = d0;
   const float *redu0 = u0;
   const float *redv0 = v0;
-  const float *blkdens0 = dens0 + color_size;
+  const float *blkd0 = d0 + color_size;
   const float *blku0 = u0 + color_size;
   const float *blkv0 = v0 + color_size;
-  advect_rb(RED, n, reddens, redu, redv, reddens0, redu0, redv0, dens0, u0, v0,
+  advect_rb(RED, n, redd, redu, redv, redd0, redu0, redv0, d0, u0, v0,
             dt);
-  advect_rb(BLACK, n, blkdens, blku, blkv, blkdens0, blku0, blkv0, dens0, u0,
+  advect_rb(BLACK, n, blkd, blku, blkv, blkd0, blku0, blkv0, d0, u0,
             v0, dt);
   set_bnd(n, VERTICAL, u);
   set_bnd(n, HORIZONTAL, v);
@@ -325,13 +325,13 @@ static void project(unsigned int n, float *u, float *v, float *u0, float *v0) {
   set_bnd(n, HORIZONTAL, v);
 }
 
-void step(unsigned int n, float *dens, float *u, float *v, float *dens0,
+void step(unsigned int n, float *d, float *u, float *v, float *d0,
           float *u0, float *v0, float diff, float visc, float dt) {
   // Density update
-  add_source(n, dens, dens0, dt);
-  SWAP(dens0, dens);
-  diffuse(n, NONE, dens, dens0, diff, dt);
-  SWAP(dens0, dens);
+  add_source(n, d, d0, dt);
+  SWAP(d0, d);
+  diffuse(n, NONE, d, d0, diff, dt);
+  SWAP(d0, d);
   // density advection will be done afterwards mixed with the velocity advection
 
   // Velocity update
@@ -344,6 +344,6 @@ void step(unsigned int n, float *dens, float *u, float *v, float *dens0,
   project(n, u, v, u0, v0);
   SWAP(u0, u);
   SWAP(v0, v);
-  advect(n, dens, u, v, dens0, u0, v0, dt);
+  advect(n, d, u, v, d0, u0, v0, dt);
   project(n, u, v, u0, v0);
 }
