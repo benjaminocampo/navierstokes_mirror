@@ -96,141 +96,11 @@ static void diffuse(unsigned int n, boundary b, float *x, const float *x0,
   lin_solve(n, b, x, x0, a, 1 + 4 * a);
 }
 
-static void advect_rb(grid_color color, unsigned int n, float *samed,
-                      const float *d0, const float *sameu, const float *samev,
+static void advect_rb(grid_color color, unsigned int n, float *samedens,
+                      float *sameu, float *samev, const float *samedens0,
+                      const float *sameu0, const float *samev0,
+                      const float *dens0, const float *u0, const float *v0,
                       float dt) {
-  // TODO: This is a stripped down copypaste from vel_advect_rb
-  // Try to keep it DRY, but also remember to update this whenever
-  // the other one changes
-  int shift = color == RED ? 1 : -1;
-  int start = color == RED ? 0 : 1;
-  const int width = (n + 2) / 2;
-  const float dt0 = dt * n;
-
-  const __m256i psuccs = _mm256_set_epi32(7, 6, 5, 4, 3, 2, 1, 0);
-  const __m256 pdt0 = fset1(dt0);
-  const __m256 plowest = fset1(0.5f);
-  const __m256 phighest = fset1(n + 0.5f);
-  const __m256i pone = iset1(1);
-  const __m256 pfone = fset1(1.0);
-  const __m256i pnplus2 = iset1(n + 2);
-  const __m256i pwidth = iset1(width);
-  const __m256i phalfgrid = imul(pnplus2, pwidth);
-  for (int iy = 1; iy <= (int)n; iy++, shift = -shift, start = 1 - start) {
-    const __m256i pshift = iset1(shift);
-    const __m256i pstart = iset1(start);
-    const __m256i pi = iset1(iy);
-    for (int ix = start; ix < width - (1 - start); ix += 8) {
-      __m256i pj = iadd(iset1(ix),
-                        psuccs);  // j = x + 0, ..., x + 7
-
-      int index = idx(ix, iy, width);
-      const __m256i pgridi = pi;
-      const __m256 pfgridi = itof(pgridi);  // (float)gridi
-      const __m256i pgridj = iadd(          // 2 * j + shift + start
-          _mm256_slli_epi32(pj, 1),         // 2 * j
-          iadd(pshift, pstart)              // + shift + start
-      );
-      const __m256 pfgridj = itof(pgridj);  // (float)gridj
-      const __m256 psameu = fload(&sameu[index]);
-      const __m256 psamev = fload(&samev[index]);
-      __m256 px = ffnmadd(pdt0, psameu,
-                          pfgridj);  // gridj - dt0 * sameu[index]
-
-      __m256 py = ffnmadd(pdt0, psamev,
-                          pfgridi);     // gridi - dt0 * samev[index]
-      px = _mm256_max_ps(px, plowest);  // clamp(x, 0.5, n + 0.5)
-      px = _mm256_min_ps(px, phighest);
-      py = _mm256_max_ps(py, plowest);  // clamp(y, 0.5, n + 0.5)
-      py = _mm256_min_ps(py, phighest);
-
-      const __m256i pj0 = ftoi(px);  // j0 = (int)x;
-      const __m256i pi0 = ftoi(py);  // i0 = (int)y;
-
-      const __m256 ps1 = _mm256_sub_ps(px, itof(pj0));  // s1 = x - j0;
-      const __m256 ps0 = _mm256_sub_ps(pfone, ps1);     // s0 = 1 - s1;
-      const __m256 pt1 = _mm256_sub_ps(py, itof(pi0));  // t1 = y - i0;
-      const __m256 pt0 = _mm256_sub_ps(pfone, pt1);     // t0 = 1 - t1;
-
-      // Let's build IX(j0, i0):
-      const __m256i pisoddrow = iand(pi0, pone);         // i % 2
-      const __m256i pisevenrow = ixor(pisoddrow, pone);  // !isoddrow
-      const __m256i pisblack = ixor(  // (j0 % 2) ^ (i0 % 2) (!=parity)
-          iand(pj0, pone),            // j0 & 0x1 (isoddcolumn)
-          pisoddrow                   // i0 & 0x1
-      );
-      const __m256i pisred = ixor(pisblack, pone);     // !isblack
-      const __m256i pfshift = isub(pisred, pisblack);  // isred ? 1 : -1
-
-      // !((isred && isevenrow) || (isblack && isoddrow)), or equivalently
-      // (isblack || isoddrow) && (isred || isevenrow)
-      const __m256i p_starts_at_zero =
-          iand(ior(pisblack, pisoddrow), ior(pisred, pisevenrow));
-
-      // pbase = isblack ? (n+2) * width : 0
-      const __m256i pbase = imul(pisblack, phalfgrid);
-      const __m256i poffset = iadd(   // (j0 / 2) + i0 * ((n+2) / 2)
-          _mm256_srai_epi32(pj0, 1),  // (j0 / 2)
-          imul(pi0, pwidth)           // i0 * ((n+2) / 2)
-      );
-
-      // i0j0 = // IX(j0, i0)
-      const __m256i pi0j0 = iadd(pbase, poffset);
-      // i0j1 = i0j0 + width + (1 - isoffstart);
-      const __m256i pi1j1 = iadd(pi0j0, iadd(pwidth, p_starts_at_zero));
-      // i0j1 = i0j0 + fshift * width * (n + 2) + (1 - isoffstart);
-      const __m256i pi0j1 =
-          iadd(pi0j0,
-               iadd(  // fshift * width * (n + 2) + (1 - isoffstart);
-                   p_starts_at_zero,         // (1 - isoffstart)
-                   imul(pfshift, phalfgrid)  // fshift * width * (n + 2)
-                   ));
-      // i1j0 = i0j0 + fshift * width * (n + 2) + width;
-      const __m256i pi1j0 =
-          iadd(pi0j0,
-               iadd(  // fshift * width * (n + 2) + width;
-                   pwidth, imul(pfshift, phalfgrid)  // fshift * width * (n + 2)
-                   ));
-
-      const __m256 pd0i0j0 = _mm256_i32gather_ps(d0, pi0j0, 4);
-      const __m256 pd0i0j1 = _mm256_i32gather_ps(d0, pi0j1, 4);
-      const __m256 pd0i1j0 = _mm256_i32gather_ps(d0, pi1j0, 4);
-      const __m256 pd0i1j1 = _mm256_i32gather_ps(d0, pi1j1, 4);
-
-      // Replace the next formula with the same but using fmadd operations
-      // s0 * (t0 * d0[i0j0] + t1 * d0[i1j0]) +
-      // s1 * (t0 * d0[i0j1] + t1 * d0[i1j1])
-      const __m256 a = fmul(pt1, pd0i1j0);         // t1 * d0[i1j0]
-      const __m256 b = ffmadd(pt0, pd0i0j0, a);    // t0 * d0[i0j0] + a
-      const __m256 a1 = fmul(pt1, pd0i1j1);        // t1 * d0[i1j1]
-      const __m256 b1 = ffmadd(pt0, pd0i0j1, a1);  // t0 * d0[i0j1] + a1
-      const __m256 c = fmul(ps0, b);
-      const __m256 psamed0 = ffmadd(ps1, b1, c);  // c + s1 * b1
-
-      fstore(&samed[index], psamed0);
-    }
-  }
-}
-
-static void advect(unsigned int n, boundary b, float *d, const float *d0,
-                   const float *u, const float *v, float dt) {
-  unsigned int color_size = (n + 2) * ((n + 2) / 2);
-
-  float *redd = d;
-  const float *redu = u;
-  const float *redv = v;
-  float *blkd = d + color_size;
-  const float *blku = u + color_size;
-  const float *blkv = v + color_size;
-  advect_rb(RED, n, redd, d0, redu, redv, dt);
-  advect_rb(BLACK, n, blkd, d0, blku, blkv, dt);
-  set_bnd(n, b, d);
-}
-
-static void vel_advect_rb(grid_color color, unsigned int n, float *sameu,
-                          float *samev, const float *sameu0,
-                          const float *samev0, const float *u0, const float *v0,
-                          float dt) {
   int shift = color == RED ? 1 : -1;
   int start = color == RED ? 0 : 1;
   const int width = (n + 2) / 2;
@@ -325,6 +195,16 @@ static void vel_advect_rb(grid_color color, unsigned int n, float *sameu,
       // Read and test with:
       // https://stackoverflow.com/questions/24756534/in-what-situation-would-the-avx2-gather-instructions-be-faster-than-individually
       // So maybe we shouldn't use gather
+      const __m256 pdens0i0j0 = _mm256_i32gather_ps(dens0, pi0j0, 4);
+      const __m256 pdens0i0j1 = _mm256_i32gather_ps(dens0, pi0j1, 4);
+      const __m256 pdens0i1j0 = _mm256_i32gather_ps(dens0, pi1j0, 4);
+      const __m256 pdens0i1j1 = _mm256_i32gather_ps(dens0, pi1j1, 4);
+      // s0 * (t0 * dens0[i0j0] + t1 * dens0[i1j0]) +
+      // s1 * (t0 * dens0[i0j1] + t1 * dens0[i1j1])
+      const __m256 psamedens =
+          fadd(fmul(ps0, fadd(fmul(pt0, pdens0i0j0), fmul(pt1, pdens0i1j0))),
+               fmul(ps1, fadd(fmul(pt0, pdens0i0j1), fmul(pt1, pdens0i1j1))));
+
       const __m256 pu0i0j0 = _mm256_i32gather_ps(u0, pi0j0, 4);
       const __m256 pu0i0j1 = _mm256_i32gather_ps(u0, pi0j1, 4);
       const __m256 pu0i1j0 = _mm256_i32gather_ps(u0, pi1j0, 4);
@@ -345,25 +225,33 @@ static void vel_advect_rb(grid_color color, unsigned int n, float *sameu,
           fadd(fmul(ps0, fadd(fmul(pt0, pv0i0j0), fmul(pt1, pv0i1j0))),
                fmul(ps1, fadd(fmul(pt0, pv0i0j1), fmul(pt1, pv0i1j1))));
 
+      fstore(&samedens[index], psamedens);
       fstore(&sameu[index], psameu);
       fstore(&samev[index], psamev);
     }
   }
 }
 
-static void vel_advect(unsigned int n, float *u, float *v, const float *u0,
-                       const float *v0, float dt) {
+static void advect(unsigned int n, float *dens, float *u, float *v,
+                   const float *dens0, const float *u0, const float *v0,
+                   float dt) {
   unsigned int color_size = (n + 2) * ((n + 2) / 2);
+  float *reddens = dens;
   float *redu = u;
   float *redv = v;
+  float *blkdens = dens + color_size;
   float *blku = u + color_size;
   float *blkv = v + color_size;
+  const float *reddens0 = dens0;
   const float *redu0 = u0;
   const float *redv0 = v0;
+  const float *blkdens0 = dens0 + color_size;
   const float *blku0 = u0 + color_size;
   const float *blkv0 = v0 + color_size;
-  vel_advect_rb(RED, n, redu, redv, redu0, redv0, u0, v0, dt);
-  vel_advect_rb(BLACK, n, blku, blkv, blku0, blkv0, u0, v0, dt);
+  advect_rb(RED, n, reddens, redu, redv, reddens0, redu0, redv0, dens0, u0, v0,
+            dt);
+  advect_rb(BLACK, n, blkdens, blku, blkv, blkdens0, blku0, blkv0, dens0, u0,
+            v0, dt);
   set_bnd(n, VERTICAL, u);
   set_bnd(n, HORIZONTAL, v);
 }
@@ -444,7 +332,8 @@ void step(unsigned int n, float *dens, float *u, float *v, float *dens0,
   SWAP(dens0, dens);
   diffuse(n, NONE, dens, dens0, diff, dt);
   SWAP(dens0, dens);
-  advect(n, NONE, dens, dens0, u, v, dt);
+  // density advection will be done afterwards mixed with the velocity advection
+
   // Velocity update
   add_source(n, u, u0, dt);
   add_source(n, v, v0, dt);
@@ -455,6 +344,6 @@ void step(unsigned int n, float *dens, float *u, float *v, float *dens0,
   project(n, u, v, u0, v0);
   SWAP(u0, u);
   SWAP(v0, v);
-  vel_advect(n, u, v, u0, v0, dt);
+  advect(n, dens, u, v, dens0, u0, v0, dt);
   project(n, u, v, u0, v0);
 }
