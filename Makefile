@@ -10,7 +10,7 @@ LDFLAGS=
 
 TARGETS=demo headless
 SOURCES=$(shell echo *.c)
-COMMON_OBJECTS=timing.o solver.o
+COMMON_OBJECTS=timing.o solver.o solver_intrinsics.o
 
 .PHONY: clean
 all: $(TARGETS)
