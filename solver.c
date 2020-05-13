@@ -4,6 +4,8 @@
 
 #include "indices.h"
 
+#include <omp.h>
+
 #if defined INTRINSICS
 #include "solver_intrinsics.h"
 #elif defined ISPC
@@ -41,10 +43,26 @@ static void lin_solve(unsigned int n, boundary b, float *restrict x,
   float *red = x;
   float *blk = x + color_size;
 
+
   for (unsigned int k = 0; k < 20; ++k) {
-    lin_solve_rb_step(RED, n, 1, n, a, c, red0, blk, red);
-    lin_solve_rb_step(BLACK, n, 1, n, a, c, blk0, red, blk);
-    set_bnd(n, b, x);
+    #pragma omp parallel
+    {
+      unsigned int strip_size = n/omp_get_num_threads();
+      #pragma omp for
+      for(unsigned int ti = 1; ti <= n - n % strip_size; ti+=strip_size){
+        lin_solve_rb_step(RED, n, ti, strip_size, a, c, red0, blk, red);
+      }
+      #pragma omp for
+      for(unsigned int ti = 1; ti <= n - n % strip_size; ti+=strip_size){
+        lin_solve_rb_step(BLACK, n, ti, strip_size, a, c, blk0, red, blk);
+      }
+      #pragma omp single
+      {
+        lin_solve_rb_step(RED, n, n - n % strip_size, n % strip_size, a, c, red0, blk, red);
+        lin_solve_rb_step(BLACK, n, n - n % strip_size, n % strip_size, a, c, blk0, red, blk);
+        set_bnd(n, b, x);
+      }
+    }
   }
 }
 
