@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 from os import makedirs
 from os.path import exists
+from itertools import count, cycle
 
 white = "#FFFFFF"
 darkgray = "#263238"
@@ -15,46 +16,73 @@ plt.rcParams["axes.labelcolor"] = darkgray
 plt.rcParams["xtick.color"] = darkgray
 plt.rcParams["ytick.color"] = darkgray
 
-def save_nscell_graph(source_name, target_name, sources, targets, ns, iterations, filename="plot.png", only_show=False):
-    source_color = "#2196F3"
-    source_color_dark = "#1976D2"
-    target_color = "#4CAF50"
-    target_color_dark = "#388E3C"
-    x = np.arange(len(ns))  # the label locations
-    width = 0.45  # the width of the bars
+COLORS = [
+    "#2196F3", # blue
+    "#4CAF50", # green
+    "#FFC107", # amber
+    "#E91E63", # pink
+    "#673AB7", # deeppurple
+    "#00BCD4", # cyan
+    "#CDDC39", # lime
+    "#FF5722", # deeporange
+]
 
-    fig, ax = plt.subplots()
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
-    ax.spines["bottom"].set_color(darkgray)
-    ax.spines["left"].set_color(darkgray)
-    rects1 = ax.bar(x - width/2, sources.astype(int), width, label=source_name, color=source_color)
-    rects2 = ax.bar(x + width/2, targets.astype(int), width, label=target_name, color=target_color)
-    ax.set_ylabel("Nanoseconds per Cell")
-    ax.set_title("Compute Time per Cell")
-    plt.figtext(0.965, 0.5, 'Lower is better', ha='center', va="center", fontsize=6, rotation=-90)
-    ax.set_xticks(x)
-    ax.set_xticklabels([f"N={s} x{i}" for s, i in zip(ns, iterations)])
-    ax.legend(loc="lower left", fontsize=6)
+DARK_COLORS = [
+    "#1976D2", # dark blue
+    "#388E3C", # dark green
+    "#FFA000", # dark amber
+    "#C2185B", # dark pink
+    "#512DA8", # dark deeppurple
+    "#0097A7", # dark cyan
+    "#AFB42B", # dark lime
+    "#E64A19", # dark deeporange
+]
 
+def save_nscell_graph(names, means, ns, iterations, filename="plot.png", only_show=False):
+    CATEGORY_WIDTH_PX = 432 # Magic number that correlates to bar_width
+    DPI = 150
+    bar_fontsize = 12
+    legend_fontsize = 6
+    nof_runs = len(names)
+    nof_groups = len(ns)
+    img_width = 96 * nof_groups * nof_runs
+    img_height = 720
+    bar_width = CATEGORY_WIDTH_PX / img_width
 
     def autolabel(rects):
         """Attach a text label above each bar in *rects*, displaying its height."""
-        FONTSIZE = 10
         for rect in rects:
             height = rect.get_height()
             ax.annotate("{}".format(height),
                         xy=(rect.get_x() + rect.get_width() / 2, height),
                         xytext=(0, -16),
                         textcoords="offset points",
-                        ha="center", va="center", color=white, fontsize=12)
+                        ha="center", va="center", color=white, fontsize=bar_fontsize)
 
+    x = np.arange(nof_groups)  # the label locations
+    fig, ax = plt.subplots(figsize=(img_width / DPI, img_height / DPI), dpi=DPI)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["bottom"].set_color(darkgray)
+    ax.spines["left"].set_color(darkgray)
 
-    autolabel(rects1)
-    autolabel(rects2)
+    rects = []
+    starting_x = x - nof_runs / 2 + 0.5
+    for i, name, mean, color in zip(count(), names, means, cycle(COLORS)):
+        rect = ax.bar(starting_x + bar_width * i, mean.astype(int), bar_width, label=name, color=color)
+        rects.append(rect)
+        autolabel(rect)
+
+    ax.set_ylabel("Nanoseconds per Cell")
+    ax.set_title("Compute Time per Cell")
+    plt.figtext(0.965, 0.5, 'Lower is better', ha='center', va="center", fontsize=legend_fontsize, rotation=-90)
+    tick_xs = [(i - nof_runs / 2 + 0.5) + (nof_runs - 1) * (bar_width / 2) for i in x]
+    ax.set_xticks(tick_xs)
+    ax.set_xticklabels([f"N={s} x{i}" for s, i in zip(ns, iterations)])
+    ax.legend(loc="lower left", fontsize=legend_fontsize)
 
     fig.tight_layout()
-    plt.show() if only_show else plt.savefig(filename, dpi=150)
+    plt.show() if only_show else plt.savefig(filename)
     plt.close()
 
 def save_cache_graph(source_name, target_name, source_refs, source_misses, target_refs, target_misses, ns, iterations, filename="plot.png", cache_name="L1", only_show=False):
@@ -142,20 +170,12 @@ def main():
     steps = np.array([512, 128, 32, 16, 8])
     # array of (branch, flags)
     runs = [
-        ("baseline", "-O3"),
-        ("ijswap", "-O3"),
-        ("baseline", "-O3 -floop-interchange -floop-nest-optimize"),
-        ("invc", "-O3"),
-        ("ijswap", "-Ofast"),
-        ("ijswap", "-O3 -freciprocal-math"),
-        ("invc", "-Ofast"),
-        ("invc", "-Ofast -march=native"),
-        ("invc", "-Ofast -march=native -funroll-loops"),
-        ("invc", "-Ofast -march=native -funroll-loops -floop-nest-optimize"),
-        ("invc", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto"),
-        ("constn2048", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto"),
-        ("bblocks", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto"),
-        ("baseline", "-O0"),
+        ("project", ""),
+        ("linsolve", ""),
+        ("baseline", ""),
+        ("rb", ""),
+        ("lab1", ""),
+        ("shload", ""),
     ]
 
 
@@ -186,18 +206,10 @@ def main():
     comparissons = [
         # (("source_branch", "source_flags"), ("target_branch", "target_flags")),
         (("baseline", "-O3"), ("ijswap", "-O3")),
-        (("baseline", "-O3"), ("baseline", "-O3 -floop-interchange -floop-nest-optimize")),
-        (("ijswap", "-O3"), ("invc", "-O3")),
-        (("invc", "-O3"), ("ijswap", "-Ofast")),
-        (("ijswap", "-O3 -freciprocal-math"), ("ijswap", "-Ofast")),
-        (("invc", "-Ofast"), ("invc", "-Ofast -march=native")),
-        (("invc", "-Ofast -march=native"), ("invc", "-Ofast -march=native -funroll-loops")),
-        (("invc", "-Ofast -march=native -funroll-loops"), ("invc", "-Ofast -march=native -funroll-loops -floop-nest-optimize")),
-        (("invc", "-Ofast -march=native -funroll-loops -floop-nest-optimize"), ("invc", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto")),
-        (("invc", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto"), ("constn2048", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto")),
-        (("invc", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto"), ("bblocks", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto")),
-        (("baseline", "-O3"), ("bblocks", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto")),
-        (("baseline", "-O0"), ("bblocks", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto")),
+        (("linsolve", ""), ("project", ""),),
+        (("linsolve", ""), ("project", ""), ("shload", "")),
+        (("linsolve", ""), ("project", ""), ("linsolve", ""), ("project", "")),
+        (("linsolve", ""), ("project", ""), ("linsolve", ""), ("project", ""), ("linsolve", ""))
     ]
     for comparisson in comparissons:
         names = [" ".join(run) for run in comparisson]
@@ -217,9 +229,7 @@ def main():
             llc_refs.append(np.array([e["cache-references"] for e in run_measuremets[run]]))
             llc_misses.append(np.array([e["cache-misses"] for e in run_measuremets[run]]))
 
-        save_nscell_graph(names[0], names[1], means[0], means[1], ns, steps, f"{plotpath}/nspcellgraph__{plotid}.png", only_show=False)
-        save_cache_graph(names[0], names[1], l1_refs[0], l1_misses[0], l1_refs[1], l1_misses[1], ns, steps, filename=f"{plotpath}/l1graph__{plotid}.png", cache_name="L1", only_show=False)
-        save_cache_graph(names[0], names[1], llc_refs[0], llc_misses[0], llc_refs[1], llc_misses[1], ns, steps, filename=f"{plotpath}/llcgraph__{plotid}.png", cache_name="LLC", only_show=False)
+        save_nscell_graph(names, means, ns, steps, f"{plotpath}/nspcellgraph__{plotid}.png", only_show=False)
 
 if __name__ == "__main__":
     main()
