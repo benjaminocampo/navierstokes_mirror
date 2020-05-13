@@ -199,26 +199,27 @@ def main():
         (("baseline", "-O3"), ("bblocks", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto")),
         (("baseline", "-O0"), ("bblocks", "-Ofast -march=native -funroll-loops -floop-nest-optimize -flto")),
     ]
-    for source_run, target_run in comparissons:
-        source_name = " ".join(source_run)
-        target_name = " ".join(target_run)
+    for comparisson in comparissons:
+        names = [" ".join(run) for run in comparisson]
         plotpath = "runs/graphs"
-        plotid = f"{source_name}__vs__{target_name}"
+        plotid = "__vs__".join(names)
 
-        source_means = np.array([e["nspcell_mean"] for e in run_measuremets[source_run]])
-        source_l1_refs = np.array([e["L1-dcache-loads"] for e in run_measuremets[source_run]])
-        source_l1_misses = np.array([e["L1-dcache-load-misses"] for e in run_measuremets[source_run]])
-        source_llc_refs = np.array([e["cache-references"] for e in run_measuremets[source_run]])
-        source_llc_misses = np.array([e["cache-misses"] for e in run_measuremets[source_run]])
-        target_means = np.array([e["nspcell_mean"] for e in run_measuremets[target_run]])
-        target_l1_refs = np.array([e["L1-dcache-loads"] for e in run_measuremets[target_run]])
-        target_l1_misses = np.array([e["L1-dcache-load-misses"] for e in run_measuremets[target_run]])
-        target_llc_refs = np.array([e["cache-references"] for e in run_measuremets[target_run]])
-        target_llc_misses = np.array([e["cache-misses"] for e in run_measuremets[target_run]])
+        means = []
+        l1_refs = []
+        l1_misses = []
+        llc_refs = []
+        llc_misses = []
 
-        save_nscell_graph(source_name, target_name, source_means, target_means, ns, steps, f"{plotpath}/nspcellgraph__{plotid}.png", only_show=False)
-        save_cache_graph(source_name, target_name, source_l1_refs, source_l1_misses, target_l1_refs, target_l1_misses, ns, steps, filename=f"{plotpath}/l1graph__{plotid}.png", cache_name="L1", only_show=False)
-        save_cache_graph(source_name, target_name, source_llc_refs, source_llc_misses, target_llc_refs, target_llc_misses, ns, steps, filename=f"{plotpath}/llcgraph__{plotid}.png", cache_name="LLC", only_show=False)
+        for run in comparisson:
+            means.append(np.array([e["nspcell_mean"] for e in run_measuremets[run]]))
+            l1_refs.append(np.array([e["L1-dcache-loads"] for e in run_measuremets[run]]))
+            l1_misses.append(np.array([e["L1-dcache-load-misses"] for e in run_measuremets[run]]))
+            llc_refs.append(np.array([e["cache-references"] for e in run_measuremets[run]]))
+            llc_misses.append(np.array([e["cache-misses"] for e in run_measuremets[run]]))
+
+        save_nscell_graph(names[0], names[1], means[0], means[1], ns, steps, f"{plotpath}/nspcellgraph__{plotid}.png", only_show=False)
+        save_cache_graph(names[0], names[1], l1_refs[0], l1_misses[0], l1_refs[1], l1_misses[1], ns, steps, filename=f"{plotpath}/l1graph__{plotid}.png", cache_name="L1", only_show=False)
+        save_cache_graph(names[0], names[1], llc_refs[0], llc_misses[0], llc_refs[1], llc_misses[1], ns, steps, filename=f"{plotpath}/llcgraph__{plotid}.png", cache_name="LLC", only_show=False)
 
 if __name__ == "__main__":
     main()
