@@ -32,10 +32,10 @@ void lin_solve_rb_step(grid_color color, unsigned int n, float a, float c,
       int index = idx(x, y, width);
       // In haswell it is a tad better to load two 128 vectors when unaligned
       // See 14.6.2 at intel IA-32 Architectures Optimization Reference Manual
-      __m256 f = fload2x4(&same0[index]);
-      __m256 u = fload2x4(&neigh[index - width]);
-      __m256 r = fload2x4(&neigh[index - start + 1]);
-      __m256 d = fload2x4(&neigh[index + width]);
+      __m256 f = fload(&same0[index]);
+      __m256 u = fload(&neigh[index - width]);
+      __m256 r = fload(&neigh[index - start + 1]);
+      __m256 d = fload(&neigh[index + width]);
       __m256 l = _mm256_blend_ps(fshl(r), fset1(leftmost), 0b00000001);
 
       // t = (f + a * (u + r + d + l)) / c
@@ -198,10 +198,10 @@ void project_rb_step1(unsigned int n, grid_color color, float *restrict sameu0,
   for (unsigned int i = 1; i <= n; ++i, start = 1 - start) {
     for (unsigned int j = start; j < width - (1 - start); j += 8) {
       int index = idx(j, i, width);
-      __m256 u = fload2x4(&neighv[index - width]);
-      __m256 r = fload2x4(&neighu[index - start + 1]);
-      __m256 d = fload2x4(&neighv[index + width]);
-      __m256 l = fload2x4(&neighu[index - start]);
+      __m256 u = fload(&neighv[index - width]);
+      __m256 r = fload(&neighu[index - start + 1]);
+      __m256 d = fload(&neighv[index + width]);
+      __m256 l = fload(&neighu[index - start]);
       __m256 result = fmul(ratio, fadd(fsub(r, l), fsub(d, u)));
       fstore(&samev0[index], result);
     }
@@ -216,12 +216,12 @@ void project_rb_step2(unsigned int n, grid_color color, float *restrict sameu,
   for (unsigned int i = 1; i <= n; ++i, start = 1 - start) {
     for (unsigned int j = start; j < width - (1 - start); j += 8) {
       int index = idx(j, i, width);
-      __m256 oldu = fload2x4(&sameu[index]);
-      __m256 oldv = fload2x4(&samev[index]);
-      __m256 u = fload2x4(&neighu0[index - width]);
-      __m256 r = fload2x4(&neighu0[index - start + 1]);
-      __m256 d = fload2x4(&neighu0[index + width]);
-      __m256 l = fload2x4(&neighu0[index - start]);
+      __m256 oldu = fload(&sameu[index]);
+      __m256 oldv = fload(&samev[index]);
+      __m256 u = fload(&neighu0[index - width]);
+      __m256 r = fload(&neighu0[index - start + 1]);
+      __m256 d = fload(&neighu0[index + width]);
+      __m256 l = fload(&neighu0[index - start]);
       __m256 newu = ffnmadd(ratio, fsub(r, l), oldu);
       __m256 newv = ffnmadd(ratio, fsub(d, u), oldv);
       fstore(&sameu[index], newu);
