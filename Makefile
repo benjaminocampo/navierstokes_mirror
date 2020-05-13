@@ -1,11 +1,11 @@
-BUILD=intrinsics
+BUILD=intrinsics # nonvect | intrinsics | ispc
 
 fastest_cflags:=-Ofast -march=native -floop-nest-optimize -funroll-loops -flto -g
 cflags.nonvect:=$(fastest_cflags)
 cflags.intrinsics:=$(fastest_cflags) -DINTRINSICS
 cflags.ispc:=$(fastest_cflags) -DISPC
 
-build_object.nonvect:=solver_nonvect.o # TODO: Make this work by bringing in the sequential code
+build_object.nonvect:=solver_nonvect.o
 build_object.intrinsics:=solver_intrinsics.o
 build_object.ispc:=solver_ispc.o
 

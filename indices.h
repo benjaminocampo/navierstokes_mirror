@@ -1,5 +1,7 @@
 #pragma once
 
+#include <stddef.h>
+
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-function"
 

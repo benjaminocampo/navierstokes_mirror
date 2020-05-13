@@ -1,12 +1,15 @@
+#include "solver.h"
+
 #include <x86intrin.h>
 
-#include "solver.h"
 #include "indices.h"
 
 #if defined INTRINSICS
 #include "solver_intrinsics.h"
 #elif defined ISPC
 #include "solver_ispc.h"
+#else
+#include "solver_nonvect.h"
 #endif
 
 #define IX(x, y) (rb_idx((x), (y), (n + 2)))
