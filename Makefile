@@ -51,10 +51,3 @@ asm: solver.o
 .PHONY: clean
 clean:
 	rm -f $(TARGETS) *.o *.asm .depend solver.s *~
-
-# TODO: This should probably not exist
-.PHONY: ispc_server
-ispc_server: ISPC='/opt/ispc/1.12.0/bin/ispc'
-ispc_server: ISPCFLAGS='--target=avx2-i32x8'
-ispc_server: CFLAGS:=$(CFLAGS) -fPIC -no-pie
-ispc_server: headless
