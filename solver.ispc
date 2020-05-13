@@ -19,6 +19,8 @@ export void add_source(uniform unsigned int n,
 
 export void lin_solve_rb_step(uniform int color,
                               uniform int n,
+                              uniform unsigned int ti,
+                              uniform unsigned int strip_size,
                               uniform float a,
                               uniform float c,
                               const uniform float *uniform same0,
@@ -28,7 +30,7 @@ export void lin_solve_rb_step(uniform int color,
   uniform int width = (n + 2) / 2;
   uniform float invc = 1/c;
 
-  for (uniform int y = 1; y <= n; y++, start = 1 - start) {
+  for (uniform int y = ti; y < ti + strip_size; y++, start = 1 - start) {
     uniform int x;
     for (x = start; x < width - programCount; x+= programCount) {
       

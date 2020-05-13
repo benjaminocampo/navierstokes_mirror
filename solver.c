@@ -34,7 +34,7 @@ static void set_bnd(unsigned int n, boundary b, float *x) {
 }
 
 static void lin_solve(unsigned int n, boundary b, float *restrict x,
-                      const float *restrict x0, float a, float c) {
+                      const float *restrict x0, const float a, const float c) {
   unsigned int color_size = (n + 2) * ((n + 2) / 2);
   const float *red0 = x0;
   const float *blk0 = x0 + color_size;
@@ -42,8 +42,8 @@ static void lin_solve(unsigned int n, boundary b, float *restrict x,
   float *blk = x + color_size;
 
   for (unsigned int k = 0; k < 20; ++k) {
-    lin_solve_rb_step(RED, n, a, c, red0, blk, red);
-    lin_solve_rb_step(BLACK, n, a, c, blk0, red, blk);
+    lin_solve_rb_step(RED, n, 1, n, a, c, red0, blk, red);
+    lin_solve_rb_step(BLACK, n, 1, n, a, c, blk0, red, blk);
     set_bnd(n, b, x);
   }
 }
