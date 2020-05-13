@@ -23,11 +23,9 @@ void lin_solve_rb_step(grid_color color, unsigned int n, float a, float c,
   const float invc = 1 / c;
   unsigned int start = color == RED ? 0 : 1;
   unsigned int width = (n + 2) / 2;
-  const __m256 pinvc = fset1(invc);
-  const __m256 pa = fset1(a);
-  float leftmost;  // Left slack of the left-right neighbours load
+  const __m256 pinvc = _mm256_set1_ps(invc);
+  const __m256 pa = _mm256_set1_ps(a);
   for (unsigned int y = 1; y <= n; ++y, start = 1 - start) {
-    leftmost = neigh[idx(0, y, width)];
     for (unsigned int x = start; x < width - (1 - start); x += 8) {
       int index = idx(x, y, width);
       // In haswell it is a tad better to load two 128 vectors when unaligned
@@ -36,14 +34,10 @@ void lin_solve_rb_step(grid_color color, unsigned int n, float a, float c,
       __m256 u = fload2x4(&neigh[index - width]);
       __m256 r = fload2x4(&neigh[index - start + 1]);
       __m256 d = fload2x4(&neigh[index + width]);
-      __m256 l = _mm256_blend_ps(fshl(r), fset1(leftmost), 0b00000001);
-
+      __m256 l = fload2x4(&neigh[index - start]);
       // t = (f + a * (u + r + d + l)) / c
       __m256 t = fmul(ffmadd(pa, fadd(u, fadd(r, fadd(d, l))), f), pinvc);
-      fstore(&same[index], t);
-
-      // extract the rightmost to be the next leftmost
-      _MM_EXTRACT_FLOAT(leftmost, _mm256_extractf128_ps(r, 1), 3);
+      _mm256_storeu_ps(&same[index], t);
     }
   }
 }
