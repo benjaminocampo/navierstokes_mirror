@@ -1,18 +1,25 @@
-# Example run make headless BUILD=fast
-# TODO: For some reason BUILD initialization needs to be done explicitly in args
-BUILD=fast
-cflags.common:=
-cflags.fast:=-Ofast -march=native -floop-nest-optimize -funroll-loops -flto -g
+BUILD=intrinsics
+
+fastest_cflags:=-Ofast -march=native -floop-nest-optimize -funroll-loops -flto -g
+cflags.nonvect:=$(fastest_cflags)
+cflags.intrinsics:=$(fastest_cflags) -DINTRINSICS
+cflags.ispc:=$(fastest_cflags) -DISPC
+
+build_object.nonvect:=solver_nonvect.o # TODO: Make this work by bringing in the sequential code
+build_object.intrinsics:=solver_intrinsics.o
+build_object.ispc:=solver_ispc.o
 
 CC=cc
+ISPC=ispc
+ISPCFLAGS=--target=avx2-i32x8
 override CFLAGS:=-std=c99 -Wall -Wextra -Werror -Wshadow -Wno-unused-parameter $(cflags.$(BUILD)) $(CFLAGS)
 LDFLAGS=
 
 TARGETS=demo headless
 SOURCES=$(shell echo *.c)
-COMMON_OBJECTS=timing.o solver.o solver_intrinsics.o
+COMMON_OBJECTS=timing.o solver.o $(build_object.$(BUILD))
 
-.PHONY: clean
+
 all: $(TARGETS)
 
 demo: demo.o $(COMMON_OBJECTS)
@@ -24,25 +31,14 @@ headless: headless.o $(COMMON_OBJECTS)
 asm: solver.o
 	$(CC) $(CFLAGS) -fno-asynchronous-unwind-tables -fno-exceptions -S solver.c
 
-runperf: headless
-	sudo perf stat \
-	-e \
-	cache-references,\
-	cache-misses,\
-	L1-dcache-stores,\
-	L1-dcache-store-misses,\
-	LLC-stores,\
-	LLC-store-misses,\
-	page-faults,\
-	cycles,\
-	instructions,\
-	branches,\
-	branch-misses \
-	-ddd \
-	./headless
+%_ispc.h: %.ispc
+	$(ISPC) $< -h $@ $(ISPCFLAGS)
+
+%_ispc.o: %.ispc
+	$(ISPC) $< -o $@ $(ISPCFLAGS)
 
 .depend: *.[ch]
-	$(CC) -MM $(SOURCES) > .depend
+	$(CC) $(CFLAGS) -MM $(SOURCES) > .depend
 
 -include .depend
 
@@ -54,4 +50,11 @@ runperf: headless
 
 .PHONY: clean
 clean:
-	rm -f $(TARGETS) *.o .depend solver.s *~
+	rm -f $(TARGETS) *.o *.asm .depend solver.s *~
+
+# TODO: This should probably not exist
+.PHONY: ispc_server
+ispc_server: ISPC='/opt/ispc/1.12.0/bin/ispc'
+ispc_server: ISPCFLAGS='--target=avx2-i32x8'
+ispc_server: CFLAGS:=$(CFLAGS) -fPIC -no-pie
+ispc_server: headless
