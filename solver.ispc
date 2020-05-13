@@ -26,30 +26,24 @@ export void lin_solve_rb_step(uniform int color,
                               uniform float *uniform same) {
   uniform int start = color == 0 ? 0 : 1;
   uniform int width = (n + 2) / 2;
-  uniform float invc = 1 / c;
-  for (uniform int y = 1; y <= n; y++, start = 1 - start) {
-    varying int index_left = programIndex + y * width;
-    varying float left = neigh[index_left];
-    uniform int x;
-    for (x = start; x < width - programCount; x += programCount){
-      varying int index_next_left = programCount + index_left;
-      varying float next_left = neigh[index_next_left];
-      varying float right = insert(shift(left, 1), programCount - 1, extract(next_left, 0));
+  uniform float invc = 1/c;
 
+  for (uniform int y = 1; y <= n; y++, start = 1 - start) {
+    uniform int x;
+    for (x = start; x < width - programCount; x+= programCount) {
+      
       varying int index = (x + programIndex) + y * width;
       same[index] =
-          (same0[index] + a * (neigh[index - width] + left +
-                               right + neigh[index + width])) *
+          (same0[index] + a * (neigh[index - width] + neigh[index - start] +
+                                neigh[index - start + 1] + neigh[index + width])) *
           invc;
-      left = next_left;
-      index_left = index_next_left;
     }
     varying int xx = programIndex + x;
-    if (xx < width - (1 - start)){
+    if(xx < width - (1 - start)){
       varying int index = xx + y * width;
       same[index] =
           (same0[index] + a * (neigh[index - width] + neigh[index - start] +
-                               neigh[index - start + 1] + neigh[index + width])) *
+                                neigh[index - start + 1] + neigh[index + width])) *
           invc;
     }
   }
