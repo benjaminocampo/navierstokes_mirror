@@ -22,6 +22,10 @@
     x = tmp;         \
   }
 
+static int min(int a, int b) {
+    return a < b ? a : b;
+}
+
 static void set_bnd(unsigned int n, boundary b, float *x) {
   for (unsigned int i = 1; i <= n; i++) {
     x[IX(0, i)] = b == VERTICAL ? -x[IX(1, i)] : x[IX(1, i)];
@@ -43,25 +47,17 @@ static void lin_solve(unsigned int n, boundary b, float *restrict x,
   float *red = x;
   float *blk = x + color_size;
 
-
   for (unsigned int k = 0; k < 20; ++k) {
     #pragma omp parallel
     {
-      unsigned int strip_size = n/omp_get_num_threads();
-      #pragma omp for
-      for(unsigned int ti = 1; ti <= n - n % strip_size; ti+=strip_size){
-        lin_solve_rb_step(RED, n, ti, strip_size, a, c, red0, blk, red);
-      }
-      #pragma omp for
-      for(unsigned int ti = 1; ti <= n - n % strip_size; ti+=strip_size){
-        lin_solve_rb_step(BLACK, n, ti, strip_size, a, c, blk0, red, blk);
-      }
-      #pragma omp single
-      {
-        lin_solve_rb_step(RED, n, n - n % strip_size, n % strip_size, a, c, red0, blk, red);
-        lin_solve_rb_step(BLACK, n, n - n % strip_size, n % strip_size, a, c, blk0, red, blk);
-        set_bnd(n, b, x);
-      }
+      unsigned int threads = omp_get_num_threads();
+      unsigned int tid = omp_get_thread_num();
+      unsigned int works = (n + threads - 1)/ threads;
+      unsigned int from = tid * works + 1;
+      unsigned int to = min((tid + 1) * works + 1, n + 1);
+      lin_solve_rb_step(RED, n, from, to, a, c, red0, blk, red);
+      lin_solve_rb_step(BLACK, n, from, to, a, c, blk0, red, blk);
+      set_bnd(n, b, x);
     }
   }
 }
