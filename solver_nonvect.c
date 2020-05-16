@@ -125,7 +125,6 @@ void project_rb_step2(unsigned int n, grid_color color, float *restrict sameu,
   int shift = 1 - start * 2;
 
   unsigned int width = (n + 2) / 2;
-  //unsigned int fromm = 1; unsigned int too = n + 1;
   for (unsigned int i = from; i < to; ++i, shift = -shift, start = 1 - start) {
     for (unsigned int j = start; j < width - (1 - start); ++j) {
       int index = idx(j, i, width);
