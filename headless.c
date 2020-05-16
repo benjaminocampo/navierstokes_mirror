@@ -18,6 +18,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <x86intrin.h>
+#include <omp.h>
 
 #include "indices.h"
 #include "solver.h"
@@ -26,6 +27,8 @@
 /* macros */
 
 #define IX(x, y) (rb_idx((x), (y), (N + 2)))
+#define MIN(a, b)  (((a) < (b)) ? (a) : (b))
+#define MAX(a, b)  (((a) > (b)) ? (a) : (b))
 
 /* global variables */
 
@@ -87,10 +90,11 @@ static int allocate_data(void) {
 
 static void react(float *d, float *uu, float *vv) {
   int i, size = (N + 2) * (N + 2);
-  float max_velocity2 = 0.0f;
-  float max_density = 0.0f;
-
-  max_velocity2 = max_density = 0.0f;
+  float max_velocity2 = 0.0f; // TODO: Remove initialization because it already starts in -infinity
+  float max_density = 0.0f; // TODO: Remove initialization because it already starts in -infinity
+  // TODO: Try using default(firstprivate)
+  // TODO: Are this parallel fors matching our strip distribution
+  #pragma omp parallel for default(none) private(i) firstprivate(size, uu, vv, d) reduction(max: max_velocity2, max_density)
   for (i = 0; i < size; i++) {
     if (max_velocity2 < uu[i] * uu[i] + vv[i] * vv[i]) {
       max_velocity2 = uu[i] * uu[i] + vv[i] * vv[i];
@@ -101,13 +105,16 @@ static void react(float *d, float *uu, float *vv) {
   }
 
   // TODO: Unify these two fors
+  #pragma omp parallel for
   for (i = 0; i < size; i++) {
     uu[i] = vv[i] = d[i] = 0.0f;
   }
 
   if (max_velocity2 < 0.0000005f) {
+    // TODO: This should be touched by the middle strip thread
     uu[IX(N / 2, N / 2)] = force * 10.0f;
     vv[IX(N / 2, N / 2)] = force * 10.0f;
+    #pragma omp parallel for collapse(2)
     for (int y = 64; y < N; y += 64)
       for (int x = 64; x < N; x += 64) {
         uu[IX(x, y)] = force * 1000.0f * (N / 2 - y) / (N / 2);
@@ -115,7 +122,9 @@ static void react(float *d, float *uu, float *vv) {
       }
   }
   if (max_density < 1.0f) {
+    // TODO: This should be touched by the middle strip thread
     d[IX(N / 2, N / 2)] = source * 10.0f;
+    #pragma omp parallel for collapse(2)
     for (int y = 64; y < N; y += 64)
       for (int x = 64; x < N; x += 64) d[IX(x, y)] = source * 1000.0f;
   }
@@ -134,7 +143,17 @@ static void one_step(void) {
   react_ns_p_cell = 1.0e9 * (wtime() - start_t) / (N * N);
 
   start_t = wtime();
-  step(N, dens, u, v, dens_prev, u_prev, v_prev, diff, visc, dt, 1, N + 1);
+  #pragma omp parallel firstprivate(dens, u, v, dens_prev, u_prev, v_prev, diff, visc, dt)
+  {
+    int threads = omp_get_num_threads();
+    int strip_size = (N + threads - 1) / threads;
+    #pragma omp for
+    for(int tid = 0; tid < threads; tid++){
+      int from = tid * strip_size + 1;
+      int to = MIN((tid + 1) * strip_size + 1, N + 1);
+      step(N, dens, u, v, dens_prev, u_prev, v_prev, diff, visc, dt, from, to);
+    }
+  }
   step_ns_p_cell = 1.0e9 * (wtime() - start_t) / (N * N);
 
   printf("%lf, %lf, %lf, %lf\n",
