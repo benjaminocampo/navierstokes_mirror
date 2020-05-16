@@ -58,7 +58,6 @@ static void lin_solve(unsigned int n, boundary b, float *restrict x,
       lin_solve_rb_step(BLACK, n, a, c, blk0, red, blk, from, to);
       #pragma omp barrier
       set_bnd(n, b, x, from, to);
-      #pragma omp barrier // TODO: This barrier we think it is needed, but the simulations seems fine without it
   }
 }
 
@@ -86,13 +85,10 @@ static void advect(unsigned int n, float *d, float *u, float *v,
   const float *blku0 = u0 + color_size;
   const float *blkv0 = v0 + color_size;
   advect_rb(RED, n, redd, redu, redv, redd0, redu0, redv0, d0, u0, v0, dt, from, to);
-  #pragma omp barrier
   advect_rb(BLACK, n, blkd, blku, blkv, blkd0, blku0, blkv0, d0, u0, v0, dt, from, to);
   #pragma omp barrier
   set_bnd(n, VERTICAL, u, from, to);
-  #pragma omp barrier
   set_bnd(n, HORIZONTAL, v, from, to);
-  #pragma omp barrier
 }
 
 static void project(unsigned int n, float *u, float *v, float *u0, float *v0,
@@ -124,46 +120,33 @@ static void project(unsigned int n, float *u, float *v, float *u0, float *v0,
 
   set_bnd(n, VERTICAL, u, from, to);
   set_bnd(n, HORIZONTAL, v, from, to);
-  #pragma omp barrier
-
 }
 
 void step(unsigned int n, float *d, float *u, float *v, float *d0,
           float *u0, float *v0, float diff, float visc, float dt,
           unsigned int from, unsigned int to) {
-  // Density update
   add_source(n, d, d0, dt, from, to);
-  #pragma omp barrier
-  SWAP(d0, d);
-  #pragma omp barrier
-  diffuse(n, NONE, d, d0, diff, dt, from, to);
-  #pragma omp barrier
-  SWAP(d0, d);
-  #pragma omp barrier
-  // density advection will be done afterwards mixed with the velocity advection
-
-
-  // Velocity update
   add_source(n, u, u0, dt, from, to);
-  #pragma omp barrier
   add_source(n, v, v0, dt, from, to);
   #pragma omp barrier
+
+  SWAP(d0, d);
   SWAP(u0, u);
-  #pragma omp barrier
-  diffuse(n, VERTICAL, u, u0, visc, dt, from, to);
-  #pragma omp barrier
   SWAP(v0, v);
-  #pragma omp barrier
+  diffuse(n, NONE, d, d0, diff, dt, from, to);
+  diffuse(n, VERTICAL, u, u0, visc, dt, from, to);
   diffuse(n, HORIZONTAL, v, v0, visc, dt, from, to);
   #pragma omp barrier
+
   project(n, u, v, u0, v0, from, to);
   #pragma omp barrier
+
+  SWAP(d0, d);
   SWAP(u0, u);
-  #pragma omp barrier
   SWAP(v0, v);
-  #pragma omp barrier
   advect(n, d, u, v, d0, u0, v0, dt, from, to);
   #pragma omp barrier
+
   project(n, u, v, u0, v0, from, to);
   #pragma omp barrier
 }

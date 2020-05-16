@@ -42,6 +42,7 @@ void advect_rb(grid_color color, unsigned int n, float *samed, float *sameu,
   int i0, j0;
   float x, y, s0, t0, s1, t1;
 
+  // TODO: Remove unused comments
   // int shift = color == RED ? 1 : -1;
   // unsigned int start = color == RED ? 0 : 1;
   unsigned int start = ((color == RED && (from % 2 == 0)) || (color != RED && (from % 2 == 1)));

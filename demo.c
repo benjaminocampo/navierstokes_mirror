@@ -291,7 +291,7 @@ static void idle_func(void) {
   react_ns_p_cell += 1.0e9 * (wtime() - start_t) / (N * N);
 
   start_t = wtime();
-  #pragma omp parallel
+  #pragma omp parallel firstprivate(dens, u, v, dens_prev, u_prev, v_prev, diff, visc, dt)
   {
     int threads = omp_get_num_threads();
     int strip_size = (N + threads - 1) / threads;
@@ -311,7 +311,6 @@ static void idle_func(void) {
         react_ns_p_cell / times, step_ns_p_cell / times, step_ns_p_cell / times);
     one_second = wtime();
     react_ns_p_cell = 0.0;
-    step_ns_p_cell = 0.0;
     step_ns_p_cell = 0.0;
     times = 1;
   } else {
