@@ -118,10 +118,7 @@ static void project(unsigned int n, float *u, float *v, float *u0, float *v0,
   { int fromm = 1; int too = n + 1;
     lin_solve(n, NONE, u0, v0, 1, 4, fromm, too);
   }
-  // #pragma omp single
-  // { int fromm = 1; int too = n + 1;
     project_rb_step2(n, RED, redu, redv, blku0, from, to);
-  // }
     project_rb_step2(n, BLACK, blku, blkv, redu0, from, to);
     #pragma omp barrier
   // }
@@ -141,8 +138,8 @@ void step(unsigned int n, float *d, float *u, float *v, float *d0,
   SWAP(d0, d);
   #pragma omp barrier
   #pragma omp single
-  { from = 1; to = n + 1;
-  diffuse(n, NONE, d, d0, diff, dt, from, to);
+  { int fromm = 1; int too = n + 1;
+  diffuse(n, NONE, d, d0, diff, dt, fromm, too);
   }
   #pragma omp barrier
   SWAP(d0, d);
@@ -159,16 +156,16 @@ void step(unsigned int n, float *d, float *u, float *v, float *d0,
   #pragma omp barrier
 
   #pragma omp single
-  { from = 1; to = n + 1;
-  diffuse(n, VERTICAL, u, u0, visc, dt, from, to);
+  { int fromm = 1; int too = n + 1;
+  diffuse(n, VERTICAL, u, u0, visc, dt, fromm, too);
   }
 
   #pragma omp barrier
   SWAP(v0, v);
   #pragma omp barrier
   #pragma omp single
-  { from = 1; to = n + 1;
-    diffuse(n, HORIZONTAL, v, v0, visc, dt, from, to);
+  { int fromm = 1; int too = n + 1;
+    diffuse(n, HORIZONTAL, v, v0, visc, dt, fromm, too);
   }
 
   #pragma omp barrier
