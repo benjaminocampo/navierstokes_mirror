@@ -12,7 +12,7 @@ build_object.ispc:=solver_ispc.o
 CC=cc
 ISPC=ispc
 ISPCFLAGS=--target=avx2-i32x8
-override CFLAGS:=-std=c99 -Wall -Wextra -Werror -Wshadow -Wno-unused-parameter $(cflags.$(BUILD)) $(CFLAGS)
+override CFLAGS:=-std=c99 -Wall -Wextra -Wshadow -Wno-unused-parameter $(cflags.$(BUILD)) $(CFLAGS)
 LDFLAGS=
 
 TARGETS=demo headless

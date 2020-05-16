@@ -3,7 +3,7 @@
 
 void add_source(unsigned int n, float *x, const float *s, float dt,
                 const unsigned int from, const unsigned int to) {
-  for (unsigned int i = from - 1; i < (to + 1) * (n + 2); i++) {
+  for (unsigned int i = idx(0, from, n + 2); i < idx(0, to, n + 2); i++) {
     x[i] += dt * s[i];
   }
 }
@@ -12,8 +12,13 @@ void lin_solve_rb_step(grid_color color, unsigned int n, float a, float c,
                        const float *restrict same0, const float *restrict neigh,
                        float *restrict same, const unsigned int from,
                        const unsigned int to) {
-  int shift = color == RED ? 1 : -1;
-  unsigned int start = color == RED ? 0 : 1;
+  // unsigned int start = color == RED ? 0 : 1;
+  // int shift = color == RED ? 1 : -1;
+  unsigned int start = (
+    (color == RED && (from % 2 == 0)) ||
+    (color == BLACK && (from % 2 == 1))
+  );
+  int shift = 1 - start * 2;
 
   unsigned int width = (n + 2) / 2;
 
@@ -36,8 +41,11 @@ void advect_rb(grid_color color, unsigned int n, float *samed, float *sameu,
   int i0, j0;
   float x, y, s0, t0, s1, t1;
 
-  int shift = color == RED ? 1 : -1;
-  unsigned int start = color == RED ? 0 : 1;
+  // int shift = color == RED ? 1 : -1;
+  // unsigned int start = color == RED ? 0 : 1;
+  unsigned int start = ((color == RED && (from % 2 == 0)) || (color != RED && (from % 2 == 1)));
+  int shift = 1 - start * 2;
+
   unsigned int width = (n + 2) / 2;
 
   float dt0 = dt * n;
@@ -90,8 +98,11 @@ void project_rb_step1(unsigned int n, grid_color color, float *restrict sameu0,
                       float *restrict samev0, float *restrict neighu,
                       float *restrict neighv, const unsigned int from,
                       const unsigned int to) {
-  int shift = color == RED ? 1 : -1;
-  unsigned int start = color == RED ? 0 : 1;
+  // int shift = color == RED ? 1 : -1;
+  // unsigned int start = color == RED ? 0 : 1;
+  unsigned int start = ((color == RED && (from % 2 == 0)) || (color != RED && (from % 2 == 1)));
+  int shift = 1 - start * 2;
+
   unsigned int width = (n + 2) / 2;
   for (unsigned int i = from; i < to; ++i, shift = -shift, start = 1 - start) {
     for (unsigned int j = start; j < width - (1 - start); ++j) {
@@ -108,11 +119,15 @@ void project_rb_step1(unsigned int n, grid_color color, float *restrict sameu0,
 void project_rb_step2(unsigned int n, grid_color color, float *restrict sameu,
                       float *restrict samev, float *restrict neighu0,
                       const unsigned int from, const unsigned int to) {
-  int shift = color == RED ? 1 : -1;
-  unsigned int start = color == RED ? 0 : 1;
-  unsigned int width = (n + 2) / 2;
+  // int shift = color == RED ? 1 : -1;
+  // unsigned int start = color == RED ? 0 : 1;
+  unsigned int start = ((color == RED && (from % 2 == 0)) || (color != RED && (from % 2 == 1)));
+  int shift = 1 - start * 2;
 
-  for (unsigned int i = from; i < to; ++i, shift = -shift, start = 1 - start) {
+  unsigned int width = (n + 2) / 2;
+  #pragma omp single
+  { unsigned int fromm = 1; unsigned int too = n + 1;
+  for (unsigned int i = fromm; i < too; ++i, shift = -shift, start = 1 - start) {
     for (unsigned int j = start; j < width - (1 - start); ++j) {
       int index = idx(j, i, width);
       sameu[index] -=
@@ -120,5 +135,6 @@ void project_rb_step2(unsigned int n, grid_color color, float *restrict sameu,
       samev[index] -=
           0.5f * n * (neighu0[index + width] - neighu0[index - width]);
     }
+  }
   }
 }

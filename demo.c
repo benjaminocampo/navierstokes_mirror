@@ -19,6 +19,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <x86intrin.h>
+#include <omp.h>
+#include <assert.h>
 
 #include "indices.h"
 #include "solver.h"
@@ -27,6 +29,8 @@
 /* macros */
 
 #define IX(x, y) (rb_idx((x), (y), (N + 2)))
+#define MIN(a, b)  (((a) < (b)) ? (a) : (b))
+#define MAX(a, b)  (((a) > (b)) ? (a) : (b))
 
 /* global variables */
 
@@ -61,7 +65,9 @@ static void free_data(void) {
 static void clear_data(void) {
   int i, size = (N + 2) * (N + 2);
 
+  #pragma omp for
   for (i = 0; i < size; i++) {
+    // XXX: assert i in [from, to] range
     u[i] = v[i] = u_prev[i] = v_prev[i] = dens[i] = dens_prev[i] = 0.0f;
   }
 }
@@ -166,10 +172,10 @@ static void draw_density(void) {
 static void react(float *d, float *uu, float *vv) {
   int i, j, size = (N + 2) * (N + 2);
 
-  float max_velocity2 = 0.0f;
-  float max_density = 0.0f;
-
-  max_velocity2 = max_density = 0.0f;
+  float max_velocity2 = 0.0f; // XXX: Sacarle la inicialización por que ya arrancan en -infinito
+  float max_density = 0.0f; // XXX: Sacarle la inicialización por que ya arrancan en -infinito
+  // XXX: Probar hacer default(firstprivate)
+  #pragma omp parallel for private(i) firstprivate(size, uu, vv, d) reduction(max: max_velocity2, max_density)
   for (i = 0; i < size; i++) {
     if (max_velocity2 < uu[i] * uu[i] + vv[i] * vv[i]) {
       max_velocity2 = uu[i] * uu[i] + vv[i] * vv[i];
@@ -179,13 +185,16 @@ static void react(float *d, float *uu, float *vv) {
     }
   }
 
+  #pragma omp parallel for
   for (i = 0; i < size; i++) {
     uu[i] = vv[i] = d[i] = 0.0f;
   }
 
   if (max_velocity2 < 0.0000005f) {
+    // XXX: Que esto lo toque el thread del medio así está en su memoria
     uu[IX(N / 2, N / 2)] = force * 10.0f;
     vv[IX(N / 2, N / 2)] = force * 10.0f;
+    #pragma omp parallel for collapse(2)
     for (int y = 64; y < N; y += 64)
       for (int x = 64; x < N; x += 64) {
         uu[IX(x, y)] = force * 1000.0f * (N / 2 - y) / (N / 2);
@@ -193,7 +202,9 @@ static void react(float *d, float *uu, float *vv) {
       }
   }
   if (max_density < 1.0f) {
+    // XXX: Que esto lo toque el thread del medio así está en su memoria
     d[IX(N / 2, N / 2)] = source * 10.0f;
+    #pragma omp parallel for collapse(2)
     for (int y = 64; y < N; y += 64)
       for (int x = 64; x < N; x += 64) d[IX(x, y)] = source * 1000.0f;
   }
@@ -275,10 +286,24 @@ static void idle_func(void) {
 
   start_t = wtime();
   react(dens_prev, u_prev, v_prev);
+
   react_ns_p_cell += 1.0e9 * (wtime() - start_t) / (N * N);
 
   start_t = wtime();
-  step(N, dens, u, v, dens_prev, u_prev, v_prev, diff, visc, dt, 1, N + 1);
+  #pragma omp parallel
+  {
+    int threads = omp_get_num_threads();
+    int strip_size = (N + threads - 1) / threads;
+    #pragma omp for
+    for(int tid = 0; tid < threads; tid++){
+      int from = tid * strip_size + 1;
+      int to = MIN((tid + 1) * strip_size + 1, N + 1);
+      // printf("tid=%d, from=%d to=%d\n", tid, from, to);
+      step(N, dens, u, v, dens_prev, u_prev, v_prev, diff, visc, dt, from, to);
+    }
+  }
+  // assert(0);
+
   step_ns_p_cell += 1.0e9 * (wtime() - start_t) / (N * N);
 
   if (1.0 < wtime() - one_second) { /* at least 1s between stats */

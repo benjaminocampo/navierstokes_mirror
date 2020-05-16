@@ -15,7 +15,8 @@ void add_source(unsigned int n, float *x, const float *s, float dt,
     __m256 product = _mm256_fmadd_ps(pdt, ps, px);  // x + dt * s[i]
     _mm256_store_ps(&x[i], product);                // x[i] += dt * s[i];
   }
-  for (; i < size; i++) x[i] += dt * s[i];
+  for (; i < size; i++) x[i] += dt * s[i]; // XXX: Peeling for each thread
+
 }
 
 void lin_solve_rb_step(grid_color color, unsigned int n, float a, float c,

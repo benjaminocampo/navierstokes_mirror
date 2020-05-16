@@ -5,7 +5,7 @@ void add_source(unsigned int n, float *x, const float *s, float dt,
 
 void lin_solve_rb_step(grid_color color, unsigned int n, float a, float c,
                        const float *same0, const float *neigh, float *same,
-                       const unsigned int from, const unsigned int to,);
+                       const unsigned int from, const unsigned int to);
 
 void advect_rb(grid_color color, unsigned int n, float *samed, float *sameu,
                float *samev, const float *samed0, const float *sameu0,
@@ -14,7 +14,7 @@ void advect_rb(grid_color color, unsigned int n, float *samed, float *sameu,
                const unsigned int to);
 
 void project_rb_step1(unsigned int n, grid_color color, float *sameu0,
-                      float *samev0, float *neighu, float *neighv
+                      float *samev0, float *neighu, float *neighv,
                       const unsigned int from, const unsigned int to);
 
 void project_rb_step2(unsigned int n, grid_color color, float *sameu,

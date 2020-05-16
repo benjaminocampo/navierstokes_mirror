@@ -12,9 +12,9 @@ export void add_source(uniform unsigned int n,
                        const uniform unsigned int from,
                        const uniform unsigned int to)
 {
-  foreach (i = (from - 1) * (n + 2) ... (to + 1) * (n + 2))
+  foreach (i = from * (n + 2) ... to * (n + 2))
   {
-    x[i] += dt * s[i];
+    x[i] += dt * s[i];   /// XXX: replace for idx
   }
 }
 
@@ -34,7 +34,7 @@ export void lin_solve_rb_step(uniform int color,
   for (uniform int y = from; y < to; y++, start = 1 - start) {
     uniform int x;
     for (x = start; x < width - programCount; x+= programCount) {
-      
+
       varying int index = (x + programIndex) + y * width;
       same[index] =
           (same0[index] + a * (neigh[index - width] + neigh[index - start] +
