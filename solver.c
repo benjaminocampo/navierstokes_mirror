@@ -4,6 +4,8 @@
 
 #include "indices.h"
 
+#include <omp.h>
+
 #if defined INTRINSICS
 #include "solver_intrinsics.h"
 #elif defined ISPC
@@ -20,6 +22,10 @@
     x = tmp;         \
   }
 
+static int min(int a, int b) {
+    return a < b ? a : b;
+}
+
 static void set_bnd(unsigned int n, boundary b, float *x) {
   for (unsigned int i = 1; i <= n; i++) {
     x[IX(0, i)] = b == VERTICAL ? -x[IX(1, i)] : x[IX(1, i)];
@@ -34,7 +40,7 @@ static void set_bnd(unsigned int n, boundary b, float *x) {
 }
 
 static void lin_solve(unsigned int n, boundary b, float *restrict x,
-                      const float *restrict x0, float a, float c) {
+                      const float *restrict x0, const float a, const float c) {
   unsigned int color_size = (n + 2) * ((n + 2) / 2);
   const float *red0 = x0;
   const float *blk0 = x0 + color_size;
@@ -42,9 +48,17 @@ static void lin_solve(unsigned int n, boundary b, float *restrict x,
   float *blk = x + color_size;
 
   for (unsigned int k = 0; k < 20; ++k) {
-    lin_solve_rb_step(RED, n, a, c, red0, blk, red);
-    lin_solve_rb_step(BLACK, n, a, c, blk0, red, blk);
-    set_bnd(n, b, x);
+    #pragma omp parallel
+    {
+      unsigned int threads = omp_get_num_threads();
+      unsigned int tid = omp_get_thread_num();
+      unsigned int works = (n + threads - 1)/ threads;
+      unsigned int from = tid * works + 1;
+      unsigned int to = min((tid + 1) * works + 1, n + 1);
+      lin_solve_rb_step(RED, n, from, to, a, c, red0, blk, red);
+      lin_solve_rb_step(BLACK, n, from, to, a, c, blk0, red, blk);
+      set_bnd(n, b, x);
+    }
   }
 }
 

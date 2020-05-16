@@ -8,7 +8,8 @@ void add_source(unsigned int n, float *x, const float *s, float dt) {
   }
 }
 
-void lin_solve_rb_step(grid_color color, unsigned int n, float a, float c,
+void lin_solve_rb_step(grid_color color, unsigned int n, unsigned int from,
+                       unsigned int to, float a, float c,
                        const float *restrict same0, const float *restrict neigh,
                        float *restrict same) {
   int shift = color == RED ? 1 : -1;
@@ -16,7 +17,7 @@ void lin_solve_rb_step(grid_color color, unsigned int n, float a, float c,
 
   unsigned int width = (n + 2) / 2;
 
-  for (unsigned int y = 1; y <= n; ++y, shift = -shift, start = 1 - start) {
+  for (unsigned int y = from; y < to; ++y, shift = -shift, start = 1 - start) {
     for (unsigned int x = start; x < width - (1 - start); ++x) {
       int index = idx(x, y, width);
       same[index] =

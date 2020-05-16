@@ -17,7 +17,8 @@ void add_source(unsigned int n, float *x, const float *s, float dt) {
   for (; i < size; i++) x[i] += dt * s[i];
 }
 
-void lin_solve_rb_step(grid_color color, unsigned int n, float a, float c,
+void lin_solve_rb_step(grid_color color, unsigned int n, unsigned int from,
+                       unsigned int to, float a, float c,
                        const float *restrict same0, const float *restrict neigh,
                        float *restrict same) {
   const float invc = 1 / c;
@@ -25,7 +26,7 @@ void lin_solve_rb_step(grid_color color, unsigned int n, float a, float c,
   unsigned int width = (n + 2) / 2;
   const __m256 pinvc = fset1(invc);
   const __m256 pa = fset1(a);
-  for (unsigned int y = 1; y <= n; ++y, start = 1 - start) {
+  for (unsigned int y = from; y < to; ++y, start = 1 - start) {
     for (unsigned int x = start; x < width - (1 - start); x += 8) {
       int index = idx(x, y, width);
       // In haswell it is a tad better to load two 128 vectors when unaligned
