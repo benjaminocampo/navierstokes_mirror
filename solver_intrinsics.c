@@ -6,17 +6,16 @@
 
 void add_source(unsigned int n, float *x, const float *s, float dt,
                 const unsigned int from, const unsigned int to) {
-  unsigned int size = (n + 2) * (n + 2);
   const __m256 pdt = fset1(dt);
   unsigned int i;
-  for (i = 0; i < size - 8; i += 8) {
-    __m256 px = faload(&x[i]);
-    __m256 ps = faload(&s[i]);
-    __m256 product = _mm256_fmadd_ps(pdt, ps, px);  // x + dt * s[i]
-    _mm256_store_ps(&x[i], product);                // x[i] += dt * s[i];
+  const unsigned int strip_border = idx(0, to, n + 2);
+  for (i = idx(0, from, n + 2); i < strip_border - 8; i += 8) {
+    __m256 px = fload(&x[i]);
+    __m256 ps = fload(&s[i]);
+    __m256 product = ffmadd(pdt, ps, px);  // x + dt * s[i]
+    fstore(&x[i], product);                // x[i] += dt * s[i];
   }
-  for (; i < size; i++) x[i] += dt * s[i]; // XXX: Peeling for each thread
-
+  for (; i < strip_border; i++) x[i] += dt * s[i];
 }
 
 void lin_solve_rb_step(grid_color color, unsigned int n, float a, float c,
@@ -24,15 +23,13 @@ void lin_solve_rb_step(grid_color color, unsigned int n, float a, float c,
                        float *restrict same, const unsigned int from,
                        const unsigned int to) {
   const float invc = 1 / c;
-  unsigned int start = color == RED ? 0 : 1;
+  unsigned int start = ((color == RED && (from % 2 == 0)) || (color != RED && (from % 2 == 1)));
   unsigned int width = (n + 2) / 2;
   const __m256 pinvc = fset1(invc);
   const __m256 pa = fset1(a);
   for (unsigned int y = from; y < to; ++y, start = 1 - start) {
     for (unsigned int x = start; x < width - (1 - start); x += 8) {
       int index = idx(x, y, width);
-      // In haswell it is a tad better to load two 128 vectors when unaligned
-      // See 14.6.2 at intel IA-32 Architectures Optimization Reference Manual
       __m256 f = fload(&same0[index]);
       __m256 u = fload(&neigh[index - width]);
       __m256 r = fload(&neigh[index - start + 1]);
@@ -51,8 +48,8 @@ void advect_rb(grid_color color, unsigned int n, float *samed, float *sameu,
                const float *samev0, const float *d0, const float *u0,
                const float *v0, float dt, const unsigned int from,
                const unsigned int to) {
-  int shift = color == RED ? 1 : -1;
-  int start = color == RED ? 0 : 1;
+  int start = ((color == RED && (from % 2 == 0)) || (color != RED && (from % 2 == 1)));
+  int shift = 1 - start * 2;
   const int width = (n + 2) / 2;
   const float dt0 = dt * n;
 
@@ -186,7 +183,7 @@ void project_rb_step1(unsigned int n, grid_color color, float *restrict sameu0,
                       float *restrict samev0, float *restrict neighu,
                       float *restrict neighv, const unsigned int from,
                       const unsigned int to) {
-  unsigned int start = color == RED ? 0 : 1;
+  unsigned int start = ((color == RED && (from % 2 == 0)) || (color != RED && (from % 2 == 1)));
   unsigned int width = (n + 2) / 2;
 
   const __m256 zeros = fset1(0.0f);
@@ -211,7 +208,7 @@ void project_rb_step1(unsigned int n, grid_color color, float *restrict sameu0,
 void project_rb_step2(unsigned int n, grid_color color, float *restrict sameu,
                       float *restrict samev, float *restrict neighu0,
                       const unsigned int from, const unsigned int to) {
-  unsigned int start = color == RED ? 0 : 1;
+  unsigned int start = ((color == RED && (from % 2 == 0)) || (color != RED && (from % 2 == 1)));
   unsigned int width = (n + 2) / 2;
   const __m256 ratio = fset1(0.5f * n);
   for (unsigned int i = from; i < to; ++i, start = 1 - start) {
