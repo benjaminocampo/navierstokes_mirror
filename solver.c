@@ -42,25 +42,6 @@ static void set_bnd(unsigned int n, boundary b, float *x,
     x[IX(0, n + 1)] = 0.5f * (x[IX(1, n + 1)] + x[IX(0, n)]);
     x[IX(n + 1, n + 1)] = 0.5f * (x[IX(n, n + 1)] + x[IX(n + 1, n)]);
   }
-
-  // for (unsigned int i = from; i < to; i++) {
-  //   x[IX(0, i)] = b == VERTICAL ? -x[IX(1, i)] : x[IX(1, i)];
-  //   x[IX(n + 1, i)] = b == VERTICAL ? -x[IX(n, i)] : x[IX(n, i)];
-  // }
-
-  // if (from == 1) {
-  //   x[IX(0, 0)] = 0.5f * (x[IX(1, 0)] + x[IX(0, 1)]);
-  //   for (unsigned int i = 1; i < n + 1; i++)
-  //     x[IX(i, 0)] = b == HORIZONTAL ? -x[IX(i, 1)] : x[IX(i, 1)];
-  //   x[IX(n + 1, 0)] = 0.5f * (x[IX(n, 0)] + x[IX(n + 1, 1)]);
-  // }
-
-  // if (to == n + 1) {
-  //   x[IX(0, n + 1)] = 0.5f * (x[IX(1, n + 1)] + x[IX(0, n)]);
-  //   for (unsigned int i = 1; i < n + 1; i++)
-  //     x[IX(i, n + 1)] = b == HORIZONTAL ? -x[IX(i, n)] : x[IX(i, n)];
-  //   x[IX(n + 1, n + 1)] = 0.5f * (x[IX(n, n + 1)] + x[IX(n + 1, n)]);
-  // }
 }
 
 static void lin_solve(unsigned int n, boundary b, float *restrict x,
@@ -77,7 +58,7 @@ static void lin_solve(unsigned int n, boundary b, float *restrict x,
       lin_solve_rb_step(BLACK, n, a, c, blk0, red, blk, from, to);
       #pragma omp barrier
       set_bnd(n, b, x, from, to);
-      #pragma omp barrier // XXX: This barrier we think it is needed, but the simulations seems fine without it
+      #pragma omp barrier // TODO: This barrier we think it is needed, but the simulations seems fine without it
   }
 }
 

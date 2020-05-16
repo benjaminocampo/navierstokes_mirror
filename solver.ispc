@@ -14,7 +14,7 @@ export void add_source(uniform unsigned int n,
 {
   foreach (i = from * (n + 2) ... to * (n + 2))
   {
-    x[i] += dt * s[i];   /// XXX: replace for idx
+    x[i] += dt * s[i];   /// TODO: replace for idx
   }
 }
 

@@ -14,6 +14,7 @@ void lin_solve_rb_step(grid_color color, unsigned int n, float a, float c,
                        const unsigned int to) {
   // unsigned int start = color == RED ? 0 : 1;
   // int shift = color == RED ? 1 : -1;
+  // TODO: Clean start/shift code in all its usages
   unsigned int start = (
     (color == RED && (from % 2 == 0)) ||
     (color == BLACK && (from % 2 == 1))
