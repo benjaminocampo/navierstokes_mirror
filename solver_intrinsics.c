@@ -4,7 +4,8 @@
 #include "indices.h"
 #include "intrinsics_helpers.h"
 
-void add_source(unsigned int n, float *x, const float *s, float dt) {
+void add_source(unsigned int n, float *x, const float *s, float dt,
+                const unsigned int from, const unsigned int to) {
   unsigned int size = (n + 2) * (n + 2);
   const __m256 pdt = fset1(dt);
   unsigned int i;
@@ -17,10 +18,10 @@ void add_source(unsigned int n, float *x, const float *s, float dt) {
   for (; i < size; i++) x[i] += dt * s[i];
 }
 
-void lin_solve_rb_step(grid_color color, unsigned int n, unsigned int from,
-                       unsigned int to, float a, float c,
+void lin_solve_rb_step(grid_color color, unsigned int n, float a, float c,
                        const float *restrict same0, const float *restrict neigh,
-                       float *restrict same) {
+                       float *restrict same, const unsigned int from,
+                       const unsigned int to) {
   const float invc = 1 / c;
   unsigned int start = color == RED ? 0 : 1;
   unsigned int width = (n + 2) / 2;
@@ -47,7 +48,8 @@ void lin_solve_rb_step(grid_color color, unsigned int n, unsigned int from,
 void advect_rb(grid_color color, unsigned int n, float *samed, float *sameu,
                float *samev, const float *samed0, const float *sameu0,
                const float *samev0, const float *d0, const float *u0,
-               const float *v0, float dt) {
+               const float *v0, float dt, const unsigned int from,
+               const unsigned int to) {
   int shift = color == RED ? 1 : -1;
   int start = color == RED ? 0 : 1;
   const int width = (n + 2) / 2;
@@ -67,7 +69,7 @@ void advect_rb(grid_color color, unsigned int n, float *samed, float *sameu,
   const __m256i pnplus2 = iset1(n + 2);
   const __m256i pwidth = iset1(width);
   const __m256i phalfgrid = imul(pnplus2, pwidth);
-  for (int iy = 1; iy <= (int)n; iy++, shift = -shift, start = 1 - start) {
+  for (int iy = from; iy < (int)to; iy++, shift = -shift, start = 1 - start) {
     const __m256i pshift = iset1(shift);
     const __m256i pstart = iset1(start);
     const __m256i pi = iset1(iy);
@@ -181,17 +183,18 @@ void advect_rb(grid_color color, unsigned int n, float *samed, float *sameu,
 
 void project_rb_step1(unsigned int n, grid_color color, float *restrict sameu0,
                       float *restrict samev0, float *restrict neighu,
-                      float *restrict neighv) {
+                      float *restrict neighv, const unsigned int from,
+                      const unsigned int to) {
   unsigned int start = color == RED ? 0 : 1;
   unsigned int width = (n + 2) / 2;
 
   const __m256 zeros = fset1(0.0f);
-  for (unsigned int i = 1; i <= n; ++i, start = 1 - start)
+  for (unsigned int i = from; i < to; ++i, start = 1 - start)
     for (unsigned int j = start; j < width - (1 - start); j += 8)
       fstore(&sameu0[idx(j, i, width)], zeros);
 
   const __m256 ratio = fset1(-0.5f / n);
-  for (unsigned int i = 1; i <= n; ++i, start = 1 - start) {
+  for (unsigned int i = from; i < to; ++i, start = 1 - start) {
     for (unsigned int j = start; j < width - (1 - start); j += 8) {
       int index = idx(j, i, width);
       __m256 u = fload(&neighv[index - width]);
@@ -205,11 +208,12 @@ void project_rb_step1(unsigned int n, grid_color color, float *restrict sameu0,
 }
 
 void project_rb_step2(unsigned int n, grid_color color, float *restrict sameu,
-                      float *restrict samev, float *restrict neighu0) {
+                      float *restrict samev, float *restrict neighu0,
+                      const unsigned int from, const unsigned int to) {
   unsigned int start = color == RED ? 0 : 1;
   unsigned int width = (n + 2) / 2;
   const __m256 ratio = fset1(0.5f * n);
-  for (unsigned int i = 1; i <= n; ++i, start = 1 - start) {
+  for (unsigned int i = from; i < to; ++i, start = 1 - start) {
     for (unsigned int j = start; j < width - (1 - start); j += 8) {
       int index = idx(j, i, width);
       __m256 oldu = fload(&sameu[index]);

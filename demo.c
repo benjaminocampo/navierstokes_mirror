@@ -278,7 +278,7 @@ static void idle_func(void) {
   react_ns_p_cell += 1.0e9 * (wtime() - start_t) / (N * N);
 
   start_t = wtime();
-  step(N, dens, u, v, dens_prev, u_prev, v_prev, diff, visc, dt);
+  step(N, dens, u, v, dens_prev, u_prev, v_prev, diff, visc, dt, 1, N + 1);
   step_ns_p_cell += 1.0e9 * (wtime() - start_t) / (N * N);
 
   if (1.0 < wtime() - one_second) { /* at least 1s between stats */

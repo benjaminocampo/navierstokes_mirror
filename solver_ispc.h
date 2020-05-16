@@ -32,11 +32,11 @@ namespace ispc { /* namespace */
 #if defined(__cplusplus) && (! defined(__ISPC_NO_EXTERN_C) || !__ISPC_NO_EXTERN_C )
 extern "C" {
 #endif // __cplusplus
-    extern void add_source(uint32_t n, float * x, const float * s, float dt);
-    extern void advect_rb(int32_t color, uint32_t n, float * samed, float * sameu, float * samev, const float * samed0, const float * sameu0, const float * samev0, const float * d0, const float * u0, const float * v0, float dt);
-    extern void lin_solve_rb_step(int32_t color, int32_t n, uint32_t from, uint32_t to, float a, float c, const float * same0, const float * neigh, float * same);
-    extern void project_rb_step1(uint32_t n, int32_t color, float * sameu0, float * samev0, float * neighu, float * neighv);
-    extern void project_rb_step2(uint32_t n, int32_t color, float * sameu, float * samev, float * neighu0);
+    extern void add_source(uint32_t n, float * x, const float * s, float dt, const uint32_t from, const uint32_t to);
+    extern void advect_rb(int32_t color, uint32_t n, float * samed, float * sameu, float * samev, const float * samed0, const float * sameu0, const float * samev0, const float * d0, const float * u0, const float * v0, float dt, const uint32_t from, const uint32_t to);
+    extern void lin_solve_rb_step(int32_t color, int32_t n, float a, float c, const float * same0, const float * neigh, float * same, const uint32_t from, const uint32_t to);
+    extern void project_rb_step1(uint32_t n, int32_t color, float * sameu0, float * samev0, float * neighu, float * neighv, const uint32_t from, const uint32_t to);
+    extern void project_rb_step2(uint32_t n, int32_t color, float * sameu, float * samev, float * neighu0, const uint32_t from, const uint32_t to);
 #if defined(__cplusplus) && (! defined(__ISPC_NO_EXTERN_C) || !__ISPC_NO_EXTERN_C )
 } /* end extern C */
 #endif // __cplusplus

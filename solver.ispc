@@ -8,10 +8,11 @@ int idx(int x, int y, int dim)
 export void add_source(uniform unsigned int n,
                        uniform float *uniform x,
                        const uniform float *uniform s,
-                       uniform float dt)
+                       uniform float dt,
+                       const uniform unsigned int from,
+                       const uniform unsigned int to)
 {
-  uniform int32 size = (n + 2) * (n + 2);
-  foreach (i = 0 ... size)
+  foreach (i = (from - 1) * (n + 2) ... (to + 1) * (n + 2))
   {
     x[i] += dt * s[i];
   }
@@ -19,13 +20,13 @@ export void add_source(uniform unsigned int n,
 
 export void lin_solve_rb_step(uniform int color,
                               uniform int n,
-                              uniform unsigned int from,
-                              uniform unsigned int to,
                               uniform float a,
                               uniform float c,
                               const uniform float *uniform same0,
                               const uniform float *uniform neigh,
-                              uniform float *uniform same) {
+                              uniform float *uniform same,
+                              const uniform unsigned int from,
+                              const uniform unsigned int to) {
   uniform int start = color == 0 ? 0 : 1;
   uniform int width = (n + 2) / 2;
   uniform float invc = 1/c;
@@ -62,14 +63,16 @@ export void advect_rb(uniform int color,
                           const uniform float * uniform d0,
                           const uniform float * uniform u0,
                           const uniform float * uniform v0,
-                          uniform float dt) {
+                          uniform float dt,
+                          const uniform unsigned int from,
+                          const uniform unsigned int to) {
 
   uniform int shift = color == 0 ? 1 : -1;
   uniform unsigned int start = color == 0 ? 0 : 1;
   uniform unsigned int width = (n + 2) / 2;
 
   uniform float dt0 = dt * n;
-  for (uniform int i = 1; i <= n; i++, shift = -shift, start = 1 - start){
+  for (uniform int i = from; i < to; i++, shift = -shift, start = 1 - start){
     for (varying int j = programIndex + start;
          j < width - (1 - start);
          j += programCount){
@@ -109,10 +112,12 @@ export void project_rb_step1(uniform unsigned int n,
                              uniform float * uniform sameu0,
                              uniform float * uniform samev0,
                              uniform float * uniform neighu,
-                             uniform float * uniform neighv) {
+                             uniform float * uniform neighv,
+                             const uniform unsigned int from,
+                             const uniform unsigned int to) {
   uniform unsigned int start = color == 0 ? 0 : 1;
   uniform unsigned int width = (n + 2) / 2;
-  for (uniform unsigned int i = 1; i <= n; ++i, start = 1 - start) {
+  for (uniform unsigned int i = from; i < to; ++i, start = 1 - start) {
     uniform unsigned int j = start;
     for (j = start; j < width - programCount; j+=programCount) {
       varying int index = (j + programIndex) + i * width;
@@ -138,11 +143,13 @@ export void project_rb_step2(uniform unsigned int n,
                              uniform int color,
                              uniform float * uniform sameu,
                              uniform float * uniform samev,
-                             uniform float * uniform neighu0) {
+                             uniform float * uniform neighu0,
+                             const uniform unsigned int from,
+                             const uniform unsigned int to) {
   uniform unsigned int start = color == 0 ? 0 : 1;
   uniform unsigned int width = (n + 2) / 2;
 
-  for (uniform unsigned int i = 1; i <= n; ++i, start = 1 - start) {
+  for (uniform unsigned int i = from; i < to; ++i, start = 1 - start) {
     uniform unsigned int j = start;
     for (j = start; j < width - programCount; j+=programCount) {
       varying int index = (j + programIndex) + i * width;

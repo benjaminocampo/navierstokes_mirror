@@ -22,12 +22,9 @@
     x = tmp;         \
   }
 
-static int min(int a, int b) {
-    return a < b ? a : b;
-}
-
-static void set_bnd(unsigned int n, boundary b, float *x) {
-  for (unsigned int i = 1; i <= n; i++) {
+static void set_bnd(unsigned int n, boundary b, float *x,
+                    const unsigned int from, unsigned int to) {
+  for (unsigned int i = from; i < to; i++) {
     x[IX(0, i)] = b == VERTICAL ? -x[IX(1, i)] : x[IX(1, i)];
     x[IX(n + 1, i)] = b == VERTICAL ? -x[IX(n, i)] : x[IX(n, i)];
     x[IX(i, 0)] = b == HORIZONTAL ? -x[IX(i, 1)] : x[IX(i, 1)];
@@ -40,7 +37,8 @@ static void set_bnd(unsigned int n, boundary b, float *x) {
 }
 
 static void lin_solve(unsigned int n, boundary b, float *restrict x,
-                      const float *restrict x0, const float a, const float c) {
+                      const float *restrict x0, const float a, const float c,
+                      const unsigned int from, const unsigned int to) {
   unsigned int color_size = (n + 2) * ((n + 2) / 2);
   const float *red0 = x0;
   const float *blk0 = x0 + color_size;
@@ -48,29 +46,22 @@ static void lin_solve(unsigned int n, boundary b, float *restrict x,
   float *blk = x + color_size;
 
   for (unsigned int k = 0; k < 20; ++k) {
-    #pragma omp parallel
-    {
-      unsigned int threads = omp_get_num_threads();
-      unsigned int tid = omp_get_thread_num();
-      unsigned int works = (n + threads - 1)/ threads;
-      unsigned int from = tid * works + 1;
-      unsigned int to = min((tid + 1) * works + 1, n + 1);
-      lin_solve_rb_step(RED, n, from, to, a, c, red0, blk, red);
-      lin_solve_rb_step(BLACK, n, from, to, a, c, blk0, red, blk);
-      set_bnd(n, b, x);
-    }
+      lin_solve_rb_step(RED, n, a, c, red0, blk, red, from, to);
+      lin_solve_rb_step(BLACK, n, a, c, blk0, red, blk, from, to);
+      set_bnd(n, b, x, from, to);
   }
 }
 
 static void diffuse(unsigned int n, boundary b, float *x, const float *x0,
-                    float diff, float dt) {
+                    float diff, float dt, const unsigned int from,
+                    const unsigned int to) {
   float a = dt * diff * n * n;
-  lin_solve(n, b, x, x0, a, 1 + 4 * a);
+  lin_solve(n, b, x, x0, a, 1 + 4 * a, from, to);
 }
 
 static void advect(unsigned int n, float *d, float *u, float *v,
-                   const float *d0, const float *u0, const float *v0,
-                   float dt) {
+                   const float *d0, const float *u0, const float *v0, float dt,
+                   const unsigned int from, const unsigned int to) {
   unsigned int color_size = (n + 2) * ((n + 2) / 2);
   float *redd = d;
   float *redu = u;
@@ -84,13 +75,14 @@ static void advect(unsigned int n, float *d, float *u, float *v,
   const float *blkd0 = d0 + color_size;
   const float *blku0 = u0 + color_size;
   const float *blkv0 = v0 + color_size;
-  advect_rb(RED, n, redd, redu, redv, redd0, redu0, redv0, d0, u0, v0, dt);
-  advect_rb(BLACK, n, blkd, blku, blkv, blkd0, blku0, blkv0, d0, u0, v0, dt);
-  set_bnd(n, VERTICAL, u);
-  set_bnd(n, HORIZONTAL, v);
+  advect_rb(RED, n, redd, redu, redv, redd0, redu0, redv0, d0, u0, v0, dt, from, to);
+  advect_rb(BLACK, n, blkd, blku, blkv, blkd0, blku0, blkv0, d0, u0, v0, dt, from, to);
+  set_bnd(n, VERTICAL, u, from, to);
+  set_bnd(n, HORIZONTAL, v, from, to);
 }
 
-static void project(unsigned int n, float *u, float *v, float *u0, float *v0) {
+static void project(unsigned int n, float *u, float *v, float *u0, float *v0,
+                    const unsigned int from, const unsigned int to) {
   unsigned int color_size = (n + 2) * ((n + 2) / 2);
   float *redu = u;
   float *redv = v;
@@ -100,36 +92,37 @@ static void project(unsigned int n, float *u, float *v, float *u0, float *v0) {
   float *redv0 = v0;
   float *blku0 = u0 + color_size;
   float *blkv0 = v0 + color_size;
-  project_rb_step1(n, RED, redu0, redv0, blku, blkv);
-  project_rb_step1(n, BLACK, blku0, blkv0, redu, redv);
-  set_bnd(n, NONE, v0);
-  set_bnd(n, NONE, u0);
-  lin_solve(n, NONE, u0, v0, 1, 4);
-  project_rb_step2(n, RED, redu, redv, blku0);
-  project_rb_step2(n, BLACK, blku, blkv, redu0);
-  set_bnd(n, VERTICAL, u);
-  set_bnd(n, HORIZONTAL, v);
+  project_rb_step1(n, RED, redu0, redv0, blku, blkv, from, to);
+  project_rb_step1(n, BLACK, blku0, blkv0, redu, redv, from, to);
+  set_bnd(n, NONE, v0, from, to);
+  set_bnd(n, NONE, u0, from, to);
+  lin_solve(n, NONE, u0, v0, 1, 4, from, to);
+  project_rb_step2(n, RED, redu, redv, blku0, from, to);
+  project_rb_step2(n, BLACK, blku, blkv, redu0, from, to);
+  set_bnd(n, VERTICAL, u, from, to);
+  set_bnd(n, HORIZONTAL, v, from, to);
 }
 
-void step(unsigned int n, float *d, float *u, float *v, float *d0, float *u0,
-          float *v0, float diff, float visc, float dt) {
+void step(unsigned int n, float *d, float *u, float *v, float *d0,
+          float *u0, float *v0, float diff, float visc, float dt,
+          const unsigned int from, const unsigned int to) {
   // Density update
-  add_source(n, d, d0, dt);
+  add_source(n, d, d0, dt, from, to);
   SWAP(d0, d);
-  diffuse(n, NONE, d, d0, diff, dt);
+  diffuse(n, NONE, d, d0, diff, dt, from, to);
   SWAP(d0, d);
   // density advection will be done afterwards mixed with the velocity advection
 
   // Velocity update
-  add_source(n, u, u0, dt);
-  add_source(n, v, v0, dt);
+  add_source(n, u, u0, dt, from, to);
+  add_source(n, v, v0, dt, from, to);
   SWAP(u0, u);
-  diffuse(n, VERTICAL, u, u0, visc, dt);
+  diffuse(n, VERTICAL, u, u0, visc, dt, from, to);
   SWAP(v0, v);
-  diffuse(n, HORIZONTAL, v, v0, visc, dt);
-  project(n, u, v, u0, v0);
+  diffuse(n, HORIZONTAL, v, v0, visc, dt, from, to);
+  project(n, u, v, u0, v0, from, to);
   SWAP(u0, u);
   SWAP(v0, v);
-  advect(n, d, u, v, d0, u0, v0, dt);
-  project(n, u, v, u0, v0);
+  advect(n, d, u, v, d0, u0, v0, dt, from, to);
+  project(n, u, v, u0, v0, from, to);
 }

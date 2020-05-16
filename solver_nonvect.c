@@ -1,17 +1,17 @@
 #include "indices.h"
 #include "solver.h"
 
-void add_source(unsigned int n, float *x, const float *s, float dt) {
-  unsigned int size = (n + 2) * (n + 2);
-  for (unsigned int i = 0; i < size; i++) {
+void add_source(unsigned int n, float *x, const float *s, float dt,
+                const unsigned int from, const unsigned int to) {
+  for (unsigned int i = from - 1; i < (to + 1) * (n + 2); i++) {
     x[i] += dt * s[i];
   }
 }
 
-void lin_solve_rb_step(grid_color color, unsigned int n, unsigned int from,
-                       unsigned int to, float a, float c,
+void lin_solve_rb_step(grid_color color, unsigned int n, float a, float c,
                        const float *restrict same0, const float *restrict neigh,
-                       float *restrict same) {
+                       float *restrict same, const unsigned int from,
+                       const unsigned int to) {
   int shift = color == RED ? 1 : -1;
   unsigned int start = color == RED ? 0 : 1;
 
@@ -31,7 +31,8 @@ void lin_solve_rb_step(grid_color color, unsigned int n, unsigned int from,
 void advect_rb(grid_color color, unsigned int n, float *samed, float *sameu,
                float *samev, const float *samed0, const float *sameu0,
                const float *samev0, const float *d0, const float *u0,
-               const float *v0, float dt) {
+               const float *v0, float dt, const unsigned int from,
+               const unsigned int to) {
   int i0, j0;
   float x, y, s0, t0, s1, t1;
 
@@ -40,7 +41,7 @@ void advect_rb(grid_color color, unsigned int n, float *samed, float *sameu,
   unsigned int width = (n + 2) / 2;
 
   float dt0 = dt * n;
-  for (unsigned int i = 1; i <= n; i++, shift = -shift, start = 1 - start) {
+  for (unsigned int i = from; i < to; i++, shift = -shift, start = 1 - start) {
     for (unsigned int j = start; j < width - (1 - start); j++) {
       int index = idx(j, i, width);
       unsigned int gridi = i;
@@ -87,11 +88,12 @@ void advect_rb(grid_color color, unsigned int n, float *samed, float *sameu,
 
 void project_rb_step1(unsigned int n, grid_color color, float *restrict sameu0,
                       float *restrict samev0, float *restrict neighu,
-                      float *restrict neighv) {
+                      float *restrict neighv, const unsigned int from,
+                      const unsigned int to) {
   int shift = color == RED ? 1 : -1;
   unsigned int start = color == RED ? 0 : 1;
   unsigned int width = (n + 2) / 2;
-  for (unsigned int i = 1; i <= n; ++i, shift = -shift, start = 1 - start) {
+  for (unsigned int i = from; i < to; ++i, shift = -shift, start = 1 - start) {
     for (unsigned int j = start; j < width - (1 - start); ++j) {
       int index = idx(j, i, width);
       samev0[index] = -0.5f *
@@ -104,12 +106,13 @@ void project_rb_step1(unsigned int n, grid_color color, float *restrict sameu0,
 }
 
 void project_rb_step2(unsigned int n, grid_color color, float *restrict sameu,
-                      float *restrict samev, float *restrict neighu0) {
+                      float *restrict samev, float *restrict neighu0,
+                      const unsigned int from, const unsigned int to) {
   int shift = color == RED ? 1 : -1;
   unsigned int start = color == RED ? 0 : 1;
   unsigned int width = (n + 2) / 2;
 
-  for (unsigned int i = 1; i <= n; ++i, shift = -shift, start = 1 - start) {
+  for (unsigned int i = from; i < to; ++i, shift = -shift, start = 1 - start) {
     for (unsigned int j = start; j < width - (1 - start); ++j) {
       int index = idx(j, i, width);
       sameu[index] -=

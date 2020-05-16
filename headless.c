@@ -134,7 +134,7 @@ static void one_step(void) {
   react_ns_p_cell = 1.0e9 * (wtime() - start_t) / (N * N);
 
   start_t = wtime();
-  step(N, dens, u, v, dens_prev, u_prev, v_prev, diff, visc, dt);
+  step(N, dens, u, v, dens_prev, u_prev, v_prev, diff, visc, dt, 1, N + 1);
   step_ns_p_cell = 1.0e9 * (wtime() - start_t) / (N * N);
 
   printf("%lf, %lf, %lf, %lf\n",
