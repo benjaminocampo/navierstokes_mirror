@@ -23,21 +23,22 @@ void lin_solve_rb_step(grid_color color, unsigned int n, float a, float c,
   const float invc = 1 / c;
   unsigned int start = color == RED ? 0 : 1;
   unsigned int width = (n + 2) / 2;
-  const __m256 pinvc = _mm256_set1_ps(invc);
-  const __m256 pa = _mm256_set1_ps(a);
+  const __m256 pinvc = fset1(invc);
+  const __m256 pa = fset1(a);
   for (unsigned int y = 1; y <= n; ++y, start = 1 - start) {
     for (unsigned int x = start; x < width - (1 - start); x += 8) {
       int index = idx(x, y, width);
       // In haswell it is a tad better to load two 128 vectors when unaligned
       // See 14.6.2 at intel IA-32 Architectures Optimization Reference Manual
-      __m256 f = fload2x4(&same0[index]);
-      __m256 u = fload2x4(&neigh[index - width]);
-      __m256 r = fload2x4(&neigh[index - start + 1]);
-      __m256 d = fload2x4(&neigh[index + width]);
-      __m256 l = fload2x4(&neigh[index - start]);
+      __m256 f = fload(&same0[index]);
+      __m256 u = fload(&neigh[index - width]);
+      __m256 r = fload(&neigh[index - start + 1]);
+      __m256 d = fload(&neigh[index + width]);
+      __m256 l = fload(&neigh[index - start]);
+
       // t = (f + a * (u + r + d + l)) / c
       __m256 t = fmul(ffmadd(pa, fadd(u, fadd(r, fadd(d, l))), f), pinvc);
-      _mm256_storeu_ps(&same[index], t);
+      fstore(&same[index], t);
     }
   }
 }
@@ -192,10 +193,10 @@ void project_rb_step1(unsigned int n, grid_color color, float *restrict sameu0,
   for (unsigned int i = 1; i <= n; ++i, start = 1 - start) {
     for (unsigned int j = start; j < width - (1 - start); j += 8) {
       int index = idx(j, i, width);
-      __m256 u = fload2x4(&neighv[index - width]);
-      __m256 r = fload2x4(&neighu[index - start + 1]);
-      __m256 d = fload2x4(&neighv[index + width]);
-      __m256 l = fload2x4(&neighu[index - start]);
+      __m256 u = fload(&neighv[index - width]);
+      __m256 r = fload(&neighu[index - start + 1]);
+      __m256 d = fload(&neighv[index + width]);
+      __m256 l = fload(&neighu[index - start]);
       __m256 result = fmul(ratio, fadd(fsub(r, l), fsub(d, u)));
       fstore(&samev0[index], result);
     }
@@ -210,12 +211,12 @@ void project_rb_step2(unsigned int n, grid_color color, float *restrict sameu,
   for (unsigned int i = 1; i <= n; ++i, start = 1 - start) {
     for (unsigned int j = start; j < width - (1 - start); j += 8) {
       int index = idx(j, i, width);
-      __m256 oldu = fload2x4(&sameu[index]);
-      __m256 oldv = fload2x4(&samev[index]);
-      __m256 u = fload2x4(&neighu0[index - width]);
-      __m256 r = fload2x4(&neighu0[index - start + 1]);
-      __m256 d = fload2x4(&neighu0[index + width]);
-      __m256 l = fload2x4(&neighu0[index - start]);
+      __m256 oldu = fload(&sameu[index]);
+      __m256 oldv = fload(&samev[index]);
+      __m256 u = fload(&neighu0[index - width]);
+      __m256 r = fload(&neighu0[index - start + 1]);
+      __m256 d = fload(&neighu0[index + width]);
+      __m256 l = fload(&neighu0[index - start]);
       __m256 newu = ffnmadd(ratio, fsub(r, l), oldu);
       __m256 newv = ffnmadd(ratio, fsub(d, u), oldv);
       fstore(&sameu[index], newu);
