@@ -185,12 +185,7 @@ void project_rb_step1(unsigned int n, grid_color color, float *restrict sameu0,
                       const unsigned int to) {
   unsigned int start = ((color == RED && (from % 2 == 0)) || (color != RED && (from % 2 == 1)));
   unsigned int width = (n + 2) / 2;
-
   const __m256 zeros = fset1(0.0f);
-  for (unsigned int i = from; i < to; ++i, start = 1 - start)
-    for (unsigned int j = start; j < width - (1 - start); j += 8)
-      fstore(&sameu0[idx(j, i, width)], zeros);
-
   const __m256 ratio = fset1(-0.5f / n);
   for (unsigned int i = from; i < to; ++i, start = 1 - start) {
     for (unsigned int j = start; j < width - (1 - start); j += 8) {
@@ -201,6 +196,7 @@ void project_rb_step1(unsigned int n, grid_color color, float *restrict sameu0,
       __m256 l = fload(&neighu[index - start]);
       __m256 result = fmul(ratio, fadd(fsub(r, l), fsub(d, u)));
       fstore(&samev0[index], result);
+      fstore(&sameu0[idx(j, i, width)], zeros);
     }
   }
 }
