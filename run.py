@@ -1,5 +1,6 @@
 import os
 import argparse
+import itertools as it
 from os import popen
 from os import chdir, makedirs
 from os.path import isdir
@@ -35,7 +36,6 @@ class Run:
         n,
         steps,
         branch_prefix="",
-        cflags="",
         previous_batch_cmds="",
         envvars={},
     ):
@@ -43,7 +43,6 @@ class Run:
         self.n = n
         self.steps = steps
         self.branch_prefix = branch_prefix
-        self.cflags = cflags
         self.previous_batch_cmds = previous_batch_cmds  # useful for things like sourcing icc `source /opt/ipsxe/2019u1/bin/compilervars.sh intel64`
         self.envvars = envvars
         if not Run.is_run_folder_initialized:
@@ -62,7 +61,7 @@ class Run:
     def sanitize_filename(value):
         if isinstance(value, dict):
             return "__".join(
-                f"{Run.sanitize_filename(k)}={Run.sanitize_filename(v)}"
+                f"{Run.sanitize_filename(k)}--{Run.sanitize_filename(v)}"
                 for k, v in value.items()
                 if v
             )
@@ -100,7 +99,7 @@ class Run:
         start_time = time()
         cmd(f"git checkout {self.branch_prefix}{self.name}")
         cmd("make clean")
-        cmd(f"make headless CFLAGS='-g {self.cflags}'")
+        cmd(f"make headless -e")
         if Run.should_run:
             cmd(f"{envvars_cmds} {self.perfstat_run_cmd}")
             printf(f">>> [TIME] Run finished in {time() - start_time} seconds.")
@@ -127,7 +126,7 @@ class Run:
             # Actual run
             git checkout {self.branch_prefix}{self.name} &&
             make clean &&
-            make headless CFLAGS='-g {self.cflags}' &&
+            make headless -e' &&
             srun {self.perfstat_run_cmd} ||
             echo "If you see this file then your run with this filename had a problem, inspect runs/ folder for more information" > {self.run_name}.error # If this is in the project root then you know there was an error
         """
@@ -161,15 +160,19 @@ def main():
     itime = time()
 
     printf(">>> [START]")
-    for n, steps in [(128, 512), (512, 128), (2048, 32), (4096, 16), (8192, 8)]:
+    for (n, steps), cores in it.product(
+        [(128, 512), (512, 128), (2048, 32), (4096, 16), (8192, 8)],
+        [1, 2, 4, 8, 14, 16, 21, 24, 28],
+    ):
         Run(
-            "lab1",
+            "lab3",
             n,
             steps,
             envvars={
-                "OMP_NUM_THREADS": 14,
+                "OMP_NUM_THREADS": cores,
                 "OMP_PROC_BIND": "true",
-                "OMP_PLACES": "{0:4:1}",
+                "BUILD": "intrinsics",
+                "CFLAGS": "-fopenmp"
             },
         ).run()
 
