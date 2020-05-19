@@ -244,6 +244,7 @@ def save_scaling_graph(
     ax.set_xticks(ns)
     ax.set_xticklabels([f"N={s} x{i}" for s, i in zip(ns, steps)])
 
+    fig.tight_layout()
     plt.show() if only_show else plt.savefig(filename)
 
 
@@ -317,8 +318,7 @@ def scaling_main():
     plotpath = "runs/graphs"
     plotid = RUN_NAME
 
-    run_measurements = {corecount: [] for corecount in cores}
-    # run_mesaurements is a dict with the following structure
+    # in the next part, run_measurements is a dict with the following structure
     # {corecount: [
     #     { # A dict for  each (n, step) pair
     #          "nspcell_mean": nspcell_mean ,
@@ -329,9 +329,10 @@ def scaling_main():
     #      }
     # ]}
 
+    run_measurements = {corecount: [] for corecount in cores}
     for (n, step), corecount in it.product(zip(ns, steps), cores):
         run = make_run(n, step, corecount)
-        run_measurements = get_run_measurement(run)
+        run_measurement = get_run_measurement(run)
         run_measurements[corecount].append(run_measurement)
 
     save_scaling_graph(
@@ -345,26 +346,39 @@ def scaling_main():
 
 def main():
     makedirs("runs/graphs", exist_ok=True)
-
     ns = np.array([128, 512, 2048, 4096, 8192])
     steps = np.array([512, 128, 32, 16, 8])
-    # array of (branch, flags)
+
+    make_run = lambda name, n, steps: Run(
+        name, n, steps, envvars={"BUILD": "intrinsics"}, branch_prefix="l2/intrinsics/",
+    )
+
+    # array of run names
     runs = [
-        ("project", ""),
-        ("linsolve", ""),
-        ("baseline", ""),
-        ("rb", ""),
-        ("lab1", ""),
-        ("shload", ""),
+        "project",
+        "linsolve",
+        "baseline",
+        "rb",
+        "lab1",
+        "shload",
     ]
 
-    underscored = lambda s: "_".join(s.split())
-
-    run_measuremets = {}
-    for branch, flags in runs:
-        run_measuremets[(branch, flags)] = []
+    run_measurements = {}
+    # run_mesaurements is a dict with the following structure
+    # { name: [
+    #     { # A dict for  each (n, step) pair
+    #          "nspcell_mean": nspcell_mean ,
+    #          "cache-references": cache_references,
+    #          "cache-misses": cache_misses,
+    #          "L1-dcache-loads": L1_dcache_loads,
+    #          "L1-dcache-load-misses": L1_dcache_load_misses,
+    #      }
+    # ] }
+    for name in runs:
+        run_measurements[name] = []
         for n, step in zip(ns, steps):
-            filename = f"{branch}_n{n}_steps{step}_{underscored(flags)}.output"
+            run = make_run(name, n, step)
+            filename = f"{run.run_name}.output"
             stdout_file = f"runs/stdouts/{filename}"
             perfstat_file = f"runs/perfstats/{filename}"
             stats = [
@@ -389,24 +403,17 @@ def main():
             run_measurement = {}
             run_measurement["nspcell_mean"] = np.mean(nspcells["total_ns"])
             run_measurement.update(perfstats)
-            run_measuremets[(branch, flags)].append(run_measurement)
+            run_measurements[name].append(run_measurement)
 
     comparissons = [
-        # (("source_branch", "source_flags"), ("target_branch", "target_flags")),
-        (("baseline", "-O3"), ("ijswap", "-O3")),
-        (("linsolve", ""), ("project", ""),),
-        (("linsolve", ""), ("project", ""), ("shload", "")),
-        (("linsolve", ""), ("project", ""), ("linsolve", ""), ("project", "")),
-        (
-            ("linsolve", ""),
-            ("project", ""),
-            ("linsolve", ""),
-            ("project", ""),
-            ("linsolve", ""),
-        ),
+        ("baseline", "ijswap"),
+        ("linsolve", "project"),
+        ("linsolve", "project", "shload"),
+        ("linsolve", "project", "linsolve", "project"),
+        ("linsolve", "project", "linsolve", "project", "linsolve"),
     ]
     for comparisson in comparissons:
-        names = [" ".join(run) for run in comparisson]
+        names = comparisson
         plotpath = "runs/graphs"
         plotid = "__vs__".join(names)
 
@@ -417,18 +424,18 @@ def main():
         llc_misses = []
 
         for run in comparisson:
-            means.append(np.array([e["nspcell_mean"] for e in run_measuremets[run]]))
+            means.append(np.array([e["nspcell_mean"] for e in run_measurements[run]]))
             l1_refs.append(
-                np.array([e["L1-dcache-loads"] for e in run_measuremets[run]])
+                np.array([e["L1-dcache-loads"] for e in run_measurements[run]])
             )
             l1_misses.append(
-                np.array([e["L1-dcache-load-misses"] for e in run_measuremets[run]])
+                np.array([e["L1-dcache-load-misses"] for e in run_measurements[run]])
             )
             llc_refs.append(
-                np.array([e["cache-references"] for e in run_measuremets[run]])
+                np.array([e["cache-references"] for e in run_measurements[run]])
             )
             llc_misses.append(
-                np.array([e["cache-misses"] for e in run_measuremets[run]])
+                np.array([e["cache-misses"] for e in run_measurements[run]])
             )
 
         save_nscell_graph(
