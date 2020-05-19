@@ -349,3 +349,9 @@ static void project(unsigned int n, float *u, float *v, float *u0, float *v0,
   set_bnd(n, VERTICAL, u, from, to);
   set_bnd(n, HORIZONTAL, v, from, to);
 }
+```
+# References
+
+ - Blaise, B. (2020) "OpenMP Tutorial" in *Lawrence Livermore National Laboratory*. May. 18, 2020. Available in <https://computing.llnl.gov/tutorials/openMP/>
+ - Yliluoma, J. (2007) "Guide into OpenMP: Easy multithreading programming for C++". Available in <https://bisqwit.iki.fi/story/howto/openmp/>
+ - Lameter, C. (2013) "NUMA (Non-Uniform Memory Access): An Overview". in *acmqueue*. August 9, 2013. Available in <https://queue.acm.org/detail.cfm?id=2513149>
