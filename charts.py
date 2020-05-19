@@ -17,29 +17,32 @@ plt.rcParams["xtick.color"] = darkgray
 plt.rcParams["ytick.color"] = darkgray
 
 COLORS = [
-    "#2196F3", # blue
-    "#4CAF50", # green
-    "#FFC107", # amber
-    "#E91E63", # pink
-    "#673AB7", # deeppurple
-    "#00BCD4", # cyan
-    "#CDDC39", # lime
-    "#FF5722", # deeporange
+    "#2196F3",  # blue
+    "#4CAF50",  # green
+    "#FFC107",  # amber
+    "#E91E63",  # pink
+    "#673AB7",  # deeppurple
+    "#00BCD4",  # cyan
+    "#CDDC39",  # lime
+    "#FF5722",  # deeporange
 ]
 
 DARK_COLORS = [
-    "#1976D2", # dark blue
-    "#388E3C", # dark green
-    "#FFA000", # dark amber
-    "#C2185B", # dark pink
-    "#512DA8", # dark deeppurple
-    "#0097A7", # dark cyan
-    "#AFB42B", # dark lime
-    "#E64A19", # dark deeporange
+    "#1976D2",  # dark blue
+    "#388E3C",  # dark green
+    "#FFA000",  # dark amber
+    "#C2185B",  # dark pink
+    "#512DA8",  # dark deeppurple
+    "#0097A7",  # dark cyan
+    "#AFB42B",  # dark lime
+    "#E64A19",  # dark deeporange
 ]
 
-def save_nscell_graph(names, means, ns, iterations, filename="plot.png", only_show=False):
-    CATEGORY_WIDTH_PX = 432 # Magic number that correlates to bar_width
+
+def save_nscell_graph(
+    names, means, ns, iterations, filename="plot.png", only_show=False
+):
+    CATEGORY_WIDTH_PX = 432  # Magic number that correlates to bar_width
     DPI = 150
     bar_fontsize = 12
     legend_fontsize = 6
@@ -58,7 +61,10 @@ def save_nscell_graph(names, means, ns, iterations, filename="plot.png", only_sh
                 xy=(rect.get_x() + rect.get_width() / 2, height),
                 xytext=(0, -16),
                 textcoords="offset points",
-                ha="center", va="center", color=white, fontsize=bar_fontsize
+                ha="center",
+                va="center",
+                color=white,
+                fontsize=bar_fontsize,
             )
 
     x = np.arange(nof_groups)  # the label locations
@@ -71,13 +77,27 @@ def save_nscell_graph(names, means, ns, iterations, filename="plot.png", only_sh
     rects = []
     starting_x = x - nof_runs / 2 + 0.5
     for i, name, mean, color in zip(count(), names, means, cycle(COLORS)):
-        rect = ax.bar(starting_x + bar_width * i, mean.astype(int), bar_width, label=name, color=color)
+        rect = ax.bar(
+            starting_x + bar_width * i,
+            mean.astype(int),
+            bar_width,
+            label=name,
+            color=color,
+        )
         rects.append(rect)
         autolabel(rect)
 
     ax.set_ylabel("Nanoseconds per Cell")
     ax.set_title("Compute Time per Cell")
-    plt.figtext(0.965, 0.5, 'Lower is better', ha='center', va="center", fontsize=legend_fontsize, rotation=-90)
+    plt.figtext(
+        0.965,
+        0.5,
+        "Lower is better",
+        ha="center",
+        va="center",
+        fontsize=legend_fontsize,
+        rotation=-90,
+    )
     tick_xs = [(i - nof_runs / 2 + 0.5) + (nof_runs - 1) * (bar_width / 2) for i in x]
     ax.set_xticks(tick_xs)
     ax.set_xticklabels([f"N={s} x{i}" for s, i in zip(ns, iterations)])
@@ -87,8 +107,18 @@ def save_nscell_graph(names, means, ns, iterations, filename="plot.png", only_sh
     plt.show() if only_show else plt.savefig(filename)
     plt.close()
 
-def save_cache_graph(names, refss, missess, ns, iterations, filename="plot.png", cache_name="L1", only_show=False):
-    CATEGORY_WIDTH_PX = 432 # Magic number that correlates to bar_width
+
+def save_cache_graph(
+    names,
+    refss,
+    missess,
+    ns,
+    iterations,
+    filename="plot.png",
+    cache_name="L1",
+    only_show=False,
+):
+    CATEGORY_WIDTH_PX = 432  # Magic number that correlates to bar_width
     DPI = 150
     bar_fontsize = 10
     legend_fontsize = 6
@@ -107,7 +137,10 @@ def save_cache_graph(names, refss, missess, ns, iterations, filename="plot.png",
                 xy=(rect.get_x() + rect.get_width() / 2, rect.get_y() + height),
                 xytext=(0, -16 if not total else 8),
                 textcoords="offset points",
-                ha="center", va="center", color=white if not total else darkgray, fontsize=bar_fontsize
+                ha="center",
+                va="center",
+                color=white if not total else darkgray,
+                fontsize=bar_fontsize,
             )
 
     def human_readable(number):
@@ -129,8 +162,8 @@ def save_cache_graph(names, refss, missess, ns, iterations, filename="plot.png",
 
     x = np.arange(nof_groups)  # the label locations
     hitss = [refs - misses for refs, misses in zip(refss, missess)]
-    scaled_hitss = [hits / ((ns**2) * iterations) for hits in hitss]
-    scaled_missess = [misses / ((ns**2) * iterations) for misses in missess]
+    scaled_hitss = [hits / ((ns ** 2) * iterations) for hits in hitss]
+    scaled_missess = [misses / ((ns ** 2) * iterations) for misses in missess]
 
     fig, ax = plt.subplots(figsize=(img_width / DPI, img_height / DPI), dpi=DPI)
     ax.spines["top"].set_visible(False)
@@ -142,17 +175,45 @@ def save_cache_graph(names, refss, missess, ns, iterations, filename="plot.png",
     misses_bars = []
     hits_bars = []
     cyclec = lambda c: islice(cycle(c), 2 if cache_name == "L1" else 4, None)
-    for i, name, misses, hits, color, dark_color in zip(count(), names, scaled_missess, scaled_hitss, cyclec(COLORS), cyclec(DARK_COLORS)):
-        hit_bar = ax.bar(starting_x + bar_width * i, hits, bar_width, label=f"{name} hits", color=color)
+    for i, name, misses, hits, color, dark_color in zip(
+        count(),
+        names,
+        scaled_missess,
+        scaled_hitss,
+        cyclec(COLORS),
+        cyclec(DARK_COLORS),
+    ):
+        hit_bar = ax.bar(
+            starting_x + bar_width * i,
+            hits,
+            bar_width,
+            label=f"{name} hits",
+            color=color,
+        )
         hits_bars.append(hit_bar)
         autolabel(hit_bar)
-        miss_bar = ax.bar(starting_x + bar_width * i, misses, bar_width, bottom=hits, label=f"{name} misses", color=dark_color)
+        miss_bar = ax.bar(
+            starting_x + bar_width * i,
+            misses,
+            bar_width,
+            bottom=hits,
+            label=f"{name} misses",
+            color=dark_color,
+        )
         misses_bars.append(miss_bar)
         autolabel(miss_bar, True)
 
     ax.set_ylabel(f"{cache_name} References")
     ax.set_title(f"Cache {cache_name} References per Cell Iteration")
-    plt.figtext(0.965, 0.5, 'Lower is better', ha='center', va="center", fontsize=legend_fontsize, rotation=-90)
+    plt.figtext(
+        0.965,
+        0.5,
+        "Lower is better",
+        ha="center",
+        va="center",
+        fontsize=legend_fontsize,
+        rotation=-90,
+    )
     tick_xs = [(i - nof_runs / 2 + 0.5) + (nof_runs - 1) * (bar_width / 2) for i in x]
     ax.set_xticks(tick_xs)
     ax.set_xticklabels([f"N={s} x{i}" for s, i in zip(ns, iterations)])
@@ -162,17 +223,23 @@ def save_cache_graph(names, refss, missess, ns, iterations, filename="plot.png",
     plt.show() if only_show else plt.savefig(filename)
     plt.close()
 
+
 def read_perfstats(filename, stats, cast_to=int):
     "Given stats=[stat] returns { stat: value } with values read from file"
-    regex = lambda s : rf'^\s*([\d\.,]+|.not supported.)\s*{s}.*$'
+    regex = lambda s: rf"^\s*([\d\.,]+|.not supported.)\s*{s}.*$"
     with open(filename, "r") as file:
         content = file.read()
         read_stats = {}
         for stat in stats:
-            matches = [a.groups()[0] for a in re.finditer(regex(stat), content, re.MULTILINE)]
-            assert len(matches) == 1, f"matches={matches} are not exactly one. stat={stat} searched in filename={filename}"
+            matches = [
+                a.groups()[0] for a in re.finditer(regex(stat), content, re.MULTILINE)
+            ]
+            assert (
+                len(matches) == 1
+            ), f"matches={matches} are not exactly one. stat={stat} searched in filename={filename}"
             read_stats[stat] = cast_to(matches[0])
     return read_stats
+
 
 def main():
     makedirs("runs/graphs", exist_ok=True)
@@ -189,7 +256,6 @@ def main():
         ("shload", ""),
     ]
 
-
     underscored = lambda s: "_".join(s.split())
 
     run_measuremets = {}
@@ -199,16 +265,25 @@ def main():
             filename = f"{branch}_n{n}_steps{step}_{underscored(flags)}.output"
             stdout_file = f"runs/stdouts/{filename}"
             perfstat_file = f"runs/perfstats/{filename}"
-            stats = ["cache-references", "cache-misses", "L1-dcache-loads", "L1-dcache-load-misses"]
+            stats = [
+                "cache-references",
+                "cache-misses",
+                "L1-dcache-loads",
+                "L1-dcache-load-misses",
+            ]
             if exists(stdout_file):
                 nspcells = pd.read_csv(f"runs/stdouts/{filename}")
             else:
-                print(f"Stdout file does not exists, will use zero instead: {stdout_file}")
+                print(
+                    f"Stdout file does not exists, will use zero instead: {stdout_file}"
+                )
             if exists(perfstat_file):
                 perfstats = read_perfstats(f"runs/perfstats/{filename}", stats)
             else:
                 perfstats = {stat: 0 for stat in stats}
-                print(f"Perfstat file does not exist, will use zero instead: {perfstat_file}")
+                print(
+                    f"Perfstat file does not exist, will use zero instead: {perfstat_file}"
+                )
             run_measurement = {}
             run_measurement["nspcell_mean"] = np.mean(nspcells["total_ns"])
             run_measurement.update(perfstats)
@@ -220,7 +295,13 @@ def main():
         (("linsolve", ""), ("project", ""),),
         (("linsolve", ""), ("project", ""), ("shload", "")),
         (("linsolve", ""), ("project", ""), ("linsolve", ""), ("project", "")),
-        (("linsolve", ""), ("project", ""), ("linsolve", ""), ("project", ""), ("linsolve", ""))
+        (
+            ("linsolve", ""),
+            ("project", ""),
+            ("linsolve", ""),
+            ("project", ""),
+            ("linsolve", ""),
+        ),
     ]
     for comparisson in comparissons:
         names = [" ".join(run) for run in comparisson]
@@ -235,14 +316,48 @@ def main():
 
         for run in comparisson:
             means.append(np.array([e["nspcell_mean"] for e in run_measuremets[run]]))
-            l1_refs.append(np.array([e["L1-dcache-loads"] for e in run_measuremets[run]]))
-            l1_misses.append(np.array([e["L1-dcache-load-misses"] for e in run_measuremets[run]]))
-            llc_refs.append(np.array([e["cache-references"] for e in run_measuremets[run]]))
-            llc_misses.append(np.array([e["cache-misses"] for e in run_measuremets[run]]))
+            l1_refs.append(
+                np.array([e["L1-dcache-loads"] for e in run_measuremets[run]])
+            )
+            l1_misses.append(
+                np.array([e["L1-dcache-load-misses"] for e in run_measuremets[run]])
+            )
+            llc_refs.append(
+                np.array([e["cache-references"] for e in run_measuremets[run]])
+            )
+            llc_misses.append(
+                np.array([e["cache-misses"] for e in run_measuremets[run]])
+            )
 
-        save_nscell_graph(names, means, ns, steps, f"{plotpath}/nspcellgraph__{plotid}.png", only_show=True)
-        save_cache_graph(names, l1_refs, l1_misses, ns, steps, filename=f"{plotpath}/l1graph__{plotid}.png", cache_name="L1", only_show=True)
-        save_cache_graph(names, llc_refs, llc_misses, ns, steps, filename=f"{plotpath}/llcgraph__{plotid}.png", cache_name="LLC", only_show=True)
+        save_nscell_graph(
+            names,
+            means,
+            ns,
+            steps,
+            f"{plotpath}/nspcellgraph__{plotid}.png",
+            only_show=True,
+        )
+        save_cache_graph(
+            names,
+            l1_refs,
+            l1_misses,
+            ns,
+            steps,
+            filename=f"{plotpath}/l1graph__{plotid}.png",
+            cache_name="L1",
+            only_show=True,
+        )
+        save_cache_graph(
+            names,
+            llc_refs,
+            llc_misses,
+            ns,
+            steps,
+            filename=f"{plotpath}/llcgraph__{plotid}.png",
+            cache_name="LLC",
+            only_show=True,
+        )
+
 
 if __name__ == "__main__":
     main()
