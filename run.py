@@ -29,13 +29,23 @@ class Run:
     is_run_folder_initialized = False
     should_run = True
 
-    def __init__(self, name, n, steps, branch_prefix="", cflags="", previous_batch_cmds=""):
+    def __init__(
+        self,
+        name,
+        n,
+        steps,
+        branch_prefix="",
+        cflags="",
+        previous_batch_cmds="",
+        envvars={},
+    ):
         self.name = name
         self.n = n
         self.steps = steps
         self.branch_prefix = branch_prefix
         self.cflags = cflags
         self.previous_batch_cmds = previous_batch_cmds  # useful for things like sourcing icc `source /opt/ipsxe/2019u1/bin/compilervars.sh intel64`
+        self.envvars = envvars
         if not Run.is_run_folder_initialized:
             Run.setup_run_folder()
             Run.is_run_folder_initialized = True
@@ -71,16 +81,18 @@ class Run:
             self.run_sbatch()
 
     def run_inplace(self):
+        envvars_cmds = " ".join(f"{k}={v}" for k, v in self.envvars.items())
         start_time = time()
         cmd(f"git checkout {self.branch_prefix}{self.name}")
         cmd("make clean")
         cmd(f"make headless CFLAGS='-g {self.cflags}'")
         if Run.should_run:
-            cmd(self.perfstat_run_cmd)
+            cmd(f"{envvars_cmds} {self.perfstat_run_cmd}")
             printf(f">>> [TIME] Run finished in {time() - start_time} seconds.")
 
     def run_sbatch(self):
         submission_filename = f"runs/submissions/{self.run_name}.sh"
+        envvars_cmds = ";".join(f"export {k}={v}" for k, v in self.envvars.items())
         submission_text = cleandoc(
             f"""
             #!/bin/bash
@@ -91,8 +103,13 @@ class Run:
             #SBATCH -o runs/slurmout/{self.run_name}.out
             #SBATCH -e runs/slurmerr/{self.run_name}.err
 
+            # Environment variables initialization
+            {envvars_cmds}
+
+            # Previous batch cmds
             {self.previous_batch_cmds}
 
+            # Actual run
             git checkout {self.branch_prefix}{self.name} &&
             make clean &&
             make headless CFLAGS='-g {self.cflags}' &&
@@ -130,7 +147,16 @@ def main():
 
     printf(">>> [START]")
     for n, steps in [(128, 512), (512, 128), (2048, 32), (4096, 16), (8192, 8)]:
-        Run("lab1", n, steps).run()
+        Run(
+            "lab1",
+            n,
+            steps,
+            envvars={
+                "OMP_NUM_THREADS": 14,
+                "OMP_PROC_BIND": "true",
+                "OMP_PLACES": "{0:4:1}",
+            },
+        ).run()
 
     if Run.no_batch:
         restore_git_state(repo, initial_branch)
