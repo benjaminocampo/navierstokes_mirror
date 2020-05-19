@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import itertools as it
+from math import ceil
 from os import makedirs
 from os.path import exists
 from itertools import count, cycle, islice
@@ -230,7 +231,12 @@ def save_cache_graph(
 
 
 def save_scaling_graph(
-    run_measurements, ns, steps, filename="plot.png", only_show=False
+    run_measurements,
+    ns,
+    steps,
+    plot_raw_scaling=True,
+    filename="plot.png",
+    only_show=False,
 ):
     DPI = 120
     img_width = 960 * 2
@@ -239,16 +245,27 @@ def save_scaling_graph(
 
     colors = cycle(COLORS)
     markers = cycle(["o", "v", "s", "D", "H"])
+    onecore_nspcell = np.array([m["nspcell_mean"] for m in run_measurements[1]])
     for cores, runs in run_measurements.items():
-        nspcells = [-measurement["nspcell_mean"] for measurement in runs]
-        ax.plot(ns, nspcells, marker=next(markers), label=f"{cores} threads", color=next(colors))
+        x = ns
+        nspcells = np.array([measurement["nspcell_mean"] for measurement in runs])
+        if plot_raw_scaling:
+            y = -nspcells
+        else:
+            speedup = onecore_nspcell / nspcells
+            efficiency = speedup / cores
+            y = efficiency
+        ax.plot(
+            x, y, marker=next(markers), label=f"{cores} threads", color=next(colors),
+        )
     plt.legend(loc="lower left")
-    plt.grid(linestyle='-', linewidth=0.125)
+    plt.grid(linestyle="-", linewidth=0.125)
     ax.set_title(f"Raw Scaling")
     ax.set_ylabel("Inverted Nanoseconds per Cell")
     ax.set_xticks(ns)
     ax.set_xticklabels([f"N={s} x{i}" for s, i in zip(ns, steps)])
-    ax.set_yticks(np.concatenate((ax.get_yticks(), ax.get_yticks() - 10)))
+    if plot_raw_scaling:
+        ax.set_yticks(np.concatenate((ax.get_yticks(), ax.get_yticks() - 10)))
 
     fig.tight_layout()
     plt.show() if only_show else plt.savefig(filename)
@@ -309,17 +326,19 @@ def scaling_main():
     make_run = lambda n, steps, cores: Run(
         RUN_NAME,
         n,
-        steps,
+        steps * ceil(cores / 2),
         envvars={
             "OMP_NUM_THREADS": cores,
             "OMP_PROC_BIND": "true",
+            "OMP_DISPLAY_ENV": "true",
             "BUILD": "intrinsics",
-            "CFLAGS": "-fopenmp",
+            "CFLAGS": "-fopenmp"
         },
     )
     makedirs("runs/graphs", exist_ok=True)
-    ns = np.array([128, 512, 2048, 4096, 8192])
-    steps = np.array([512, 128, 32, 16, 8])
+    ns = np.array([128, 512, 1024, 2048, 3072, 4096, 6144, 8192])
+    steps = np.array([512, 128, 64, 32, 24, 16, 12, 8])
+
     cores = [1, 2, 4, 8, 14, 16, 21, 24, 28]
     plotpath = "runs/graphs"
     plotid = RUN_NAME
@@ -345,6 +364,14 @@ def scaling_main():
         run_measurements,
         ns,
         steps,
+        filename=f"{plotpath}/scaling__{plotid}.png",
+        only_show=True,
+    )
+    save_scaling_graph(
+        run_measurements,
+        ns,
+        steps,
+        plot_raw_scaling=False,
         filename=f"{plotpath}/scaling__{plotid}.png",
         only_show=True,
     )
