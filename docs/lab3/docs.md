@@ -137,27 +137,10 @@ static void clear_data(void) {
   }
 }
 ```
-In order to stay in parallel sections most of the time, one of the main regions
-is placed in *step* as we said before, so if we have m threads, they will
-be distributed along the entire grid, computing the function step from a certain
-region. Here is the code of the work distribution performed at calling the
-function step.
 
-```c
-#pragma omp parallel firstprivate(dens, u, v, dens_prev, u_prev, v_prev, diff, visc, dt)
-  {
-    int threads = omp_get_num_threads();
-    int strip_size = (N + threads - 1) / threads;
-    #pragma omp for
-    for(int tid = 0; tid < threads; tid++){
-      int from = tid * strip_size + 1;
-      int to = MIN((tid + 1) * strip_size + 1, N + 1);
-      step(N, dens, u, v, dens_prev, u_prev, v_prev, diff, visc, dt, from, to);
-    }
-  }
-```
+# React
 
-Another main parallel section was in react. Since we needed to compute two
+One main parallel section was in react. Since we needed to compute two
 maximum values, a reduction over a parallel for was used.
 
 ```c
@@ -194,6 +177,28 @@ a parallel for collapse directive was applied in these cases.
     #pragma omp parallel for collapse(2)
     for (int y = 64; y < N; y += 64)
       for (int x = 64; x < N; x += 64) d[IX(x, y)] = source * 1000.0f;
+  }
+```
+
+# Step
+
+In order to stay in parallel sections most of the time, the other main region
+is placed in *step* as we said before, so if we have m threads, they will
+be distributed along the entire grid, computing the function step from a certain
+region. Here is the code of the work distribution performed at calling the
+function step.
+
+```c
+#pragma omp parallel firstprivate(dens, u, v, dens_prev, u_prev, v_prev, diff, visc, dt)
+  {
+    int threads = omp_get_num_threads();
+    int strip_size = (N + threads - 1) / threads;
+    #pragma omp for
+    for(int tid = 0; tid < threads; tid++){
+      int from = tid * strip_size + 1;
+      int to = MIN((tid + 1) * strip_size + 1, N + 1);
+      step(N, dens, u, v, dens_prev, u_prev, v_prev, diff, visc, dt, from, to);
+    }
   }
 ```
 
