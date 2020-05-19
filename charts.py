@@ -28,6 +28,7 @@ COLORS = [
     "#00BCD4",  # cyan
     "#CDDC39",  # lime
     "#FF5722",  # deeporange
+    "#009688",  # teal
 ]
 
 DARK_COLORS = [
@@ -39,6 +40,7 @@ DARK_COLORS = [
     "#0097A7",  # dark cyan
     "#AFB42B",  # dark lime
     "#E64A19",  # dark deeporange
+    "#00796B",  # dark teal
 ]
 
 
@@ -230,19 +232,23 @@ def save_cache_graph(
 def save_scaling_graph(
     run_measurements, ns, steps, filename="plot.png", only_show=False
 ):
-    DPI = 150
+    DPI = 120
     img_width = 960 * 2
     img_height = 720 * 2
     fig, ax = plt.subplots(figsize=(img_width / DPI, img_height / DPI), dpi=DPI)
 
+    colors = cycle(COLORS)
+    markers = cycle(["o", "v", "s", "D", "H"])
     for cores, runs in run_measurements.items():
         nspcells = [-measurement["nspcell_mean"] for measurement in runs]
-        ax.plot(ns, nspcells, marker="o", label=f"{cores} threads")
-    plt.legend(loc="lower right")
+        ax.plot(ns, nspcells, marker=next(markers), label=f"{cores} threads", color=next(colors))
+    plt.legend(loc="lower left")
+    plt.grid(linestyle='-', linewidth=0.125)
     ax.set_title(f"Raw Scaling")
     ax.set_ylabel("Inverted Nanoseconds per Cell")
     ax.set_xticks(ns)
     ax.set_xticklabels([f"N={s} x{i}" for s, i in zip(ns, steps)])
+    ax.set_yticks(np.concatenate((ax.get_yticks(), ax.get_yticks() - 10)))
 
     fig.tight_layout()
     plt.show() if only_show else plt.savefig(filename)
