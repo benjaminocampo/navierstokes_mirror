@@ -58,10 +58,25 @@ class Run:
         makedirs("runs/slurmout", exist_ok=True)
         makedirs("runs/slurmerr", exist_ok=True)
 
+    @staticmethod
+    def sanitize_filename(value):
+        if isinstance(value, dict):
+            return "__".join(
+                f"{Run.sanitize_filename(k)}={Run.sanitize_filename(v)}"
+                for k, v in value.items()
+                if v
+            )
+        elif isinstance(value, str):
+            isvalid = lambda l: l.isalnum() or l in ["-", "_"]
+            return "".join(letter if isvalid(letter) else "-" for letter in value)
+        return value
+
+    def __str__(self):
+        return Run.sanitize_filename(vars(self))
+
     @property
     def run_name(self):
-        underscored = lambda s: "_".join(s.split())
-        return f"{self.name}_n{self.n}_steps{self.steps}_{underscored(self.cflags)}"
+        return str(self)
 
     @property
     def run_cmd(self):
