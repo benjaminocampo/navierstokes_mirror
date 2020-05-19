@@ -6,6 +6,7 @@ from os import chdir, makedirs
 from os.path import isdir
 from time import time
 from inspect import cleandoc
+from math import ceil
 
 from utils import save_git_state, restore_git_state
 
@@ -167,10 +168,11 @@ def main():
         Run(
             "lab3",
             n,
-            steps,
+            steps * ceil(cores / 2),
             envvars={
                 "OMP_NUM_THREADS": cores,
                 "OMP_PROC_BIND": "true",
+                "OMP_DISPLAY_ENV": "true",
                 "BUILD": "intrinsics",
                 "CFLAGS": "-fopenmp"
             },
