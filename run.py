@@ -50,13 +50,16 @@ class Run:
         f"{self.name}_n{self.n}_steps{self.steps}_{underscored(self.cflags)}"
 
     @property
-    def run_cmd(self, perfstat=False):
+    def run_cmd(self):
         run_cmd = f"./headless {self.n} 0.1 0.0001 0.0001 5.0 100.0 {self.steps} > runs/stdouts/{self.run_name}.output"
-        if perfstat:
-            perfstat_cmd = f"perf stat -o runs/perfstats/{self.run_name}.output -e cache-references,cache-misses,L1-dcache-stores,L1-dcache-store-misses,LLC-stores,LLC-store-misses,page-faults,cycles,instructions,branches,branch-misses -ddd"
-            perfstat_run_cmd = f"{perfstat_cmd} {run_cmd}"
-            return perfstat_run_cmd
         return run_cmd
+
+    @property
+    def perfstat_run_cmd(self):
+        perfstat_cmd = f"perf stat -o runs/perfstats/{self.run_name}.output -e cache-references,cache-misses,L1-dcache-stores,L1-dcache-store-misses,LLC-stores,LLC-store-misses,page-faults,cycles,instructions,branches,branch-misses -ddd"
+        perfstat_run_cmd = f"{perfstat_cmd} {self.run_cmd}"
+        return perfstat_run_cmd
+
 
     def run(self):
         if Run.no_batch:
@@ -70,7 +73,7 @@ class Run:
         cmd("make clean")
         cmd(f"make headless CFLAGS='-g {self.cflags}'")
         if Run.should_run:
-            cmd(self.run_cmd(perfstat=True))
+            cmd(self.perfstat_run_cmd)
             printf(f">>> [TIME] Run finished in {time() - start_time} seconds.")
 
     def run_sbatch(self):
@@ -90,7 +93,7 @@ class Run:
             git checkout {self.branch_prefix}{self.name} &&
             make clean &&
             make headless CFLAGS='-g {self.cflags}' &&
-            srun {self.run_cmd(perfstat=True)} ||
+            srun {self.perfstat_run_cmd} ||
             echo "If you see this file then your run with this filename had a problem, inspect runs/ folder for more information" > {self.run_name}.error # If this is in the project root then you know there was an error
         """
         )
