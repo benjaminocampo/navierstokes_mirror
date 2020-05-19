@@ -238,7 +238,7 @@ def save_scaling_graph(
     filename="plot.png",
     only_show=False,
 ):
-    DPI = 120
+    DPI = 150
     img_width = 960 * 2
     img_height = 720 * 2
     fig, ax = plt.subplots(figsize=(img_width / DPI, img_height / DPI), dpi=DPI)
@@ -254,16 +254,16 @@ def save_scaling_graph(
         else:
             speedup = onecore_nspcell / nspcells
             efficiency = speedup / cores
-            y = efficiency
+            y = efficiency * 100
         ax.plot(
             x, y, marker=next(markers), label=f"{cores} threads", color=next(colors),
         )
-    plt.legend(loc="lower left")
+    plt.legend(loc="lower left" if plot_raw_scaling else "lower right")
     plt.grid(linestyle="-", linewidth=0.125)
-    ax.set_title(f"Raw Scaling")
-    ax.set_ylabel("Inverted Nanoseconds per Cell")
+    ax.set_title("Raw Scaling" if plot_raw_scaling else "Efficiency Scaling")
+    ax.set_ylabel("Inverted Nanoseconds per Cell" if plot_raw_scaling else "Efficiency (%)")
     ax.set_xticks(ns)
-    ax.set_xticklabels([f"N={s} x{i}" for s, i in zip(ns, steps)])
+    ax.set_xticklabels([f"N={n}" for n in ns])
     if plot_raw_scaling:
         ax.set_yticks(np.concatenate((ax.get_yticks(), ax.get_yticks() - 10)))
 
@@ -364,16 +364,16 @@ def scaling_main():
         run_measurements,
         ns,
         steps,
-        filename=f"{plotpath}/scaling__{plotid}.png",
-        only_show=True,
+        filename=f"{plotpath}/rawscaling__{plotid}.png",
+        only_show=False,
     )
     save_scaling_graph(
         run_measurements,
         ns,
         steps,
         plot_raw_scaling=False,
-        filename=f"{plotpath}/scaling__{plotid}.png",
-        only_show=True,
+        filename=f"{plotpath}/efcyscaling__{plotid}.png",
+        only_show=False,
     )
 
 
