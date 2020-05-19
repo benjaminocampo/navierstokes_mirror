@@ -126,7 +126,7 @@ class Run:
             # Actual run
             git checkout {self.branch_prefix}{self.name} &&
             make clean &&
-            make headless -e' &&
+            make headless -e &&
             srun {self.perfstat_run_cmd} ||
             echo "If you see this file then your run with this filename had a problem, inspect runs/ folder for more information" > {self.run_name}.error # If this is in the project root then you know there was an error
         """
