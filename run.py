@@ -8,70 +8,97 @@ from inspect import cleandoc
 
 from utils import save_git_state, restore_git_state
 
-SHOULD_RUN = True # Generates run.output and perfstat.output
-
 printf = lambda s: print(s, flush=True)
 
-error_count = 0
 def cmd(c):
-    global error_count
+    if not hasattr(cmd, "error_count"):
+        cmd.error_count = 0
     red_color = "\033[91m"
     end_color = "\033[0m"
     printf(f"\n>>> [COMMAND] {c} @ {os.getcwd()}")
-    if os.system(c): # Command returned != 0
+    if os.system(c):  # Command returned != 0
         printf(f"{red_color}>>> [ERROR] there was an error in command:{end_color}")
         printf(f"{red_color}>>> [ERROR] {c} @ {os.getcwd()}{end_color}")
         exit()
-        error_count += 1
+        cmd.error_count += 1
 
-def run(branch, flags, n, steps):
-    underscored = lambda s: "_".join(s.split())
-    run_name = f"{branch}_n{n}_steps{steps}_{underscored(flags)}"
-    run_cmd = f"./headless {n} 0.1 0.0001 0.0001 5.0 100.0 {steps} > runs/stdouts/{run_name}.output"
-    perfstat_cmd = f"perf stat -o runs/perfstats/{run_name}.output -e cache-references,cache-misses,L1-dcache-stores,L1-dcache-store-misses,LLC-stores,LLC-store-misses,page-faults,cycles,instructions,branches,branch-misses -ddd"
-    perfstat_run_cmd = f"{perfstat_cmd} {run_cmd}"
 
-    start_time = time()
-    cmd(f"git checkout l1-{branch}")
-    cmd("make clean")
-    cmd(f"make headless CFLAGS='-g {flags}'")
-    if (SHOULD_RUN): cmd(perfstat_run_cmd)
-    printf(f">>> [TIME] Run finished in {time() - start_time} seconds.")
+class Run:
+    is_run_folder_initialized = False
+    should_run = True
 
-def batch(branch, flags, n, steps):
-    underscored = lambda s: "_".join(s.split())
-    run_name = f"{branch}_n{n}_steps{steps}_{underscored(flags)}"
-    run_cmd = f"./headless {n} 0.1 0.0001 0.0001 5.0 100.0 {steps} > runs/stdouts/{run_name}.output"
-    perfstat_cmd = f"perf stat -o runs/perfstats/{run_name}.output -e cache-references,cache-misses,L1-dcache-stores,L1-dcache-store-misses,LLC-stores,LLC-store-misses,page-faults,cycles,instructions,branches,branch-misses -ddd"
-    perfstat_run_cmd = f"{perfstat_cmd} {run_cmd}"
-    submission_filename = f"runs/submissions/{run_name}.sh"
-    submission_text = cleandoc(f"""
-    #!/bin/bash
-    #SBATCH --job-name={n}x{steps}
-    #SBATCH --ntasks=1
-    #SBATCH --cpus-per-task=1
-    #SBATCH --exclusive
-    #SBATCH -o runs/slurmout/{run_name}.out
-    #SBATCH -e runs/slurmerr/{run_name}.err
+    def __init__(self, name, n, steps, branch_prefix="", cflags=""):
+        self.name = name
+        self.n = n
+        self.steps = steps
+        self.branch_prefix = branch_prefix
+        self.cflags = cflags
+        if Run.should_run and not Run.is_run_folder_initialized:
+            Run.setup_run_folder()
 
-    source /opt/ipsxe/2019u1/bin/compilervars.sh intel64
+    @staticmethod
+    def setup_run_folder():
+        makedirs("runs/submissions", exist_ok=True)
+        makedirs("runs/stdouts", exist_ok=True)
+        makedirs("runs/perfstats", exist_ok=True)
+        makedirs("runs/slurmout", exist_ok=True)
+        makedirs("runs/slurmerr", exist_ok=True)
 
-    git checkout l2/intrinsics/{branch} &&
-    make clean &&
-    make headless CFLAGS='-g {flags}' &&
-    {perfstat_run_cmd} ||
-    echo "If you see this file then your run with this filename had a problem, inspect runs/ folder for more information" > {run_name}.error # If this is in the root then you know there was an error
-    """)
-    with open(submission_filename, "w") as submission:
-        submission.write(submission_text)
-    if (SHOULD_RUN): cmd(f"sbatch ./{submission_filename}")
+    @property
+    def run_name(self):
+        underscored = lambda s: "_".join(s.split())
+        f"{self.name}_n{self.n}_steps{self.steps}_{underscored(self.cflags)}"
 
-def setup_run_folder():
-    makedirs("runs/submissions", exist_ok=True)
-    makedirs("runs/stdouts", exist_ok=True)
-    makedirs("runs/perfstats", exist_ok=True)
-    makedirs("runs/slurmout", exist_ok=True)
-    makedirs("runs/slurmerr", exist_ok=True)
+    @property
+    def run_cmd(self, perfstat=False):
+        run_cmd = f"./headless {self.n} 0.1 0.0001 0.0001 5.0 100.0 {self.steps} > runs/stdouts/{self.run_name}.output"
+        if perfstat:
+            perfstat_cmd = f"perf stat -o runs/perfstats/{self.run_name}.output -e cache-references,cache-misses,L1-dcache-stores,L1-dcache-store-misses,LLC-stores,LLC-store-misses,page-faults,cycles,instructions,branches,branch-misses -ddd"
+            perfstat_run_cmd = f"{perfstat_cmd} {run_cmd}"
+            return perfstat_run_cmd
+        return run_cmd
+
+    def run(self):
+        if Run.no_batch:
+            self.run_inplace()
+        else:
+            self.run_sbatch()
+
+    def run_inplace(self):
+        start_time = time()
+        cmd(f"git checkout {self.branch_prefix}{self.name}")
+        cmd("make clean")
+        cmd(f"make headless CFLAGS='-g {self.cflags}'")
+        if Run.should_run:
+            cmd(self.run_cmd(perfstat=True))
+            printf(f">>> [TIME] Run finished in {time() - start_time} seconds.")
+
+    def run_sbatch(self):
+        submission_filename = f"runs/submissions/{self.run_name}.sh"
+        submission_text = cleandoc(
+            f"""
+            #!/bin/bash
+            #SBATCH --job-name={self.n}x{self.steps}
+            #SBATCH --ntasks=1
+            #SBATCH --cpus-per-task=1
+            #SBATCH --exclusive
+            #SBATCH -o runs/slurmout/{self.run_name}.out
+            #SBATCH -e runs/slurmerr/{self.run_name}.err
+
+            source /opt/ipsxe/2019u1/bin/compilervars.sh intel64
+
+            git checkout {self.branch_prefix}{self.name} &&
+            make clean &&
+            make headless CFLAGS='-g {self.cflags}' &&
+            srun {self.run_cmd(perfstat=True)} ||
+            echo "If you see this file then your run with this filename had a problem, inspect runs/ folder for more information" > {self.run_name}.error # If this is in the project root then you know there was an error
+        """
+        )
+        with open(submission_filename, "w") as submission:
+            submission.write(submission_text)
+        if Run.should_run:
+            cmd(f"sbatch ./{submission_filename}")
+
 
 def main():
     # Parser
@@ -80,34 +107,34 @@ def main():
         "--no-batch",
         "-nb",
         action="store_true",
-        help="This flag will override the default behaviour of submiting to a slurm squeue, and instead directly run the commands"
+        help="This flag will override the default behaviour of submiting to a slurm squeue, and instead directly run the commands",
     )
-    no_batch = parser.parse_args().no_batch
+    parser.add_argument(
+        "--dry-run",
+        "-s",
+        action="store_true",
+        help="When set, runs the script without actually making the runs, just prints",
+    )
+    parsed_args = parser.parse_args()
+    Run.no_batch = parsed_args.no_batch
+    Run.should_run = not parsed_args.dry_run
 
-    prun = run if no_batch else batch # Pick appropiate run method
-    setup_run_folder()
     repo, initial_branch = save_git_state()
     itime = time()
+
     printf(">>> [START]")
     for n, steps in [(128, 512), (512, 128), (2048, 32), (4096, 16), (8192, 8)]:
-        prun("lab1", "", n, steps)
-        prun("rb", "", n, steps)
-        prun("baseline", "", n, steps)
-        prun("linsolve", "", n, steps)
-        prun("addsource", "", n, steps)
-        prun("advect", "", n, steps)
-        prun("project", "", n, steps)
-        prun("blocks", "", n, steps)
-        prun("shload", "", n, steps)
-        prun("icc", "", n, steps)
-        prun("stream", "", n + 16 - 2, steps)
+        Run("lab1", n, steps).run()
 
-    if no_batch:
+    if Run.no_batch:
         restore_git_state(repo, initial_branch)
     else:
         # Batch command to restore git state after all batches
-        cmd(f"nohup srun --job-name=cleanup -- git checkout {initial_branch} && git stash pop &")
-    printf(f"Done in {time() - itime} seconds with {error_count} errors.")
+        cmd(
+            f"nohup srun --job-name=cleanup -- git checkout {initial_branch} && git stash pop &"
+        )
+    printf(f"Done in {time() - itime} seconds with {cmd.error_count} errors.")
+
 
 if __name__ == "__main__":
     main()
