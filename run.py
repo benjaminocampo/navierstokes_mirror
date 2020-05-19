@@ -10,30 +10,33 @@ from utils import save_git_state, restore_git_state
 
 printf = lambda s: print(s, flush=True)
 
+cmd_error_count = 0
+
+
 def cmd(c):
-    if not hasattr(cmd, "error_count"):
-        cmd.error_count = 0
+    global cmd_error_count
     red_color = "\033[91m"
     end_color = "\033[0m"
     printf(f"\n>>> [COMMAND] {c} @ {os.getcwd()}")
     if os.system(c):  # Command returned != 0
         printf(f"{red_color}>>> [ERROR] there was an error in command:{end_color}")
         printf(f"{red_color}>>> [ERROR] {c} @ {os.getcwd()}{end_color}")
+        cmd_error_count += 1
         exit()
-        cmd.error_count += 1
 
 
 class Run:
     is_run_folder_initialized = False
     should_run = True
 
-    def __init__(self, name, n, steps, branch_prefix="", cflags=""):
+    def __init__(self, name, n, steps, branch_prefix="", cflags="", previous_batch_cmds=""):
         self.name = name
         self.n = n
         self.steps = steps
         self.branch_prefix = branch_prefix
         self.cflags = cflags
-        if Run.should_run and not Run.is_run_folder_initialized:
+        self.previous_batch_cmds = previous_batch_cmds  # useful for things like sourcing icc `source /opt/ipsxe/2019u1/bin/compilervars.sh intel64`
+        if not Run.is_run_folder_initialized:
             Run.setup_run_folder()
             Run.is_run_folder_initialized = True
 
@@ -60,7 +63,6 @@ class Run:
         perfstat_cmd = f"perf stat -o runs/perfstats/{self.run_name}.output -e cache-references,cache-misses,L1-dcache-stores,L1-dcache-store-misses,LLC-stores,LLC-store-misses,page-faults,cycles,instructions,branches,branch-misses -ddd"
         perfstat_run_cmd = f"{perfstat_cmd} {self.run_cmd}"
         return perfstat_run_cmd
-
 
     def run(self):
         if Run.no_batch:
@@ -89,7 +91,7 @@ class Run:
             #SBATCH -o runs/slurmout/{self.run_name}.out
             #SBATCH -e runs/slurmerr/{self.run_name}.err
 
-            source /opt/ipsxe/2019u1/bin/compilervars.sh intel64
+            {self.previous_batch_cmds}
 
             git checkout {self.branch_prefix}{self.name} &&
             make clean &&
@@ -137,7 +139,7 @@ def main():
         cmd(
             f"nohup srun --job-name=cleanup -- git checkout {initial_branch} && git stash pop &"
         )
-    printf(f"Done in {time() - itime} seconds with {cmd.error_count} errors.")
+    printf(f"Done in {time() - itime} seconds with {cmd_error_count} errors.")
 
 
 if __name__ == "__main__":
