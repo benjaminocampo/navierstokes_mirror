@@ -35,6 +35,7 @@ class Run:
         self.cflags = cflags
         if Run.should_run and not Run.is_run_folder_initialized:
             Run.setup_run_folder()
+            Run.is_run_folder_initialized = True
 
     @staticmethod
     def setup_run_folder():
@@ -47,7 +48,7 @@ class Run:
     @property
     def run_name(self):
         underscored = lambda s: "_".join(s.split())
-        f"{self.name}_n{self.n}_steps{self.steps}_{underscored(self.cflags)}"
+        return f"{self.name}_n{self.n}_steps{self.steps}_{underscored(self.cflags)}"
 
     @property
     def run_cmd(self):
