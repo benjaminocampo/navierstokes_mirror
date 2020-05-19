@@ -3,9 +3,12 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import itertools as it
 from os import makedirs
 from os.path import exists
 from itertools import count, cycle, islice
+
+from run import Run
 
 white = "#FFFFFF"
 darkgray = "#263238"
@@ -224,6 +227,26 @@ def save_cache_graph(
     plt.close()
 
 
+def save_scaling_graph(
+    run_measurements, ns, steps, filename="plot.png", only_show=False
+):
+    DPI = 150
+    img_width = 960 * 2
+    img_height = 720 * 2
+    fig, ax = plt.subplots(figsize=(img_width / DPI, img_height / DPI), dpi=DPI)
+
+    for cores, runs in run_measurements.items():
+        nspcells = [-measurement["nspcell_mean"] for measurement in runs]
+        ax.plot(ns, nspcells, marker="o", label=f"{cores} threads")
+    plt.legend(loc="lower right")
+    ax.set_title(f"Raw Scaling")
+    ax.set_ylabel("Inverted Nanoseconds per Cell")
+    ax.set_xticks(ns)
+    ax.set_xticklabels([f"N={s} x{i}" for s, i in zip(ns, steps)])
+
+    plt.show() if only_show else plt.savefig(filename)
+
+
 def read_perfstats(filename, stats, cast_to=int):
     "Given stats=[stat] returns { stat: value } with values read from file"
     regex = lambda s: rf"^\s*([\d\.,]+|.not supported.)\s*{s}.*$"
@@ -239,6 +262,85 @@ def read_perfstats(filename, stats, cast_to=int):
             ), f"matches={matches} are not exactly one. stat={stat} searched in filename={filename}"
             read_stats[stat] = cast_to(matches[0])
     return read_stats
+
+
+def get_run_measurement(run: Run):
+    # Returns for a given existing measured run, the next dictionary
+    # {
+    #     "nspcell_mean": nspcell_mean ,
+    #     "cache-references": cache_references,
+    #     "cache-misses": cache_misses,
+    #     "L1-dcache-loads": L1_dcache_loads,
+    #     "L1-dcache-load-misses": L1_dcache_load_misses,
+    # }
+    filename = f"{run.run_name}.output"
+    stdout_file = f"runs/stdouts/{filename}"
+    perfstat_file = f"runs/perfstats/{filename}"
+    stats = [
+        "cache-references",
+        "cache-misses",
+        "L1-dcache-loads",
+        "L1-dcache-load-misses",
+    ]
+    if exists(stdout_file):
+        nspcells = pd.read_csv(f"runs/stdouts/{filename}")
+    else:
+        print(f"Stdout file does not exists, will use zero instead: {stdout_file}")
+    if exists(perfstat_file):
+        perfstats = read_perfstats(f"runs/perfstats/{filename}", stats)
+    else:
+        perfstats = {stat: 0 for stat in stats}
+        print(f"Perfstat file does not exist, will use zero instead: {perfstat_file}")
+    run_measurement = {}
+    run_measurement["nspcell_mean"] = np.mean(nspcells["total_ns"])
+    run_measurement.update(perfstats)
+    return run_measurement
+
+
+def scaling_main():
+    RUN_NAME = "lab3"  # The run name to make the scaling graph against
+    make_run = lambda n, steps, cores: Run(
+        RUN_NAME,
+        n,
+        steps,
+        envvars={
+            "OMP_NUM_THREADS": cores,
+            "OMP_PROC_BIND": "true",
+            "BUILD": "intrinsics",
+            "CFLAGS": "-fopenmp",
+        },
+    )
+    makedirs("runs/graphs", exist_ok=True)
+    ns = np.array([128, 512, 2048, 4096, 8192])
+    steps = np.array([512, 128, 32, 16, 8])
+    cores = [1, 2, 4, 8, 14, 16, 21, 24, 28]
+    plotpath = "runs/graphs"
+    plotid = RUN_NAME
+
+    run_measurements = {corecount: [] for corecount in cores}
+    # run_mesaurements is a dict with the following structure
+    # {corecount: [
+    #     { # A dict for  each (n, step) pair
+    #          "nspcell_mean": nspcell_mean ,
+    #          "cache-references": cache_references,
+    #          "cache-misses": cache_misses,
+    #          "L1-dcache-loads": L1_dcache_loads,
+    #          "L1-dcache-load-misses": L1_dcache_load_misses,
+    #      }
+    # ]}
+
+    for (n, step), corecount in it.product(zip(ns, steps), cores):
+        run = make_run(n, step, corecount)
+        run_measurements = get_run_measurement(run)
+        run_measurements[corecount].append(run_measurement)
+
+    save_scaling_graph(
+        run_measurements,
+        ns,
+        steps,
+        filename=f"{plotpath}/scaling__{plotid}.png",
+        only_show=True,
+    )
 
 
 def main():
@@ -360,4 +462,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    scaling_main()
