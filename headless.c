@@ -64,7 +64,8 @@ static void free_data(void) {
 
 static void clear_data(void) {
   int i, size = (N + 2) * (N + 2);
-
+  
+  #pragma omp parallel for
   for (i = 0; i < size; i++) {
     u[i] = v[i] = u_prev[i] = v_prev[i] = dens[i] = dens_prev[i] = 0.0f;
   }
