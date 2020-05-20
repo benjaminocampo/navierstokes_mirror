@@ -1,18 +1,3 @@
-# Changes from E5-2620v3 to E5-2680v4
-TODO: Remove? Included below
-
-From haswell to broadwell:
-
-- Intel Optimization Manual (2.4.7) and Agner Fog Optimization Manual 3 (10.14):
-  - Gathers have been improved (./vectortest now tells gathers are better than single loads) (14.16.4)
-  - `fpmul` from 5 to 3 cycles
-  - `PCLMULQDQ` is one cycle
-- Also
-  - `fload2x4` is notably worse (~10ns) than `fload8` as expected
-  - `shload` is now not worth it, it is better just directly read from memory
-  - `stream` is now slower. (Note that reading and writing the same memory
-    location is now **really** bad, and in haswell it seemed to be *"free"*)
-
 # Parallel Computing - Lab 3: OpenMP
 
 - Benjamín Ocampo: nicolasbenjaminocampo@gmail.com
@@ -29,14 +14,23 @@ approach, which was called *Stream*, would be our *baseline* during this lab.
 Therefore, it was compared along with *Shload* and our basic vectorization
 in linsolve. Remember that the three of them contain all the improvements
 in *advect* and *project* pointed out in the previous laboratory.
+We got the following conclusions:
+
+- Intel Optimization Manual (2.4.7) and Agner Fog Optimization Manual 3 (10.14):
+  - Gathers have been improved (./vectortest now tells gathers are better than single loads) (14.16.4)
+  - `fpmul` from 5 to 3 cycles
+  - `PCLMULQDQ` is one cycle
+- Also
+  - `fload2x4` is notably worse (~10ns) than `fload8` as expected
+  - `shload` is now not worth it, it is better just directly read from memory
+  - `stream` is now slower. (Note that reading and writing the same memory
+    location is now **really** bad, and in haswell it seemed to be *"free"*)
 
 We were taken by surprise when stream was worse for the smallest cases
 (N = 128, 512, and 2048) but considerably better for the largest ones
-(N = 4096 and 8192). Note that reading and writing the same memory
-location is now **really** bad, and in haswell it seemed to be *"free"*.
-*Shload* was also worse than without it. It is better just to read directly
-from memory. And the code without these approaches was the best
-one for the smaller cases but one of the worst for the largest ones.
+(N = 4096 and 8192) *Shload* was also worse than without it. 
+And the code without these approaches was the best one for the
+smaller cases but one of the worst for the largest ones.
 That was totally confusing. Which of them was the fastest one?
 Which could be used during the lab 3?
 
@@ -44,16 +38,6 @@ We decided to remove our tricks and aces up to the sleeve, i.e, working
 without *Shload* and *Stream* but organizing the code in such a way that
 works with them in order to choose the fastest one at the end of the
 laboratory.
-
-Other changes:
-
-- Intel Optimization Manual (2.4.7) and Agner Fog Optimization Manual 3 (10.14):
-  - Gathers have been improved (./vectortest now tells gathers are better than
-    single loads) (14.16.4)
-  - `fpmul` from 5 to 3 cycles
-  - `PCLMULQDQ` is one cycle
-- Also
-  - `fload2x4` is notably worse (~10ns) than `fload8` as expected
 
 # Tidying up
 
@@ -110,6 +94,10 @@ best possible share-out. We found out that a strip-division, i.e, a set
 of rows of the same length for each thread it is the one that feets better.
 So, each thread receives a strip of size ceil(N/threads). The last thread
 will receive the remaining rows if the number of threads does not divide N.
+
+<div align="center">
+  <img src="res/other_imgs/strips.png" alt="drawing" style="width:450px;" />
+</div>
 
 # From-To division
 
@@ -350,6 +338,46 @@ static void project(unsigned int n, float *u, float *v, float *u0, float *v0,
   set_bnd(n, HORIZONTAL, v, from, to);
 }
 ```
+
+# Scaling
+
+After all the migration, we measured the outcome of the
+program associated with the number of threads that were used.
+As long as we increase the number of threads, more performance we get,
+but less efficient we are. No matter how much threads we add,
+results tend to be enclosed by a certain threshold.
+
+<div align="center">
+  <img src="res/scaling_imgs/jupiterace_rawscaling__lab3.png"
+       alt="drawing"
+       style="width:550px;" />
+</div>
+
+<div align="center">
+  <img src="res/scaling_imgs/jupiterace_efcyscaling__lab3.png"
+       alt="drawing"
+       style="width:550px;" />
+</div>
+
+# Final Results
+
+Finally, this implementations were compared along the best results obtained
+in lab2 and lab3 in order to see how much we have improved.
+
+<div align="center">
+  <img src="res/lab123_imgs/nspcellgraph__broadwell_lab1 __vs__broadwell_lab3 .png"
+       alt="drawing"
+       style="width:550px;" />
+</div>
+
+<div align="center">
+  <img src="res/lab123_imgs/nspcellgraph__haswell_lab2_stream __vs__broadwell_lab2_shload __vs__broadwell_lab2_stream __vs__broadwell_lab3 .png"
+       alt="drawing"
+       style="width:780px;" />
+</div>
+
+
+
 # References
 
  - Blaise, B. (2020) "OpenMP Tutorial" in *Lawrence Livermore National Laboratory*. May. 18, 2020. Available in <https://computing.llnl.gov/tutorials/openMP/>

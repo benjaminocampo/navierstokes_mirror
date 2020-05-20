@@ -207,6 +207,10 @@ Since malloc allocates memory just when it is written and the function
 *clear_data* is the first one that initializes arrays *u*, *v*, and *d* we
 parallelized it.
 
+Asserts were also used to check that threads inside of a parallel for were
+not distributed scatterly. We needed they belong to their strips after
+this loop.
+
 ```c
 static void clear_data(void) {
   int i, size = (N + 2) * (N + 2);
