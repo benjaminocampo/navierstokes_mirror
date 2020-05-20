@@ -46,7 +46,7 @@ class: center, middle
    since they will not be comparable with future
    versions of the project due to the change of architecture
    from Haswell to Broadwell in zx81 and jupiterace.
- 
+
  - Choose the new **baseline**.
 
  - Compare **stream**, **shload**, and without them.
@@ -54,10 +54,10 @@ class: center, middle
 ## Changes from E5-2620v3 to E5-2680v4
 
  - `shload` is now not worth it, it is better just directly read from memory
- 
+
  - `stream` is now slower. (Note that reading and writing the same memory
    location is now **really** bad, and in haswell it seemed to be *"free"*)
- 
+
  - `fload2x4` is notably worse (~10ns) than `fload8` as expected
 
 ---
@@ -130,7 +130,7 @@ A non-vectorized version was also included (Useful in debugging).
 
 **Issue from lab2**: two versions of advect, one for the density and the
 other one for velocity, were added to increase the performance of **u**
-and **v** updates. 
+and **v** updates.
 
 It is hard to reuse and mantain!
 
@@ -233,7 +233,7 @@ maximum values, a reduction over a parallel for was used.
 ```c
   float max_velocity2 = 0.0f;
   float max_density = 0.0f;
-  
+
   #pragma omp parallel for default(none) private(i) firstprivate(size, uu, vv, d) reduction(max: max_velocity2, max_density)
   for (i = 0; i < size; i++) {
     if (max_velocity2 < uu[i] * uu[i] + vv[i] * vv[i]) {
@@ -277,7 +277,7 @@ class: center, middle
 In order to stay in parallel sections most of the time, the other main region
 is placed in *step* as we said before, so if we have m threads, they will
 be distributed along the entire grid, computing the function step from a certain
-region. 
+region.
 
 ```c
 #pragma omp parallel firstprivate(dens, u, v, dens_prev, u_prev, v_prev, diff, visc, dt)
@@ -369,7 +369,7 @@ static void lin_solve(unsigned int n, boundary b, float *restrict x,
  - It would reasonable that a barrier should be necessary between a call
  of both *lin_solve_rb_step* (again for boundary dependencies of neighbour
  strips). Fortunately, the simulation seems to work fine without it.
- 
+
  - We could not get rid of the barrier before a set_bnd giving rise to
  a sincronization every iteration. It also leads to threads with a
  distance of just one iteration.
@@ -448,18 +448,18 @@ class: center, middle
 class: center, middle
 # Final results
 ---
-## lab1 vs lab3 (28 threads)
-<div align="center">
-  <img src="res/lab123_imgs/nspcellgraph__broadwell_lab1 __vs__broadwell_lab3 .png"
-       alt="drawing"
-       style="width:550px;" />
-</div>
----
 ## lab2 vs lab3 (28 threads)
 <div align="center">
   <img src="res/lab123_imgs/nspcellgraph__haswell_lab2_stream __vs__broadwell_lab2_shload __vs__broadwell_lab2_stream __vs__broadwell_lab3 .png"
        alt="drawing"
        style="width:780px;" />
+</div>
+---
+## lab1 vs lab3 (28 threads)
+<div align="center">
+  <img src="res/lab123_imgs/nspcellgraph__broadwell_lab1 __vs__broadwell_lab3 .png"
+       alt="drawing"
+       style="width:550px;" />
 </div>
 ---
 
