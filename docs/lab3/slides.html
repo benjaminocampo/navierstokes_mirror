@@ -51,8 +51,7 @@ class: center, middle
 
  - Compare **stream**, **shload**, and without them.
 ---
-<!-- TODO: Put new results -->
-# Before getting covered in mud
+## Changes from E5-2620v3 to E5-2680v4
 
  - `shload` is now not worth it, it is better just directly read from memory
  
@@ -66,10 +65,52 @@ class: center, middle
 According to Intel Optimization Manual (2.4.7) and Agner Fog Optimization Manual 3 (10.14):
  - Gathers have been improved (./vectortest now tells gathers are better than
    single loads) (14.16.4)
- - `fpmul` from 5 to 3 cycles
- - `PCLMULQDQ` is one cycle
-  
 
+ - `fpmul` from 5 to 3 cycles
+
+ - `PCLMULQDQ` is one cycle
+
+---
+## Changes from E5-2620v3 to E5-2680v4
+
+<div align="center">
+  <img src="res/migrations_imgs/nspcellgraph__haswell_lab1 __vs__broadwell_lab1 .png"
+       alt="drawing"
+       style="width:500px;" />
+</div>
+
+---
+## Changes from E5-2620v3 to E5-2680v4
+
+<div align="center">
+  <img src="res/migrations_imgs/nspcellgraph__haswell_intrinsics_shload __vs__haswell_intrinsics_stream __vs__broadwell_fix_master_intrinsics __vs__broadwell_stream .png"
+       alt="drawing"
+       style="width:750px;" />
+</div>
+
+- *(green vs all)* **stream** in haswell is faster than the other ones.
+  (there wasn't enough time to soup up the code for broadwell)
+
+- *(yellow vs pink)* stream in broadwell is worse up to N=2048 but then is
+  quite better.
+
+- **stream** in haswell needs a smaller N (in comparison to Broadwell) to show its
+  profits against fix-master and change the results in favor of it.
+  (Proportion between the groups *blue-green* and *yellow-pink*).
+
+---
+## Changes from E5-2620v3 to E5-2680v4
+
+<div align="center">
+  <img src="res/migrations_imgs/nspcellgraph__haswell_ispc_shload __vs__haswell_intrinsics_shload __vs__broadwell_fix_master_ispc __vs__broadwell_fix_master_intrinsics .png"
+       alt="drawing"
+       style="width:750px;" />
+</div>
+
+- Broadwell works worse from N=4096.
+
+- *(ispc vs intrinsics)* ISPC in Haswell is better for smaller cases,
+  but that is not the case in Broadwell. Intrinsics is better in all cases.
 ---
 class: center, middle
 # Tidying up
@@ -83,7 +124,7 @@ the same interfaces in intrinsics and ispc.
 Now, it is possible to
 compile either **intrinsics** or **ispc** code by means of Makefile rules.
 
-A non-vectorized version was also included.
+A non-vectorized version was also included (Useful in debugging).
 ---
 #Tidying up
 
@@ -383,6 +424,41 @@ static void project(unsigned int n, float *u, float *v, float *u0, float *v0,
 }
 ```
 ---
+class: center, middle
+# Scaling
+---
+## Scaling
+<div align="center">
+  <img src="res/scaling_imgs/jupiterace_rawscaling__lab3.png"
+       alt="drawing"
+       style="width:650px;" />
+</div>
+---
+## Scaling
+<div align="center">
+  <img src="res/scaling_imgs/jupiterace_efcyscaling__lab3.png"
+       alt="drawing"
+       style="width:650px;" />
+</div>
+---
+class: center, middle
+# Final results
+---
+## lab1 vs lab3 (28 threads)
+<div align="center">
+  <img src="res/lab123_imgs/nspcellgraph__broadwell_lab1 __vs__broadwell_lab3 .png"
+       alt="drawing"
+       style="width:550px;" />
+</div>
+---
+## lab2 vs lab3 (28 threads)
+<div align="center">
+  <img src="res/lab123_imgs/nspcellgraph__haswell_lab2_stream __vs__broadwell_lab2_shload __vs__broadwell_lab2_stream __vs__broadwell_lab3 .png"
+       alt="drawing"
+       style="width:780px;" />
+</div>
+---
+
 # References
 
 - Blaise, B. (2020) "OpenMP Tutorial" in *Lawrence Livermore National Laboratory*. May. 18, 2020. Available in <https://computing.llnl.gov/tutorials/openMP/>
