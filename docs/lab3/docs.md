@@ -6,7 +6,7 @@
 # Changes from E5-2620v3 to E5-2680v4
 
 Before adding a line of code we needed to re-measure our previous results
-since they will not be comparable with future versions of the project due 
+since they will not be comparable with future versions of the project due
 to the change of architecture from Haswell to Broadwell in zx81 and jupiterace.
 We also had to corroborate that our best approaches were still obtaining
 similar outcomes. It was also important to decide if our best
@@ -28,7 +28,7 @@ We got the following conclusions:
 
 We were taken by surprise when stream was worse for the smallest cases
 (N = 128, 512, and 2048) but considerably better for the largest ones
-(N = 4096 and 8192) *Shload* was also worse than without it. 
+(N = 4096 and 8192) *Shload* was also worse than without it.
 And the code without these approaches was the best one for the
 smaller cases but one of the worst for the largest ones.
 That was totally confusing. Which of them was the fastest one?
@@ -42,7 +42,7 @@ laboratory.
 # Tidying up
 
 In order to provide a parallelization which works for the three approaches
-mentioned above implemented in *intrinsics* and *ispc*(except for of 
+mentioned above implemented in *intrinsics* and *ispc*(except for of
 *Stream* which has not been done in *ispc* yet), a code migration was
 performed. The file *solver.c* was changed in such a way that *advect*,
 *project* and *linsolve* were implemented by means of functions that share
@@ -95,9 +95,7 @@ of rows of the same length for each thread it is the one that feets better.
 So, each thread receives a strip of size ceil(N/threads). The last thread
 will receive the remaining rows if the number of threads does not divide N.
 
-<div align="center">
-  <img src="res/other_imgs/strips.png" alt="drawing" style="width:450px;" />
-</div>
+![strips](res/other_imgs/strips.png)
 
 # From-To division
 
@@ -158,7 +156,7 @@ maximum values, a reduction over a parallel for was used.
 ```c
   float max_velocity2 = 0.0f;
   float max_density = 0.0f;
-  
+
   #pragma omp parallel for default(none) private(i) firstprivate(size, uu, vv, d) reduction(max: max_velocity2, max_density)
   for (i = 0; i < size; i++) {
     if (max_velocity2 < uu[i] * uu[i] + vv[i] * vv[i]) {
@@ -220,9 +218,7 @@ a different thread, especially in the upper and lower borders (since it is
 an stencil problem). So barriers should be added to avoid a race condition.
 Here is a graph of dependencies between the procedures that performs step.
 
-<div align="center">
-  <img src="res/other_imgs/graph-dependency.png" alt="drawing" style="width:450px;" />
-</div>
+![graph dependency](res/other_imgs/graph-dependency.png)
 
 As we can see, the three add_source can be executed without any problem. Then,
 diffuse would have a race condition if one thread needs information of a
@@ -230,9 +226,7 @@ neighbour strip. If it needs so, add_source should had been done. So one barrier
 be place after add_source. Applying a similar analysis, we found out where
 would be necessary synchronization.
 
-<div align="center">
-  <img src="res/other_imgs/graph-dependency-barriers.png" alt="drawing" style="width:450px;" />
-</div>
+![minimal barriers](res/other_imgs/graph-dependency-barriers.png)
 
 ```c
 void step(unsigned int n, float *d, float *u, float *v, float *d0,
@@ -347,39 +341,21 @@ As long as we increase the number of threads, more performance we get,
 but less efficient we are. No matter how much threads we add,
 results tend to be enclosed by a certain threshold.
 
-<div align="center">
-  <img src="res/scaling_imgs/jupiterace_rawscaling__lab3.png"
-       alt="drawing"
-       style="width:550px;" />
-</div>
+![raw scaling](res/scaling_imgs/jupiterace_rawscaling__lab3.png)
 
-<div align="center">
-  <img src="res/scaling_imgs/jupiterace_efcyscaling__lab3.png"
-       alt="drawing"
-       style="width:550px;" />
-</div>
+![efficiency scaling](res/scaling_imgs/jupiterace_efcyscaling__lab3.png)
 
 # Final Results
 
 Finally, this implementations were compared along the best results obtained
 in lab2 and lab3 in order to see how much we have improved.
 
-<div align="center">
-  <img src="res/lab123_imgs/nspcellgraph__broadwell_lab1 __vs__broadwell_lab3 .png"
-       alt="drawing"
-       style="width:550px;" />
-</div>
+![lab2 vs lab3](res/lab123_imgs/nspcellgraph__haswell_lab2_stream __vs__broadwell_lab2_shload __vs__broadwell_lab2_stream __vs__broadwell_lab3 .png)
 
-<div align="center">
-  <img src="res/lab123_imgs/nspcellgraph__haswell_lab2_stream __vs__broadwell_lab2_shload __vs__broadwell_lab2_stream __vs__broadwell_lab3 .png"
-       alt="drawing"
-       style="width:780px;" />
-</div>
-
-
+![lab1 vs lab3](res/lab123_imgs/nspcellgraph__broadwell_lab1 __vs__broadwell_lab3 .png)
 
 # References
 
- - Blaise, B. (2020) "OpenMP Tutorial" in *Lawrence Livermore National Laboratory*. May. 18, 2020. Available in <https://computing.llnl.gov/tutorials/openMP/>
- - Yliluoma, J. (2007) "Guide into OpenMP: Easy multithreading programming for C++". Available in <https://bisqwit.iki.fi/story/howto/openmp/>
- - Lameter, C. (2013) "NUMA (Non-Uniform Memory Access): An Overview". in *acmqueue*. August 9, 2013. Available in <https://queue.acm.org/detail.cfm?id=2513149>
+- Blaise, B. (2020) "OpenMP Tutorial" in *Lawrence Livermore National Laboratory*. May. 18, 2020. Available in <https://computing.llnl.gov/tutorials/openMP/>
+- Yliluoma, J. (2007) "Guide into OpenMP: Easy multithreading programming for C++". Available in <https://bisqwit.iki.fi/story/howto/openmp/>
+- Lameter, C. (2013) "NUMA (Non-Uniform Memory Access): An Overview". in *acmqueue*. August 9, 2013. Available in <https://queue.acm.org/detail.cfm?id=2513149>
