@@ -1,3 +1,12 @@
+cuda: clean
+	# TODO: Dummy CUDA target, integrate properly into the Makefile
+	# See https://devblogs.nvidia.com/separate-compilation-linking-cuda-device-code/
+	# for more compiling and linking ideas, see -dc and -dlink to mix gcc and nvcc
+
+	# Toggle comments for switching headless/demo compilation
+	# nvcc headless.c timing.c solver.c solver_cuda.c -o headless -lGL -lGLU -lglut --compiler-options=-fopenmp
+	nvcc demo.c timing.c solver.c solver_cuda.c -o demo -lGL -lGLU -lglut --compiler-options=-fopenmp
+
 BUILD=intrinsics # nonvect | intrinsics | ispc
 
 fastest_cflags:=-Ofast -march=native -floop-nest-optimize -funroll-loops -flto -g
