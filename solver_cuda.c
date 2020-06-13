@@ -19,6 +19,8 @@ void gpu_add_source(unsigned int n, float *dst, const float *src, float dt) {
   const int grid_height = gridDim.y * blockDim.y;
   const int gtidx = blockIdx.x * blockDim.x + threadIdx.x;
   const int gtidy = blockIdx.y * blockDim.y + threadIdx.y;
+  // TODO: Change the boundary of the loop. It should go up to n + 2
+  // Another option: Consider the range [1, n] x [1, n]
   for (int y = gtidy; y < n; y += grid_height) {
     for (int x = gtidx; x < n; x += grid_width) {
       int index = y * n + x;
@@ -34,6 +36,35 @@ void add_source(unsigned int n, float *x, const float *s, float dt,
                 const unsigned int from, const unsigned int to) {
   for (unsigned int i = idx(0, from, n + 2); i < idx(0, to, n + 2); i++) {
     x[i] += dt * s[i];
+  }
+}
+
+__global__
+void gpu_lin_solve_rb_step(grid_color color, unsigned int n, float a, float c,
+                           const float *__restrict__ same0,
+                           const float *__restrict__ neigh,
+                           float *__restrict__ same) {
+  // unsigned int start = color == RED ? 0 : 1;
+  // int shift = color == RED ? 1 : -1;
+  // TODO: Clean start/shift code in all its usages
+  unsigned int width = (n + 2) / 2;
+
+  unsigned int start = ((color == RED && (threadIdx.y % 2 == 0)) ||
+                        (color == BLACK && (threadIdx.y % 2 == 1)));
+  int shift = 1 - start * 2;
+
+  const int grid_tidx = blockIdx.x * blockDim.x + threadIdx.x;
+  const int grid_tidy = blockIdx.y * blockDim.y + threadIdx.y;
+
+  int x = start + grid_tidx;  // [start, width - (1 - start))
+  int y = 1 + grid_tidy;      // [1, n]
+
+  if(x < width - (1 - start)){
+    int index = y * width + x;
+    same[index] =
+          (same0[index] + a * (neigh[index - width] + neigh[index] +
+                               neigh[index + shift] + neigh[index + width])) /
+          c;
   }
 }
 

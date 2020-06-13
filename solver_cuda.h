@@ -1,9 +1,15 @@
 #pragma once
 
-__global__ void gpu_add_source(unsigned int n, float *x, const float *s, float dt);
+__global__
+void gpu_add_source(unsigned int n, float *x, const float *s, float dt);
 
 void add_source(unsigned int n, float *x, const float *s, float dt,
                 const unsigned int from, const unsigned int to);
+
+__global__
+void gpu_lin_solve_rb_step(grid_color color,unsigned int n, float a, float c,
+                           const float * same0, const float * neigh,
+                           float * same);
 
 void lin_solve_rb_step(grid_color color, unsigned int n, float a, float c,
                        const float *same0, const float *neigh, float *same,
