@@ -22,15 +22,17 @@
 #include <omp.h>
 #include <assert.h>
 
-#include "indices.h"
-#include "solver.h"
-#include "timing.h"
-
 /* macros */
 
 #define IX(x, y) (rb_idx((x), (y), (N + 2)))
 #define MIN(a, b)  (((a) < (b)) ? (a) : (b))
 #define MAX(a, b)  (((a) > (b)) ? (a) : (b))
+
+#include "indices.h"
+#include "solver.h"
+#include "timing.h"
+#include "helper_cuda.h"
+#include "helper_string.h"
 
 /* global variables */
 
@@ -41,6 +43,8 @@ static int dvel;
 
 static float *hd, *hu, *hv;
 static float *hd_prev, *hu_prev, *hv_prev;
+static float *dd, *du, *dv;
+static float *dd_prev, *du_prev, *dv_prev;
 
 static int win_id;
 static int win_x, win_y;
@@ -60,10 +64,24 @@ static void free_data(void) {
   if (hv_prev) _mm_free(hv_prev);
   if (hd) _mm_free(hd);
   if (hd_prev) _mm_free(hd_prev);
+  if (du) cudaFree(hu);
+  if (dv) cudaFree(hv);
+  if (du_prev) cudaFree(hu_prev);
+  if (dv_prev) cudaFree(hv_prev);
+  if (dd) cudaFree(hd);
+  if (dd_prev) cudaFree(hd_prev);
 }
 
 static void clear_data(void) {
   int i, size = (N + 2) * (N + 2);
+
+  size_t size_in_mem = size * sizeof(float);
+  cudaMemset(du, 0, size_in_mem);
+  cudaMemset(dv, 0, size_in_mem);
+  cudaMemset(du_prev, 0, size_in_mem);
+  cudaMemset(dv_prev, 0, size_in_mem);
+  cudaMemset(dd, 0, size_in_mem);
+  cudaMemset(dd_prev, 0, size_in_mem);
 
   #pragma omp parallel for
   for (i = 0; i < size; i++) {
@@ -73,14 +91,19 @@ static void clear_data(void) {
 }
 
 static int allocate_data(void) {
-  int size = (N + 2) * (N + 2);
-
-  hu = (float *)_mm_malloc(size * sizeof(float), 32);
-  hv = (float *)_mm_malloc(size * sizeof(float), 32);
-  hu_prev = (float *)_mm_malloc(size * sizeof(float), 32);
-  hv_prev = (float *)_mm_malloc(size * sizeof(float), 32);
-  hd = (float *)_mm_malloc(size * sizeof(float), 32);
-  hd_prev = (float *)_mm_malloc(size * sizeof(float), 32);
+  int size = (N + 2) * (N + 2) * sizeof(float);
+  checkCudaErrors(cudaMalloc(&du, size));
+  checkCudaErrors(cudaMalloc(&du_prev, size));
+  checkCudaErrors(cudaMalloc(&dv, size));
+  checkCudaErrors(cudaMalloc(&dv_prev, size));
+  checkCudaErrors(cudaMalloc(&dd, size));
+  checkCudaErrors(cudaMalloc(&dd_prev, size));
+  hu = (float *)_mm_malloc(size, 32);
+  hv = (float *)_mm_malloc(size, 32);
+  hu_prev = (float *)_mm_malloc(size, 32);
+  hv_prev = (float *)_mm_malloc(size, 32);
+  hd = (float *)_mm_malloc(size, 32);
+  hd_prev = (float *)_mm_malloc(size, 32);
 
   if (!hu || !hv || !hu_prev || !hv_prev || !hd || !hd_prev) {
     fprintf(stderr, "cannot allocate data\n");
