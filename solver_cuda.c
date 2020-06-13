@@ -14,12 +14,17 @@ cudaError_t checkCuda(cudaError_t result)
 }
 
 __global__
-void gpu_add_source(unsigned int n, float *x, const float *s, float dt) {
-  int gtidx = blockIdx.x * blockDim.x + threadIdx.x;
-  int gtidy = blockIdx.y * blockDim.y + threadIdx.y;
-  int gridWidth = gridDim.x * blockDim.x;
-  int gtid = gtidy * gridWidth + gtidx;
-  x[gtid] += dt * s[gtid];
+void gpu_add_source(unsigned int n, float *dst, const float *src, float dt) {
+  const int grid_width = gridDim.x * blockDim.x;
+  const int grid_height = gridDim.y * blockDim.y;
+  const int gtidx = blockIdx.x * blockDim.x + threadIdx.x;
+  const int gtidy = blockIdx.y * blockDim.y + threadIdx.y;
+  for (int y = gtidy; y < n; y += grid_height) {
+    for (int x = gtidx; x < n; x += grid_width) {
+      int index = y * n + x;
+      dst[index] += dt * src[index];
+    }
+  }
 }
 
 // TODO: Make an add_source version using grid stride loops
