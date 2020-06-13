@@ -131,22 +131,35 @@ void step(unsigned int n, float diff, float visc, float dt,
           float* dd, float *du, float *dv, float *dd0, float *du0, float *dv0,
           const unsigned int from, const unsigned int to) {
 
-  //const dim3 block_dim{16, 16};
-  //const dim3 grid_dim{n / block_dim.x, n / block_dim.y};
+  const dim3 block_dim{16, 16};
+  const dim3 grid_dim{n / block_dim.x, n / block_dim.y};
 
   // TODO: These launches can be unsynchronized inside the device, specify that
-  // gpu_add_source<<<grid_dim, block_dim>>>(n, dd, dd0, dt);
-  // gpu_add_source<<<grid_dim, block_dim>>>(n, du, dd0, dt);
-  // gpu_add_source<<<grid_dim, block_dim>>>(n, dv, dd0, dt);
 
-  //checkCudaErrors(cudaDeviceSynchronize());
+  size_t size = (n + 2) * (n + 2) * sizeof(float);
+  checkCudaErrors(cudaMemcpy(dd, hd, size, cudaMemcpyHostToDevice));
+  checkCudaErrors(cudaMemcpy(du, hu, size, cudaMemcpyHostToDevice));
+  checkCudaErrors(cudaMemcpy(dv, hv, size, cudaMemcpyHostToDevice));
+  checkCudaErrors(cudaMemcpy(dd0, hd0, size, cudaMemcpyHostToDevice));
+  checkCudaErrors(cudaMemcpy(du0, hu0, size, cudaMemcpyHostToDevice));
+  checkCudaErrors(cudaMemcpy(dv0, hv0, size, cudaMemcpyHostToDevice));
+  gpu_add_source<<<grid_dim, block_dim>>>(n, dd, dd0, dt);
+  gpu_add_source<<<grid_dim, block_dim>>>(n, du, dd0, dt);
+  gpu_add_source<<<grid_dim, block_dim>>>(n, dv, dd0, dt);
+  checkCudaErrors(cudaMemcpy(hd, dd, size, cudaMemcpyDeviceToHost));
+  checkCudaErrors(cudaMemcpy(hu, du, size, cudaMemcpyDeviceToHost));
+  checkCudaErrors(cudaMemcpy(hv, dv, size, cudaMemcpyDeviceToHost));
+  checkCudaErrors(cudaMemcpy(hd0, dd0, size, cudaMemcpyDeviceToHost));
+  checkCudaErrors(cudaMemcpy(hu0, du0, size, cudaMemcpyDeviceToHost));
+  checkCudaErrors(cudaMemcpy(hv0, dv0, size, cudaMemcpyDeviceToHost));
 
+  checkCudaErrors(cudaDeviceSynchronize());
 
   // Old openmp version
-  add_source(n, hd, hd0, dt, from, to);
-  add_source(n, hu, hu0, dt, from, to);
-  add_source(n, hv, hv0, dt, from, to);
-  #pragma omp barrier
+  // add_source(n, hd, hd0, dt, from, to);
+  // add_source(n, hu, hu0, dt, from, to);
+  // add_source(n, hv, hv0, dt, from, to);
+  // #pragma omp barrier
 
   SWAP(hd0, hd);
   SWAP(hu0, hu);
