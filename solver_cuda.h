@@ -1,5 +1,7 @@
 #pragma once
 
+__global__ void gpu_add_source(unsigned int n, float *x, const float *s, float dt);
+
 void add_source(unsigned int n, float *x, const float *s, float dt,
                 const unsigned int from, const unsigned int to);
 

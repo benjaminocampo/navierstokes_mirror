@@ -1,8 +1,32 @@
 #include "indices.h"
 #include "solver.h"
 
+inline
+cudaError_t checkCuda(cudaError_t result)
+{
+#if defined(DEBUG) || defined(_DEBUG)
+  if (result != cudaSuccess) {
+    fprintf(stderr, "CUDA Runtime Error: %sn", cudaGetErrorString(result));
+    assert(result == cudaSuccess);
+  }
+#endif
+  return result;
+}
+
+__global__
+void gpu_add_source(unsigned int n, float *x, const float *s, float dt) {
+  int gtidx = blockIdx.x * blockDim.x + threadIdx.x;
+  int gtidy = blockIdx.y * blockDim.y + threadIdx.y;
+  int gridWidth = gridDim.x * blockDim.x;
+  int gtid = gtidy * gridWidth + gtidx;
+  x[gtid] += dt * s[gtid];
+}
+
+// TODO: Make an add_source version using grid stride loops
+// https://devblogs.nvidia.com/cuda-pro-tip-write-flexible-kernels-grid-stride-loops/
+
 void add_source(unsigned int n, float *x, const float *s, float dt,
-                           const unsigned int from, const unsigned int to) {
+                const unsigned int from, const unsigned int to) {
   for (unsigned int i = idx(0, from, n + 2); i < idx(0, to, n + 2); i++) {
     x[i] += dt * s[i];
   }

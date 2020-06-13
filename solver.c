@@ -10,6 +10,8 @@
 #include "solver_intrinsics.h"
 #elif defined ISPC
 #include "solver_ispc.h"
+#elif defined CUDA
+#include "solver_cuda.h"
 #else
 #include "solver_nonvect.h"
 #endif
@@ -44,8 +46,8 @@ static void set_bnd(unsigned int n, boundary b, float *x,
   }
 }
 
-static void lin_solve(unsigned int n, boundary b, float *restrict x,
-                      const float *restrict x0, const float a, const float c,
+static void lin_solve(unsigned int n, boundary b, float *__restrict__ x,
+                      const float *__restrict__ x0, const float a, const float c,
                       const unsigned int from, const unsigned int to) {
   unsigned int color_size = (n + 2) * ((n + 2) / 2);
   const float *red0 = x0;
@@ -125,10 +127,23 @@ static void project(unsigned int n, float *u, float *v, float *u0, float *v0,
 void step(unsigned int n, float *d, float *u, float *v, float *d0,
           float *u0, float *v0, float diff, float visc, float dt,
           unsigned int from, unsigned int to) {
-  add_source(n, d, d0, dt, from, to);
-  add_source(n, u, u0, dt, from, to);
-  add_source(n, v, v0, dt, from, to);
-  #pragma omp barrier
+
+  const dim3 block_dim{16, 16};
+  const dim3 grid_dim{n / block_dim.x, n / block_dim.y};
+
+  // TODO: These launches can be unsynchronized inside the device, specify that
+  gpu_add_source<<<grid_dim, block_dim>>>(n, d, d0, dt);
+  gpu_add_source<<<grid_dim, block_dim>>>(n, u, d0, dt);
+  gpu_add_source<<<grid_dim, block_dim>>>(n, v, d0, dt);
+
+  cudaDeviceSynchronize();
+
+
+  // Old openmp version
+  // add_source(n, d, d0, dt, from, to);
+  // add_source(n, u, u0, dt, from, to);
+  // add_source(n, v, v0, dt, from, to);
+  // #pragma omp barrier
 
   SWAP(d0, d);
   SWAP(u0, u);
