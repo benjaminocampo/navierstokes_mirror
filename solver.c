@@ -48,8 +48,37 @@ static void set_bnd(unsigned int n, boundary b, float *x,
   }
 }
 
-static void lin_solve(unsigned int n, boundary b, float *__restrict__ x,
-                      const float *__restrict__ x0, const float a, const float c,
+static void lin_solve(unsigned int n, boundary b, const float a, const float c,
+                      float *__restrict__ hx, const float *__restrict__ hx0,
+                      float *__restrict__ dx, const float *__restrict__ dx0,
+                      const unsigned int from, const unsigned int to) {
+  unsigned int color_size = (n + 2) * ((n + 2) / 2);
+  const float *hred0 = hx0;
+  const float *hblk0 = hx0 + color_size;
+  float *hred = hx;
+  float *hblk = hx + color_size;
+
+  for (unsigned int k = 0; k < 20; ++k) {
+    lin_solve_rb_step(RED, n, a, c, hred0, hblk, hred, from, to);
+    lin_solve_rb_step(BLACK, n, a, c, hblk0, hred, hblk, from, to);
+    #pragma omp barrier
+    set_bnd(n, b, hx, from, to);
+  }
+}
+
+static void diffuse(unsigned int n, boundary b, float diff, float dt, 
+                    float *hx, const float *hx0,
+                    float *dx, const float *dx0,
+                    const unsigned int from, const unsigned int to) {
+  const float a = dt * diff * n * n;
+  lin_solve(n, b, a, 1 + 4 * a, hx, hx0, dx, dx0, from, to);
+}
+
+// lin_solve version of project. TODO: Change signature inside of project to use
+// the other linsolve.
+static void project_lin_solve(unsigned int n, boundary b,
+                      float *__restrict__ x, const float *__restrict__ x0,
+                      const float a, const float c,
                       const unsigned int from, const unsigned int to) {
   unsigned int color_size = (n + 2) * ((n + 2) / 2);
   const float *red0 = x0;
@@ -58,18 +87,11 @@ static void lin_solve(unsigned int n, boundary b, float *__restrict__ x,
   float *blk = x + color_size;
 
   for (unsigned int k = 0; k < 20; ++k) {
-      lin_solve_rb_step(RED, n, a, c, red0, blk, red, from, to);
-      lin_solve_rb_step(BLACK, n, a, c, blk0, red, blk, from, to);
-      #pragma omp barrier
-      set_bnd(n, b, x, from, to);
+    lin_solve_rb_step(RED, n, a, c, red0, blk, red, from, to);
+    lin_solve_rb_step(BLACK, n, a, c, blk0, red, blk, from, to);
+    #pragma omp barrier
+    set_bnd(n, b, x, from, to);
   }
-}
-
-static void diffuse(unsigned int n, boundary b, float *x, const float *x0,
-                    float diff, float dt, const unsigned int from,
-                    const unsigned int to) {
-  float a = dt * diff * n * n;
-  lin_solve(n, b, x, x0, a, 1 + 4 * a, from, to);
 }
 
 static void advect(unsigned int n, float *d, float *u, float *v,
@@ -115,7 +137,7 @@ static void project(unsigned int n, float *u, float *v, float *u0, float *v0,
   set_bnd(n, NONE, u0, from, to);
   #pragma omp barrier
 
-  lin_solve(n, NONE, u0, v0, 1, 4, from, to);
+  project_lin_solve(n, NONE, u0, v0, 1, 4, from, to);
   #pragma omp barrier
 
   project_rb_step2(n, RED, redu, redv, blku0, from, to);
@@ -131,8 +153,8 @@ void step(unsigned int n, float diff, float visc, float dt,
           float* dd, float *du, float *dv, float *dd0, float *du0, float *dv0,
           const unsigned int from, const unsigned int to) {
 
-  const dim3 block_dim{16, 16};
-  const dim3 grid_dim{n / block_dim.x, n / block_dim.y};
+  const dim3 block_dim{1, 1};
+  const dim3 grid_dim{1, 1};
 
   // TODO: These launches can be unsynchronized inside the device, specify that
 
@@ -164,9 +186,15 @@ void step(unsigned int n, float diff, float visc, float dt,
   SWAP(hd0, hd);
   SWAP(hu0, hu);
   SWAP(hv0, hv);
-  diffuse(n, NONE, hd, hd0, diff, dt, from, to);
-  diffuse(n, VERTICAL, hu, hu0, visc, dt, from, to);
-  diffuse(n, HORIZONTAL, hv, hv0, visc, dt, from, to);
+  
+  diffuse(n, NONE, diff, dt, hd, hd0, dd, dd0, from, to);
+  diffuse(n, VERTICAL, visc, dt, hu, hu0, du, du0, from, to);
+  diffuse(n, HORIZONTAL, visc, dt, hv, hv0, dv, dv0, from, to);
+
+  // Old openmp version
+  //diffuse(n, NONE, hd, hd0, diff, dt, from, to);
+  //diffuse(n, VERTICAL, hu, hu0, visc, dt, from, to);
+  //diffuse(n, HORIZONTAL, hv, hv0, visc, dt, from, to);
   #pragma omp barrier
 
   project(n, hu, hv, hu0, hv0, from, to);
