@@ -3,6 +3,8 @@
 #include <x86intrin.h>
 
 #include "indices.h"
+#include "helper_string.h"
+#include "helper_cuda.h"
 
 #include <omp.h>
 
@@ -136,7 +138,7 @@ void step(unsigned int n, float *d, float *u, float *v, float *d0,
   gpu_add_source<<<grid_dim, block_dim>>>(n, u, d0, dt);
   gpu_add_source<<<grid_dim, block_dim>>>(n, v, d0, dt);
 
-  cudaDeviceSynchronize();
+  checkCudaErrors(cudaDeviceSynchronize());
 
 
   // Old openmp version

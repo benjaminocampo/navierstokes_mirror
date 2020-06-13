@@ -39,8 +39,8 @@ static float dt, diff, visc;
 static float force, source;
 static int dvel;
 
-static float *u, *v, *u_prev, *v_prev;
-static float *dens, *dens_prev;
+static float *hd, *hu, *hv;
+static float *hd_prev, *hu_prev, *hv_prev;
 
 static int win_id;
 static int win_x, win_y;
@@ -54,12 +54,12 @@ static int omx, omy, mx, my;
 */
 
 static void free_data(void) {
-  if (u) _mm_free(u);
-  if (v) _mm_free(v);
-  if (u_prev) _mm_free(u_prev);
-  if (v_prev) _mm_free(v_prev);
-  if (dens) _mm_free(dens);
-  if (dens_prev) _mm_free(dens_prev);
+  if (hu) _mm_free(hu);
+  if (hv) _mm_free(hv);
+  if (hu_prev) _mm_free(hu_prev);
+  if (hv_prev) _mm_free(hv_prev);
+  if (hd) _mm_free(hd);
+  if (hd_prev) _mm_free(hd_prev);
 }
 
 static void clear_data(void) {
@@ -68,21 +68,21 @@ static void clear_data(void) {
   #pragma omp parallel for
   for (i = 0; i < size; i++) {
     // TODO: assert i in [from, to] range
-    u[i] = v[i] = u_prev[i] = v_prev[i] = dens[i] = dens_prev[i] = 0.0f;
+    hu[i] = hv[i] = hu_prev[i] = hv_prev[i] = hd[i] = hd_prev[i] = 0.0f;
   }
 }
 
 static int allocate_data(void) {
   int size = (N + 2) * (N + 2);
 
-  u = (float *)_mm_malloc(size * sizeof(float), 32);
-  v = (float *)_mm_malloc(size * sizeof(float), 32);
-  u_prev = (float *)_mm_malloc(size * sizeof(float), 32);
-  v_prev = (float *)_mm_malloc(size * sizeof(float), 32);
-  dens = (float *)_mm_malloc(size * sizeof(float), 32);
-  dens_prev = (float *)_mm_malloc(size * sizeof(float), 32);
+  hu = (float *)_mm_malloc(size * sizeof(float), 32);
+  hv = (float *)_mm_malloc(size * sizeof(float), 32);
+  hu_prev = (float *)_mm_malloc(size * sizeof(float), 32);
+  hv_prev = (float *)_mm_malloc(size * sizeof(float), 32);
+  hd = (float *)_mm_malloc(size * sizeof(float), 32);
+  hd_prev = (float *)_mm_malloc(size * sizeof(float), 32);
 
-  if (!u || !v || !u_prev || !v_prev || !dens || !dens_prev) {
+  if (!hu || !hv || !hu_prev || !hv_prev || !hd || !hd_prev) {
     fprintf(stderr, "cannot allocate data\n");
     return (0);
   }
@@ -124,7 +124,7 @@ static void draw_velocity(void) {
       y = (j - 0.5f) * h;
 
       glVertex2f(x, y);
-      glVertex2f(x + u[IX(i, j)], y + v[IX(i, j)]);
+      glVertex2f(x + hu[IX(i, j)], y + hv[IX(i, j)]);
     }
   }
 
@@ -144,10 +144,10 @@ static void draw_density(void) {
     for (j = 0; j <= N; j++) {
       y = (j - 0.5f) * h;
 
-      d00 = dens[IX(i, j)];
-      d01 = dens[IX(i, j + 1)];
-      d10 = dens[IX(i + 1, j)];
-      d11 = dens[IX(i + 1, j + 1)];
+      d00 = hd[IX(i, j)];
+      d01 = hd[IX(i, j + 1)];
+      d10 = hd[IX(i + 1, j)];
+      d11 = hd[IX(i + 1, j + 1)];
 
       glColor3f(d00, d00, d00);
       glVertex2f(x, y);
@@ -286,12 +286,12 @@ static void idle_func(void) {
   static double step_ns_p_cell = 0.0;
 
   start_t = wtime();
-  react(dens_prev, u_prev, v_prev);
+  react(hd_prev, hu_prev, hv_prev);
 
   react_ns_p_cell += 1.0e9 * (wtime() - start_t) / (N * N);
 
   start_t = wtime();
-  #pragma omp parallel firstprivate(dens, u, v, dens_prev, u_prev, v_prev, diff, visc, dt)
+  #pragma omp parallel firstprivate(hd, hu, hv, hd_prev, hu_prev, hv_prev, diff, visc, dt)
   {
     int threads = omp_get_num_threads();
     int strip_size = (N + threads - 1) / threads;
@@ -299,7 +299,7 @@ static void idle_func(void) {
     for(int tid = 0; tid < threads; tid++){
       int from = tid * strip_size + 1;
       int to = MIN((tid + 1) * strip_size + 1, N + 1);
-      step(N, dens, u, v, dens_prev, u_prev, v_prev, diff, visc, dt, from, to);
+      step(N, hd, hu, hv, hd_prev, hu_prev, hv_prev, diff, visc, dt, from, to);
     }
   }
   step_ns_p_cell += 1.0e9 * (wtime() - start_t) / (N * N);

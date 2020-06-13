@@ -1,6 +1,6 @@
 #include "indices.h"
 #include "solver.h"
-
+#include "helper_cuda.h"
 inline
 cudaError_t checkCuda(cudaError_t result)
 {
