@@ -93,7 +93,11 @@ static void lin_solve(unsigned int n, boundary b, const float a, const float c,
     // lin_solve_rb_step(RED, n, a, c, hred0, hblk, hred, from, to);
     // lin_solve_rb_step(BLACK, n, a, c, hblk0, hred, hblk, from, to);
     // #pragma omp barrier
-    set_bnd(n, b, hx, from, to);
+    checkCudaErrors(cudaMemcpy(dx, hx, size, cudaMemcpyHostToDevice));
+    // gpu_set_bnd<<<div_round_up(n + 2, 16), 16>>>(n, b, dx);
+    gpu_set_bnd<<<1, 1>>>(n, b, dx);
+    checkCudaErrors(cudaMemcpy(hx, dx, size, cudaMemcpyDeviceToHost));
+    // set_bnd(n, b, hx, from, to);
   }
 }
 

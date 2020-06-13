@@ -1,6 +1,9 @@
 #include "indices.h"
 #include "solver.h"
 #include "helper_cuda.h"
+
+#define IX(x, y) (rb_idx((x), (y), (n + 2)))
+
 inline
 cudaError_t checkCuda(cudaError_t result)
 {
@@ -37,6 +40,21 @@ void add_source(unsigned int n, float *x, const float *s, float dt,
   for (unsigned int i = idx(0, from, n + 2); i < idx(0, to, n + 2); i++) {
     x[i] += dt * s[i];
   }
+}
+
+__global__
+void gpu_set_bnd(unsigned int n, boundary b, float *x) {
+      // TODO: Currently, this must be launched with <<<1, 1>>>
+      for (unsigned int i = 1; i <= n; i++) {
+        x[IX(0, i)] = b == VERTICAL ? -x[IX(1, i)] : x[IX(1, i)];
+        x[IX(n + 1, i)] = b == VERTICAL ? -x[IX(n, i)] : x[IX(n, i)];
+        x[IX(i, 0)] = b == HORIZONTAL ? -x[IX(i, 1)] : x[IX(i, 1)];
+        x[IX(i, n + 1)] = b == HORIZONTAL ? -x[IX(i, n)] : x[IX(i, n)];
+      }
+      x[IX(0, 0)] = 0.5f * (x[IX(1, 0)] + x[IX(0, 1)]);
+      x[IX(0, n + 1)] = 0.5f * (x[IX(1, n + 1)] + x[IX(0, n)]);
+      x[IX(n + 1, 0)] = 0.5f * (x[IX(n, 0)] + x[IX(n + 1, 1)]);
+      x[IX(n + 1, n + 1)] = -0.5f * (x[IX(n, n + 1)] + x[IX(n + 1, n)]);
 }
 
 __global__
