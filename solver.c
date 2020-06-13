@@ -126,44 +126,45 @@ static void project(unsigned int n, float *u, float *v, float *u0, float *v0,
   set_bnd(n, HORIZONTAL, v, from, to);
 }
 
-void step(unsigned int n, float *d, float *u, float *v, float *d0,
-          float *u0, float *v0, float diff, float visc, float dt,
-          unsigned int from, unsigned int to) {
+void step(unsigned int n, float diff, float visc, float dt,
+          float *hd, float *hu, float *hv, float *hd0, float *hu0, float *hv0,
+          float* dd, float *du, float *dv, float *dd0, float *du0, float *dv0,
+          const unsigned int from, const unsigned int to) {
 
-  const dim3 block_dim{16, 16};
-  const dim3 grid_dim{n / block_dim.x, n / block_dim.y};
+  //const dim3 block_dim{16, 16};
+  //const dim3 grid_dim{n / block_dim.x, n / block_dim.y};
 
   // TODO: These launches can be unsynchronized inside the device, specify that
-  gpu_add_source<<<grid_dim, block_dim>>>(n, d, d0, dt);
-  gpu_add_source<<<grid_dim, block_dim>>>(n, u, d0, dt);
-  gpu_add_source<<<grid_dim, block_dim>>>(n, v, d0, dt);
+  // gpu_add_source<<<grid_dim, block_dim>>>(n, dd, dd0, dt);
+  // gpu_add_source<<<grid_dim, block_dim>>>(n, du, dd0, dt);
+  // gpu_add_source<<<grid_dim, block_dim>>>(n, dv, dd0, dt);
 
-  checkCudaErrors(cudaDeviceSynchronize());
+  //checkCudaErrors(cudaDeviceSynchronize());
 
 
   // Old openmp version
-  // add_source(n, d, d0, dt, from, to);
-  // add_source(n, u, u0, dt, from, to);
-  // add_source(n, v, v0, dt, from, to);
-  // #pragma omp barrier
-
-  SWAP(d0, d);
-  SWAP(u0, u);
-  SWAP(v0, v);
-  diffuse(n, NONE, d, d0, diff, dt, from, to);
-  diffuse(n, VERTICAL, u, u0, visc, dt, from, to);
-  diffuse(n, HORIZONTAL, v, v0, visc, dt, from, to);
+  add_source(n, hd, hd0, dt, from, to);
+  add_source(n, hu, hu0, dt, from, to);
+  add_source(n, hv, hv0, dt, from, to);
   #pragma omp barrier
 
-  project(n, u, v, u0, v0, from, to);
+  SWAP(hd0, hd);
+  SWAP(hu0, hu);
+  SWAP(hv0, hv);
+  diffuse(n, NONE, hd, hd0, diff, dt, from, to);
+  diffuse(n, VERTICAL, hu, hu0, visc, dt, from, to);
+  diffuse(n, HORIZONTAL, hv, hv0, visc, dt, from, to);
   #pragma omp barrier
 
-  SWAP(d0, d);
-  SWAP(u0, u);
-  SWAP(v0, v);
-  advect(n, d, u, v, d0, u0, v0, dt, from, to);
+  project(n, hu, hv, hu0, hv0, from, to);
   #pragma omp barrier
 
-  project(n, u, v, u0, v0, from, to);
+  SWAP(hd0, hd);
+  SWAP(hu0, hu);
+  SWAP(hv0, hv);
+  advect(n, hd, hu, hv, hd0, hu0, hv0, dt, from, to);
+  #pragma omp barrier
+
+  project(n, hu, hv, hu0, hv0, from, to);
   #pragma omp barrier
 }

@@ -322,7 +322,10 @@ static void idle_func(void) {
     for(int tid = 0; tid < threads; tid++){
       int from = tid * strip_size + 1;
       int to = MIN((tid + 1) * strip_size + 1, N + 1);
-      step(N, hd, hu, hv, hd_prev, hu_prev, hv_prev, diff, visc, dt, from, to);
+      step(N, diff, visc, dt,
+           hd, hu, hv, hd_prev, hu_prev, hv_prev,
+           dd, du, dv, dd_prev, du_prev, dv_prev,
+           from, to);
     }
   }
   step_ns_p_cell += 1.0e9 * (wtime() - start_t) / (N * N);
