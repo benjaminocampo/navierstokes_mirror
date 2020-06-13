@@ -44,27 +44,21 @@ void gpu_lin_solve_rb_step(grid_color color, unsigned int n, float a, float c,
                            const float *__restrict__ same0,
                            const float *__restrict__ neigh,
                            float *__restrict__ same) {
-  // unsigned int start = color == RED ? 0 : 1;
-  // int shift = color == RED ? 1 : -1;
-  // TODO: Clean start/shift code in all its usages
   unsigned int width = (n + 2) / 2;
-
-  unsigned int start = ((color == RED && (threadIdx.y % 2 == 0)) ||
-                        (color == BLACK && (threadIdx.y % 2 == 1)));
-  int shift = 1 - start * 2;
-
+  unsigned int start = ((color == RED && ((threadIdx.y + 1) % 2 == 0)) ||
+                        (color == BLACK && ((threadIdx.y + 1) % 2 == 1)));
   const int grid_tidx = blockIdx.x * blockDim.x + threadIdx.x;
   const int grid_tidy = blockIdx.y * blockDim.y + threadIdx.y;
 
   int x = start + grid_tidx;  // [start, width - (1 - start))
   int y = 1 + grid_tidy;      // [1, n]
 
-  if(x < width - (1 - start)){
+  if(x < width - (1 - start) && y <= n){
     int index = y * width + x;
     same[index] =
-          (same0[index] + a * (neigh[index - width] + neigh[index] +
-                               neigh[index + shift] + neigh[index + width])) /
-          c;
+        (same0[index] + a * (neigh[index - width] + neigh[index - start] +
+                             neigh[index - start + 1] + neigh[index + width])) /
+        c;
   }
 }
 

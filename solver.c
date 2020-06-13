@@ -26,6 +26,8 @@
     x = tmp;         \
   }
 
+static unsigned int div_round_up(unsigned int a, unsigned int b) { return (a + b - 1) / b; }
+
 static void set_bnd(unsigned int n, boundary b, float *x,
                     const unsigned int from, unsigned int to) {
   for (unsigned int i = from; i < to; i++) {
@@ -68,7 +70,8 @@ static void lin_solve(unsigned int n, boundary b, const float a, const float c,
 
   const dim3 block_dim{16, 16};
   // The grid size is according to rb in order to cover the range [1, n]x[0, width)
-  const dim3 grid_dim{width / block_dim.x, n / block_dim.y};
+
+  const dim3 grid_dim{div_round_up(width, block_dim.x), n / block_dim.y};
   size_t size = (n + 2) * width * sizeof(float);
 
   for (unsigned int k = 0; k < 20; ++k) {
@@ -94,7 +97,7 @@ static void lin_solve(unsigned int n, boundary b, const float a, const float c,
   }
 }
 
-static void diffuse(unsigned int n, boundary b, float diff, float dt, 
+static void diffuse(unsigned int n, boundary b, float diff, float dt,
                     float *hx, float *hx0,
                     float *dx, float *dx0,
                     const unsigned int from, const unsigned int to) {
@@ -214,7 +217,7 @@ void step(unsigned int n, float diff, float visc, float dt,
   SWAP(hd0, hd);
   SWAP(hu0, hu);
   SWAP(hv0, hv);
-  
+
   diffuse(n, NONE, diff, dt, hd, hd0, dd, dd0, from, to);
   diffuse(n, VERTICAL, visc, dt, hu, hu0, du, du0, from, to);
   diffuse(n, HORIZONTAL, visc, dt, hv, hv0, dv, dv0, from, to);
