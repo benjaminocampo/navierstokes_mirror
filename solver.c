@@ -197,8 +197,8 @@ void step(unsigned int n, float diff, float visc, float dt,
   checkCudaErrors(cudaMemcpy(du0, hu0, size, cudaMemcpyHostToDevice));
   checkCudaErrors(cudaMemcpy(dv0, hv0, size, cudaMemcpyHostToDevice));
   gpu_add_source<<<grid_dim, block_dim>>>(n, dd, dd0, dt);
-  gpu_add_source<<<grid_dim, block_dim>>>(n, du, dd0, dt);
-  gpu_add_source<<<grid_dim, block_dim>>>(n, dv, dd0, dt);
+  gpu_add_source<<<grid_dim, block_dim>>>(n, du, du0, dt);
+  gpu_add_source<<<grid_dim, block_dim>>>(n, dv, dv0, dt);
   checkCudaErrors(cudaMemcpy(hd, dd, size, cudaMemcpyDeviceToHost));
   checkCudaErrors(cudaMemcpy(hu, du, size, cudaMemcpyDeviceToHost));
   checkCudaErrors(cudaMemcpy(hv, dv, size, cudaMemcpyDeviceToHost));
