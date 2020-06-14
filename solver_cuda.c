@@ -44,17 +44,20 @@ void add_source(unsigned int n, float *x, const float *s, float dt,
 
 __global__
 void gpu_set_bnd(unsigned int n, boundary b, float *x) {
-      // TODO: Currently, this must be launched with <<<1, 1>>>
-  for (unsigned int i = 1; i <= n; i++) {
+  const int grid_width = gridDim.x * blockDim.x;
+  const int gtid = blockIdx.x * blockDim.x + threadIdx.x;
+  for (unsigned int i = 1 + gtid; i <= n; i += grid_width) {
     x[IX(0, i)] = b == VERTICAL ? -x[IX(1, i)] : x[IX(1, i)];
     x[IX(n + 1, i)] = b == VERTICAL ? -x[IX(n, i)] : x[IX(n, i)];
     x[IX(i, 0)] = b == HORIZONTAL ? -x[IX(i, 1)] : x[IX(i, 1)];
     x[IX(i, n + 1)] = b == HORIZONTAL ? -x[IX(i, n)] : x[IX(i, n)];
   }
-  x[IX(0, 0)] = 0.5f * (x[IX(1, 0)] + x[IX(0, 1)]);
-  x[IX(0, n + 1)] = 0.5f * (x[IX(1, n + 1)] + x[IX(0, n)]);
-  x[IX(n + 1, 0)] = 0.5f * (x[IX(n, 0)] + x[IX(n + 1, 1)]);
-  x[IX(n + 1, n + 1)] = -0.5f * (x[IX(n, n + 1)] + x[IX(n + 1, n)]);
+  if(gtid == 0) {
+    x[IX(0, 0)] = 0.5f * (x[IX(1, 0)] + x[IX(0, 1)]);
+    x[IX(0, n + 1)] = 0.5f * (x[IX(1, n + 1)] + x[IX(0, n)]);
+    x[IX(n + 1, 0)] = 0.5f * (x[IX(n, 0)] + x[IX(n + 1, 1)]);
+    x[IX(n + 1, n + 1)] = -0.5f * (x[IX(n, n + 1)] + x[IX(n + 1, n)]);
+  }
 }
 
 // Pre: blockDim.y is even, if not, start needs to shift between row increments.

@@ -30,36 +30,24 @@ static unsigned int div_round_up(unsigned int a, unsigned int b) { return (a + b
 
 static void set_bnd(unsigned int n, boundary b, float *x,
                     const unsigned int from, unsigned int to) {
-  
-  for (unsigned int i = 1; i <= n; i++) {
+  for (unsigned int i = from; i < to; i++) {
     x[IX(0, i)] = b == VERTICAL ? -x[IX(1, i)] : x[IX(1, i)];
     x[IX(n + 1, i)] = b == VERTICAL ? -x[IX(n, i)] : x[IX(n, i)];
-    x[IX(i, 0)] = b == HORIZONTAL ? -x[IX(i, 1)] : x[IX(i, 1)];
-    x[IX(i, n + 1)] = b == HORIZONTAL ? -x[IX(i, n)] : x[IX(i, n)];
   }
-  x[IX(0, 0)] = 0.5f * (x[IX(1, 0)] + x[IX(0, 1)]);
-  x[IX(0, n + 1)] = 0.5f * (x[IX(1, n + 1)] + x[IX(0, n)]);
-  x[IX(n + 1, 0)] = 0.5f * (x[IX(n, 0)] + x[IX(n + 1, 1)]);
-  x[IX(n + 1, n + 1)] = -0.5f * (x[IX(n, n + 1)] + x[IX(n + 1, n)]);
-  
-  //for (unsigned int i = from; i < to; i++) {
-  //  x[IX(0, i)] = b == VERTICAL ? -x[IX(1, i)] : x[IX(1, i)];
-  //  x[IX(n + 1, i)] = b == VERTICAL ? -x[IX(n, i)] : x[IX(n, i)];
-  //}
-//
-  //if (from == 1) {
-  //  for (unsigned int i = 1; i < n + 1; i++)
-  //    x[IX(i, 0)] = b == HORIZONTAL ? -x[IX(i, 1)] : x[IX(i, 1)];
-  //  x[IX(0, 0)] = 0.5f * (x[IX(1, 0)] + x[IX(0, 1)]);
-  //  x[IX(n + 1, 0)] = 0.5f * (x[IX(n, 0)] + x[IX(n + 1, 1)]);
-  //}
-//
-  //if (to == n + 1) {
-  //  for (unsigned int i = 1; i < n + 1; i++)
-  //    x[IX(i, n + 1)] = b == HORIZONTAL ? -x[IX(i, n)] : x[IX(i, n)];
-  //  x[IX(0, n + 1)] = 0.5f * (x[IX(1, n + 1)] + x[IX(0, n)]);
-  //  x[IX(n + 1, n + 1)] = 0.5f * (x[IX(n, n + 1)] + x[IX(n + 1, n)]);
-  //}
+
+  if (from == 1) {
+    for (unsigned int i = 1; i < n + 1; i++)
+      x[IX(i, 0)] = b == HORIZONTAL ? -x[IX(i, 1)] : x[IX(i, 1)];
+    x[IX(0, 0)] = 0.5f * (x[IX(1, 0)] + x[IX(0, 1)]);
+    x[IX(n + 1, 0)] = 0.5f * (x[IX(n, 0)] + x[IX(n + 1, 1)]);
+  }
+
+  if (to == n + 1) {
+    for (unsigned int i = 1; i < n + 1; i++)
+      x[IX(i, n + 1)] = b == HORIZONTAL ? -x[IX(i, n)] : x[IX(i, n)];
+    x[IX(0, n + 1)] = 0.5f * (x[IX(1, n + 1)] + x[IX(0, n)]);
+    x[IX(n + 1, n + 1)] = 0.5f * (x[IX(n, n + 1)] + x[IX(n + 1, n)]);
+  }
 }
 
 static void lin_solve(unsigned int n, boundary b, const float a, const float c,
@@ -104,9 +92,8 @@ static void lin_solve(unsigned int n, boundary b, const float a, const float c,
     // lin_solve_rb_step(RED, n, a, c, hred0, hblk, hred, from, to);
     // lin_solve_rb_step(BLACK, n, a, c, hblk0, hred, hblk, from, to);
     // #pragma omp barrier
-    //// gpu_set_bnd<<<div_round_up(n + 2, 16), 16>>>(n, b, dx);
     checkCudaErrors(cudaMemcpy(dx, hx, (n + 2) * (n + 2) * sizeof(float), cudaMemcpyHostToDevice));
-    gpu_set_bnd<<<1, 1>>>(n, b, dx);
+    gpu_set_bnd<<<div_round_up(n + 2, 16), 16>>>(n, b, dx);
     checkCudaErrors(cudaMemcpy(hx, dx, (n + 2) * (n + 2) * sizeof(float), cudaMemcpyDeviceToHost));
     checkCudaErrors(cudaDeviceSynchronize());
     //set_bnd(n, b, hx, from, to);
