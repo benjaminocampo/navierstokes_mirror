@@ -256,6 +256,33 @@ void project_rb_step1(unsigned int n, grid_color color,
     }
   }
 }
+__global__
+void gpu_project_rb_step1(unsigned int n, grid_color color,
+                          float *sameu0, float *samev0,
+                          float *neighu, float *neighv) {
+  // TODO: Check __restrict__ on parameters, the nonvect versions have them
+  const int grid_width = gridDim.x * blockDim.x;
+  const int grid_height = gridDim.y * blockDim.y;
+  const int gtidx = blockIdx.x * blockDim.x + threadIdx.x;
+  const int gtidy = blockIdx.y * blockDim.y + threadIdx.y;
+
+  unsigned int width = (n + 2) / 2;
+  unsigned int start = (
+    (color == RED && ((threadIdx.y + 1) % 2 == 0)) ||
+    (color == BLACK && ((threadIdx.y + 1) % 2 == 1))
+  );
+
+  for (int i = 1 + gtidy; i <= n; i += grid_height) {
+    for (int j = start + gtidx; j < width - (1 - start); j += grid_width) {
+      int index = idx(j, i, width);
+      samev0[index] = -0.5f *
+                      (neighu[index - start + 1] - neighu[index - start] +
+                       neighv[index + width] - neighv[index - width]) /
+                      n;
+      sameu0[index] = 0;
+    }
+  }
+}
 
 void project_rb_step2(unsigned int n, grid_color color,
                       float *__restrict__ sameu, float *__restrict__ samev,

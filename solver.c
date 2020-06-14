@@ -181,35 +181,59 @@ static void advect(unsigned int n,
   set_bnd(n, HORIZONTAL, hv, from, to);
 }
 
-static void project(unsigned int n, float *u, float *v, float *u0, float *v0,
+static void project(unsigned int n,
+                    float *hu, float *hv, float *hu0, float *hv0,
+                    float *du, float *dv, float *du0, float *dv0,
                     unsigned int from, unsigned int to) {
   unsigned int color_size = (n + 2) * ((n + 2) / 2);
-  float *redu = u;
-  float *redv = v;
-  float *blku = u + color_size;
-  float *blkv = v + color_size;
-  float *redu0 = u0;
-  float *redv0 = v0;
-  float *blku0 = u0 + color_size;
-  float *blkv0 = v0 + color_size;
+  float *hredu = hu;
+  float *hredv = hv;
+  float *hblku = hu + color_size;
+  float *hblkv = hv + color_size;
+  float *hredu0 = hu0;
+  // float *hredv0 = hv0;
+  float *hblku0 = hu0 + color_size;
+  // float *hblkv0 = hv0 + color_size;
 
-  project_rb_step1(n, RED, redu0, redv0, blku, blkv, from, to);
-  project_rb_step1(n, BLACK, blku0, blkv0, redu, redv, from, to);
+  float *dredu = du;
+  float *dredv = dv;
+  float *dblku = du + color_size;
+  float *dblkv = dv + color_size;
+  float *dredu0 = du0;
+  float *dredv0 = dv0;
+  float *dblku0 = du0 + color_size;
+  float *dblkv0 = dv0 + color_size;
+
+  size_t width = (n + 2) / 2;
+  size_t size = (n + 2) * (n + 2) * sizeof(float);
+  dim3 block_dim{16, 16};
+  dim3 grid_dim{div_round_up(width, block_dim.x), n / block_dim.y};
+
+  checkCudaErrors(cudaMemcpy(du, hu, size, cudaMemcpyHostToDevice));
+  checkCudaErrors(cudaMemcpy(dv, hv, size, cudaMemcpyHostToDevice));
+  checkCudaErrors(cudaMemcpy(du0, hu0, size, cudaMemcpyHostToDevice));
+  checkCudaErrors(cudaMemcpy(dv0, hv0, size, cudaMemcpyHostToDevice));
+  gpu_project_rb_step1<<<grid_dim, block_dim>>>(n, RED, dredu0, dredv0, dblku, dblkv);
+  gpu_project_rb_step1<<<grid_dim, block_dim>>>(n, BLACK, dblku0, dblkv0, dredu, dredv);
+  checkCudaErrors(cudaMemcpy(hu, du, size, cudaMemcpyDeviceToHost));
+  checkCudaErrors(cudaMemcpy(hv, dv, size, cudaMemcpyDeviceToHost));
+  checkCudaErrors(cudaMemcpy(hu0, du0, size, cudaMemcpyDeviceToHost));
+  checkCudaErrors(cudaMemcpy(hv0, dv0, size, cudaMemcpyDeviceToHost));
   #pragma omp barrier
 
-  set_bnd(n, NONE, v0, from, to);
-  set_bnd(n, NONE, u0, from, to);
+  set_bnd(n, NONE, hv0, from, to);
+  set_bnd(n, NONE, hu0, from, to);
   #pragma omp barrier
 
-  project_lin_solve(n, NONE, u0, v0, 1, 4, from, to);
+  project_lin_solve(n, NONE, hu0, hv0, 1, 4, from, to);
   #pragma omp barrier
 
-  project_rb_step2(n, RED, redu, redv, blku0, from, to);
-  project_rb_step2(n, BLACK, blku, blkv, redu0, from, to);
+  project_rb_step2(n, RED, hredu, hredv, hblku0, from, to);
+  project_rb_step2(n, BLACK, hblku, hblkv, hredu0, from, to);
   #pragma omp barrier
 
-  set_bnd(n, VERTICAL, u, from, to);
-  set_bnd(n, HORIZONTAL, v, from, to);
+  set_bnd(n, VERTICAL, hu, from, to);
+  set_bnd(n, HORIZONTAL, hv, from, to);
 }
 
 void step(unsigned int n, float diff, float visc, float dt,
@@ -261,7 +285,7 @@ void step(unsigned int n, float diff, float visc, float dt,
   //diffuse(n, HORIZONTAL, hv, hv0, visc, dt, from, to);
   #pragma omp barrier
 
-  project(n, hu, hv, hu0, hv0, from, to);
+  project(n, hu, hv, hu0, hv0, du, dv, du0, dv0, from, to);
   #pragma omp barrier
 
   SWAP(hd0, hd);
@@ -269,10 +293,8 @@ void step(unsigned int n, float diff, float visc, float dt,
   SWAP(hv0, hv);
 
   advect(n, hd, hu, hv, hd0, hu0, hv0, dd, du, dv, dd0, du0, dv0, dt, from, to);
-
-  // advect(n, hd, hu, hv, hd0, hu0, hv0, dd, du, dv, dd0, du0, dv0, dt, from, to);
   #pragma omp barrier
 
-  project(n, hu, hv, hu0, hv0, from, to);
+  project(n, hu, hv, hu0, hv0, du, dv, du0, dv0, from, to);
   #pragma omp barrier
 }
