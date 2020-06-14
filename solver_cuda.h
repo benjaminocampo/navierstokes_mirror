@@ -24,6 +24,12 @@ void advect_rb(grid_color color, unsigned int n, float *samed, float *sameu,
                const float *v0, float dt, const unsigned int from,
                const unsigned int to);
 
+__global__
+void gpu_advect_rb(grid_color color, unsigned int n, float dt,
+                   float *samed, float *sameu, float *samev,
+                   const float *samed0, const float *sameu0, const float *samev0,
+                   const float *d0, const float *u0, const float *v0);
+
 void project_rb_step1(unsigned int n, grid_color color, float *sameu0,
                       float *samev0, float *neighu, float *neighv,
                       const unsigned int from, const unsigned int to);

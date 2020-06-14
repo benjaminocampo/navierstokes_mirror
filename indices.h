@@ -12,6 +12,7 @@ static inline size_t rb_idx(size_t x, size_t y, size_t dim) {
   return base + offset;
 }
 
+__host__ __device__
 static inline size_t idx(size_t x, size_t y, size_t stride) {
   return x + y * stride;
 }

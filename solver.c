@@ -93,11 +93,11 @@ static void lin_solve(unsigned int n, boundary b, const float a, const float c,
     // lin_solve_rb_step(RED, n, a, c, hred0, hblk, hred, from, to);
     // lin_solve_rb_step(BLACK, n, a, c, hblk0, hred, hblk, from, to);
     // #pragma omp barrier
-    checkCudaErrors(cudaMemcpy(dx, hx, size, cudaMemcpyHostToDevice));
+    // checkCudaErrors(cudaMemcpy(dx, hx, size, cudaMemcpyHostToDevice));
     // gpu_set_bnd<<<div_round_up(n + 2, 16), 16>>>(n, b, dx);
-    gpu_set_bnd<<<1, 1>>>(n, b, dx);
-    checkCudaErrors(cudaMemcpy(hx, dx, size, cudaMemcpyDeviceToHost));
-    // set_bnd(n, b, hx, from, to);
+    // gpu_set_bnd<<<1, 1>>>(n, b, dx);
+    // checkCudaErrors(cudaMemcpy(hx, dx, size, cudaMemcpyDeviceToHost));
+    set_bnd(n, b, hx, from, to);
   }
 }
 
@@ -129,27 +129,56 @@ static void project_lin_solve(unsigned int n, boundary b,
   }
 }
 
-static void advect(unsigned int n, float *d, float *u, float *v,
-                   const float *d0, const float *u0, const float *v0, float dt,
-                   const unsigned int from, const unsigned int to) {
+static void advect(unsigned int n,
+                   float *hd, float *hu, float *hv,
+                   float *hd0, float *hu0, float *hv0,
+                   float *dd, float *du, float *dv,
+                   float *dd0, float *du0, float *dv0,
+                   float dt, unsigned int from, unsigned int to) {
   unsigned int color_size = (n + 2) * ((n + 2) / 2);
-  float *redd = d;
-  float *redu = u;
-  float *redv = v;
-  float *blkd = d + color_size;
-  float *blku = u + color_size;
-  float *blkv = v + color_size;
-  const float *redd0 = d0;
-  const float *redu0 = u0;
-  const float *redv0 = v0;
-  const float *blkd0 = d0 + color_size;
-  const float *blku0 = u0 + color_size;
-  const float *blkv0 = v0 + color_size;
-  advect_rb(RED, n, redd, redu, redv, redd0, redu0, redv0, d0, u0, v0, dt, from, to);
-  advect_rb(BLACK, n, blkd, blku, blkv, blkd0, blku0, blkv0, d0, u0, v0, dt, from, to);
-  #pragma omp barrier
-  set_bnd(n, VERTICAL, u, from, to);
-  set_bnd(n, HORIZONTAL, v, from, to);
+  float *dredd = dd;
+  float *dredu = du;
+  float *dredv = dv;
+  float *dblkd = dd + color_size;
+  float *dblku = du + color_size;
+  float *dblkv = dv + color_size;
+  float *dredd0 = dd0;
+  float *dredu0 = du0;
+  float *dredv0 = dv0;
+  float *dblkd0 = dd0 + color_size;
+  float *dblku0 = du0 + color_size;
+  float *dblkv0 = dv0 + color_size;
+
+  unsigned int width = (n + 2) / 2;
+  size_t size = (n + 2) * (n + 2) * sizeof(float);
+  const dim3 block_dim{16, 16};
+  const dim3 grid_dim{div_round_up(width, block_dim.x), n / block_dim.y};
+
+  checkCudaErrors(cudaMemcpy(dd, hd, size, cudaMemcpyHostToDevice));
+  checkCudaErrors(cudaMemcpy(du, hu, size, cudaMemcpyHostToDevice));
+  checkCudaErrors(cudaMemcpy(dv, hv, size, cudaMemcpyHostToDevice));
+  checkCudaErrors(cudaMemcpy(dd0, hd0, size, cudaMemcpyHostToDevice));
+  checkCudaErrors(cudaMemcpy(du0, hu0, size, cudaMemcpyHostToDevice));
+  checkCudaErrors(cudaMemcpy(dv0, hv0, size, cudaMemcpyHostToDevice));
+  gpu_advect_rb<<<grid_dim, block_dim>>>(
+    RED, n, dt, dredd, dredu, dredv, dredd0, dredu0, dredv0, dd0, du0, dv0
+  );
+  gpu_advect_rb<<<grid_dim, block_dim>>>(
+    BLACK, n, dt, dblkd, dblku, dblkv, dblkd0, dblku0, dblkv0, dd0, du0, dv0
+  );
+  checkCudaErrors(cudaMemcpy(hd, dd, size, cudaMemcpyDeviceToHost));
+  checkCudaErrors(cudaMemcpy(hu, du, size, cudaMemcpyDeviceToHost));
+  checkCudaErrors(cudaMemcpy(hv, dv, size, cudaMemcpyDeviceToHost));
+  checkCudaErrors(cudaMemcpy(hd0, dd0, size, cudaMemcpyDeviceToHost));
+  checkCudaErrors(cudaMemcpy(hu0, du0, size, cudaMemcpyDeviceToHost));
+  checkCudaErrors(cudaMemcpy(hv0, dv0, size, cudaMemcpyDeviceToHost));
+  checkCudaErrors(cudaDeviceSynchronize());
+  // advect_rb(RED, n, redd, redu, redv, redd0, redu0, redv0, d0, u0, v0, dt, from, to);
+  // advect_rb(BLACK, n, blkd, blku, blkv, blkd0, blku0, blkv0, d0, u0, v0, dt, from, to);
+  // #pragma omp barrier
+
+  set_bnd(n, VERTICAL, hu, from, to);
+  set_bnd(n, HORIZONTAL, hv, from, to);
 }
 
 static void project(unsigned int n, float *u, float *v, float *u0, float *v0,
@@ -238,7 +267,10 @@ void step(unsigned int n, float diff, float visc, float dt,
   SWAP(hd0, hd);
   SWAP(hu0, hu);
   SWAP(hv0, hv);
-  advect(n, hd, hu, hv, hd0, hu0, hv0, dt, from, to);
+
+  advect(n, hd, hu, hv, hd0, hu0, hv0, dd, du, dv, dd0, du0, dv0, dt, from, to);
+
+  // advect(n, hd, hu, hv, hd0, hu0, hv0, dd, du, dv, dd0, du0, dv0, dt, from, to);
   #pragma omp barrier
 
   project(n, hu, hv, hu0, hv0, from, to);
