@@ -57,26 +57,32 @@ void gpu_set_bnd(unsigned int n, boundary b, float *x) {
       x[IX(n + 1, n + 1)] = -0.5f * (x[IX(n, n + 1)] + x[IX(n + 1, n)]);
 }
 
+// Pre: blockDim.y is even, if not, start needs to shift between row increments.
 __global__
 void gpu_lin_solve_rb_step(grid_color color, unsigned int n, float a, float c,
                            const float *__restrict__ same0,
                            const float *__restrict__ neigh,
                            float *__restrict__ same) {
   unsigned int width = (n + 2) / 2;
-  unsigned int start = ((color == RED && ((threadIdx.y + 1) % 2 == 0)) ||
-                        (color == BLACK && ((threadIdx.y + 1) % 2 == 1)));
-  const int grid_tidx = blockIdx.x * blockDim.x + threadIdx.x;
-  const int grid_tidy = blockIdx.y * blockDim.y + threadIdx.y;
+  unsigned int start = (
+    (color == RED && ((threadIdx.y + 1) % 2 == 0)) ||
+    (color == BLACK && ((threadIdx.y + 1) % 2 == 1))
+  );
+  const int grid_width = gridDim.x * blockDim.x;
+  const int grid_height = gridDim.y * blockDim.y;
+  const int gtidx = blockIdx.x * blockDim.x + threadIdx.x;
+  const int gtidy = blockIdx.y * blockDim.y + threadIdx.y;
 
-  int x = start + grid_tidx;  // [start, width - (1 - start))
-  int y = 1 + grid_tidy;      // [1, n]
-
-  if(x < width - (1 - start) && y <= n){
-    int index = y * width + x;
-    same[index] =
-        (same0[index] + a * (neigh[index - width] + neigh[index - start] +
-                             neigh[index - start + 1] + neigh[index + width])) /
-        c;
+  for (int y = 1 + gtidy; y <= n; y += grid_height) {
+    for (int x = start + gtidx; x < width - (1 - start); x += grid_width) {
+      int index = y * width + x;
+      same[index] = (same0[index] + a * (
+          neigh[index - width] +
+          neigh[index - start] +
+          neigh[index - start + 1] +
+          neigh[index + width]
+      )) / c;
+    }
   }
 }
 
