@@ -42,3 +42,7 @@ void gpu_project_rb_step1(unsigned int n, grid_color color,
 void project_rb_step2(unsigned int n, grid_color color, float *sameu,
                       float *samev, float *neighu0, const unsigned int from,
                       const unsigned int to);
+
+__global__
+void gpu_project_rb_step2(unsigned int n, grid_color color,
+                          float *sameu, float *samev, float *neighu0);

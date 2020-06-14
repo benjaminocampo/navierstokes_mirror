@@ -186,15 +186,6 @@ static void project(unsigned int n,
                     float *du, float *dv, float *du0, float *dv0,
                     unsigned int from, unsigned int to) {
   unsigned int color_size = (n + 2) * ((n + 2) / 2);
-  float *hredu = hu;
-  float *hredv = hv;
-  float *hblku = hu + color_size;
-  float *hblkv = hv + color_size;
-  float *hredu0 = hu0;
-  // float *hredv0 = hv0;
-  float *hblku0 = hu0 + color_size;
-  // float *hblkv0 = hv0 + color_size;
-
   float *dredu = du;
   float *dredv = dv;
   float *dblku = du + color_size;
@@ -228,8 +219,16 @@ static void project(unsigned int n,
   project_lin_solve(n, NONE, hu0, hv0, 1, 4, from, to);
   #pragma omp barrier
 
-  project_rb_step2(n, RED, hredu, hredv, hblku0, from, to);
-  project_rb_step2(n, BLACK, hblku, hblkv, hredu0, from, to);
+  checkCudaErrors(cudaMemcpy(du, hu, size, cudaMemcpyHostToDevice));
+  checkCudaErrors(cudaMemcpy(dv, hv, size, cudaMemcpyHostToDevice));
+  checkCudaErrors(cudaMemcpy(du0, hu0, size, cudaMemcpyHostToDevice));
+  checkCudaErrors(cudaMemcpy(dv0, hv0, size, cudaMemcpyHostToDevice));
+  gpu_project_rb_step2<<<grid_dim, block_dim>>>(n, RED, dredu, dredv, dblku0);
+  gpu_project_rb_step2<<<grid_dim, block_dim>>>(n, BLACK, dblku, dblkv, dredu0);
+  checkCudaErrors(cudaMemcpy(hu, du, size, cudaMemcpyDeviceToHost));
+  checkCudaErrors(cudaMemcpy(hv, dv, size, cudaMemcpyDeviceToHost));
+  checkCudaErrors(cudaMemcpy(hu0, du0, size, cudaMemcpyDeviceToHost));
+  checkCudaErrors(cudaMemcpy(hv0, dv0, size, cudaMemcpyDeviceToHost));
   #pragma omp barrier
 
   set_bnd(n, VERTICAL, hu, from, to);
