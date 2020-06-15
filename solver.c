@@ -56,45 +56,32 @@ static void lin_solve(unsigned int n, boundary b, const float a, const float c,
                       const unsigned int from, const unsigned int to) {
   unsigned int color_size = (n + 2) * ((n + 2) / 2);
   // cudaMemcpy does not allow const pointers in dst.
-  float *hred0 = hx0;
-  float *hblk0 = hx0 + color_size;
-  float *hred = hx;
-  float *hblk = hx + color_size;
-
   float *dred0 = dx0;
   float *dblk0 = dx0 + color_size;
   float *dred = dx;
   float *dblk = dx + color_size;
 
   unsigned int width = (n + 2) / 2;
-
   const dim3 block_dim{16, 16};
   const dim3 grid_dim{div_round_up(width, block_dim.x), n / block_dim.y};
-  size_t size = (n + 2) * width * sizeof(float);
+  size_t size = (n + 2) * (n + 2) * sizeof(float);
 
   for (unsigned int k = 0; k < 20; ++k) {
-    checkCudaErrors(cudaMemcpy(dred0, hred0, size, cudaMemcpyHostToDevice));
-    checkCudaErrors(cudaMemcpy(dblk, hblk, size, cudaMemcpyHostToDevice));
-    checkCudaErrors(cudaMemcpy(dred, hred, siz  e, cudaMemcpyHostToDevice));
-    checkCudaErrors(cudaMemcpy(dblk0, hblk0, size, cudaMemcpyHostToDevice));
-    checkCudaErrors(cudaMemcpy(dred, hred, size, cudaMemcpyHostToDevice));
-    checkCudaErrors(cudaMemcpy(dblk, hblk, size, cudaMemcpyHostToDevice));
+    checkCudaErrors(cudaMemcpy(dx, hx, size, cudaMemcpyHostToDevice));
+    checkCudaErrors(cudaMemcpy(dx0, hx0, size, cudaMemcpyHostToDevice));
     gpu_lin_solve_rb_step<<<grid_dim, block_dim>>>(RED, n, a, c, dred0, dblk, dred);
     gpu_lin_solve_rb_step<<<grid_dim, block_dim>>>(BLACK, n, a, c, dblk0, dred, dblk);
-    checkCudaErrors(cudaMemcpy(hred0, dred0,  size, cudaMemcpyDeviceToHost));
-    checkCudaErrors(cudaMemcpy(hblk, dblk, size, cudaMemcpyDeviceToHost));
-    checkCudaErrors(cudaMemcpy(hred, dred, size, cudaMemcpyDeviceToHost));
-    checkCudaErrors(cudaMemcpy(hblk0, dblk0,  size, cudaMemcpyDeviceToHost));
-    checkCudaErrors(cudaMemcpy(hred, dred, size, cudaMemcpyDeviceToHost));
-    checkCudaErrors(cudaMemcpy(hblk, dblk, size, cudaMemcpyDeviceToHost));
+    checkCudaErrors(cudaMemcpy(hx, dx,  size, cudaMemcpyDeviceToHost));
+    checkCudaErrors(cudaMemcpy(hx0, dx0, size, cudaMemcpyDeviceToHost));
     checkCudaErrors(cudaDeviceSynchronize());
     // old openmp version
     // lin_solve_rb_step(RED, n, a, c, hred0, hblk, hred, from, to);
     // lin_solve_rb_step(BLACK, n, a, c, hblk0, hred, hblk, from, to);
     // #pragma omp barrier
-    checkCudaErrors(cudaMemcpy(dx, hx, (n + 2) * (n + 2) * sizeof(float), cudaMemcpyHostToDevice));
+
+    checkCudaErrors(cudaMemcpy(dx, hx, size, cudaMemcpyHostToDevice));
     gpu_set_bnd<<<div_round_up(n + 2, 16), 16>>>(n, b, dx);
-    checkCudaErrors(cudaMemcpy(hx, dx, (n + 2) * (n + 2) * sizeof(float), cudaMemcpyDeviceToHost));
+    checkCudaErrors(cudaMemcpy(hx, dx, size, cudaMemcpyDeviceToHost));
     checkCudaErrors(cudaDeviceSynchronize());
     //set_bnd(n, b, hx, from, to);
   }
