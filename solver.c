@@ -69,15 +69,13 @@ static void lin_solve(unsigned int n, boundary b, const float a, const float c,
   unsigned int width = (n + 2) / 2;
 
   const dim3 block_dim{16, 16};
-  // The grid size is according to rb in order to cover the range [1, n]x[0, width)
-
   const dim3 grid_dim{div_round_up(width, block_dim.x), n / block_dim.y};
   size_t size = (n + 2) * width * sizeof(float);
 
   for (unsigned int k = 0; k < 20; ++k) {
     checkCudaErrors(cudaMemcpy(dred0, hred0, size, cudaMemcpyHostToDevice));
     checkCudaErrors(cudaMemcpy(dblk, hblk, size, cudaMemcpyHostToDevice));
-    checkCudaErrors(cudaMemcpy(dred, hred, size, cudaMemcpyHostToDevice));
+    checkCudaErrors(cudaMemcpy(dred, hred, siz  e, cudaMemcpyHostToDevice));
     checkCudaErrors(cudaMemcpy(dblk0, hblk0, size, cudaMemcpyHostToDevice));
     checkCudaErrors(cudaMemcpy(dred, hred, size, cudaMemcpyHostToDevice));
     checkCudaErrors(cudaMemcpy(dblk, hblk, size, cudaMemcpyHostToDevice));
@@ -89,15 +87,16 @@ static void lin_solve(unsigned int n, boundary b, const float a, const float c,
     checkCudaErrors(cudaMemcpy(hblk0, dblk0,  size, cudaMemcpyDeviceToHost));
     checkCudaErrors(cudaMemcpy(hred, dred, size, cudaMemcpyDeviceToHost));
     checkCudaErrors(cudaMemcpy(hblk, dblk, size, cudaMemcpyDeviceToHost));
+    checkCudaErrors(cudaDeviceSynchronize());
     // old openmp version
     // lin_solve_rb_step(RED, n, a, c, hred0, hblk, hred, from, to);
     // lin_solve_rb_step(BLACK, n, a, c, hblk0, hred, hblk, from, to);
     // #pragma omp barrier
-    // checkCudaErrors(cudaMemcpy(dx, hx, size, cudaMemcpyHostToDevice));
-    // gpu_set_bnd<<<div_round_up(n + 2, 16), 16>>>(n, b, dx);
-    // gpu_set_bnd<<<1, 1>>>(n, b, dx);
-    // checkCudaErrors(cudaMemcpy(hx, dx, size, cudaMemcpyDeviceToHost));
-    set_bnd(n, b, hx, from, to);
+    checkCudaErrors(cudaMemcpy(dx, hx, (n + 2) * (n + 2) * sizeof(float), cudaMemcpyHostToDevice));
+    gpu_set_bnd<<<div_round_up(n + 2, 16), 16>>>(n, b, dx);
+    checkCudaErrors(cudaMemcpy(hx, dx, (n + 2) * (n + 2) * sizeof(float), cudaMemcpyDeviceToHost));
+    checkCudaErrors(cudaDeviceSynchronize());
+    //set_bnd(n, b, hx, from, to);
   }
 }
 
@@ -264,7 +263,6 @@ void step(unsigned int n, float diff, float visc, float dt,
 
   checkCudaErrors(cudaDeviceSynchronize());
 
-  // Old openmp version
   // add_source(n, hd, hd0, dt, from, to);
   // add_source(n, hu, hu0, dt, from, to);
   // add_source(n, hv, hv0, dt, from, to);
