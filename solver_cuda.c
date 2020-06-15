@@ -1,3 +1,4 @@
+#include <assert.h>
 #include "indices.h"
 #include "solver.h"
 #include "helper_cuda.h"
@@ -11,7 +12,6 @@ void gpu_add_source(unsigned int n, float *dst, const float *src, float dt) {
   const int gtidx = blockIdx.x * blockDim.x + threadIdx.x;
   const int gtidy = blockIdx.y * blockDim.y + threadIdx.y;
   // TODO: Change the boundary of the loop. It should go up to n + 2
-  // Another option: Consider the range [1, n] x [1, n]
   for (int y = gtidy; y < n; y += grid_height) {
     for (int x = gtidx; x < n; x += grid_width) {
       int index = y * n + x;
@@ -38,13 +38,15 @@ void gpu_set_bnd(unsigned int n, boundary b, float *x) {
   }
 }
 
-// Pre: blockDim.y is even, if not, start needs to shift between row increments.
-// TODO: Move preconditions "Pre:" to asserts
 __global__
 void gpu_lin_solve_rb_step(grid_color color, unsigned int n, float a, float c,
                            const float *__restrict__ same0,
                            const float *__restrict__ neigh,
                            float *__restrict__ same) {
+  assert(
+    blockDim.y % 2 == 0 &&
+    "blockDim.y is even, if not, start needs to shift between row increments"
+  );
   unsigned int width = (n + 2) / 2;
   unsigned int start = (
     (color == RED && ((threadIdx.y + 1) % 2 == 0)) ||
@@ -67,17 +69,19 @@ void gpu_lin_solve_rb_step(grid_color color, unsigned int n, float a, float c,
   }
 }
 
-// Pre: blockDim.y must be even, `start` calculation will not be recomputed.
 __global__
 void gpu_advect_rb(grid_color color, unsigned int n, float dt,
                    float *samed, float *sameu, float *samev,
                    const float *samed0, const float *sameu0, const float *samev0,
                    const float *d0, const float *u0, const float *v0) {
+  assert(
+    blockDim.y % 2 == 0 &&
+    "blockDim.y is even, if not, start needs to shift between row increments"
+  );
   const int grid_width = gridDim.x * blockDim.x;
   const int grid_height = gridDim.y * blockDim.y;
   const int gtidx = blockIdx.x * blockDim.x + threadIdx.x;
   const int gtidy = blockIdx.y * blockDim.y + threadIdx.y;
-
   int i0, j0;
   float xx, yy, s0, t0, s1, t1;
 
@@ -137,7 +141,6 @@ __global__
 void gpu_project_rb_step1(unsigned int n, grid_color color,
                           float *__restrict__ sameu0, float *__restrict__ samev0,
                           float *__restrict__ neighu, float *__restrict__ neighv) {
-  // TODO: Check __restrict__ on parameters, the nonvect versions have them
   const int grid_width = gridDim.x * blockDim.x;
   const int grid_height = gridDim.y * blockDim.y;
   const int gtidx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -163,8 +166,8 @@ void gpu_project_rb_step1(unsigned int n, grid_color color,
 
 __global__
 void gpu_project_rb_step2(unsigned int n, grid_color color,
-                          float *sameu, float *samev, float *neighu0) {
-  // TODO: Check __restrict__ on parameters, the nonvect versions have them
+                          float *__restrict__ sameu, float *__restrict__ samev,
+                          float *__restrict__ neighu0) {
   const int grid_width = gridDim.x * blockDim.x;
   const int grid_height = gridDim.y * blockDim.y;
   const int gtidx = blockIdx.x * blockDim.x + threadIdx.x;
