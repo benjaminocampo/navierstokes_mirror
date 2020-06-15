@@ -20,7 +20,6 @@
 #include <stdlib.h>
 #include <x86intrin.h>
 #include <omp.h>
-#include <assert.h>
 
 /* macros */
 
@@ -85,7 +84,6 @@ static void clear_data(void) {
 
   #pragma omp parallel for
   for (i = 0; i < size; i++) {
-    // TODO: assert i in [from, to] range
     hu[i] = hv[i] = hu_prev[i] = hv_prev[i] = hd[i] = hd_prev[i] = 0.0f;
   }
 }

@@ -20,15 +20,17 @@
 #include <x86intrin.h>
 #include <omp.h>
 
-#include "indices.h"
-#include "solver.h"
-#include "timing.h"
-
 /* macros */
 
 #define IX(x, y) (rb_idx((x), (y), (N + 2)))
 #define MIN(a, b)  (((a) < (b)) ? (a) : (b))
 #define MAX(a, b)  (((a) > (b)) ? (a) : (b))
+
+#include "indices.h"
+#include "solver.h"
+#include "timing.h"
+#include "helper_cuda.h"
+#include "helper_string.h"
 
 /* global variables */
 
@@ -36,8 +38,10 @@ static int N, steps;
 static float dt, diff, visc;
 static float force, source;
 
-static float *u, *v, *u_prev, *v_prev;
-static float *dens, *dens_prev;
+static float *hd, *hu, *hv;
+static float *hd_prev, *hu_prev, *hv_prev;
+static float *dd, *du, *dv;
+static float *dd_prev, *du_prev, *dv_prev;
 
 __attribute__((unused)) static void dump_grid(float *grid) {
   for (int i = 0; i < N; i++) {
@@ -54,34 +58,53 @@ __attribute__((unused)) static void dump_grid(float *grid) {
 */
 
 static void free_data(void) {
-  if (u) _mm_free(u);
-  if (v) _mm_free(v);
-  if (u_prev) _mm_free(u_prev);
-  if (v_prev) _mm_free(v_prev);
-  if (dens) _mm_free(dens);
-  if (dens_prev) _mm_free(dens_prev);
+  if (hu) _mm_free(hu);
+  if (hv) _mm_free(hv);
+  if (hu_prev) _mm_free(hu_prev);
+  if (hv_prev) _mm_free(hv_prev);
+  if (hd) _mm_free(hd);
+  if (hd_prev) _mm_free(hd_prev);
+  if (du) cudaFree(hu);
+  if (dv) cudaFree(hv);
+  if (du_prev) cudaFree(hu_prev);
+  if (dv_prev) cudaFree(hv_prev);
+  if (dd) cudaFree(hd);
+  if (dd_prev) cudaFree(hd_prev);
 }
 
 static void clear_data(void) {
   int i, size = (N + 2) * (N + 2);
-  
+
+  size_t size_in_mem = size * sizeof(float);
+  cudaMemset(du, 0, size_in_mem);
+  cudaMemset(dv, 0, size_in_mem);
+  cudaMemset(du_prev, 0, size_in_mem);
+  cudaMemset(dv_prev, 0, size_in_mem);
+  cudaMemset(dd, 0, size_in_mem);
+  cudaMemset(dd_prev, 0, size_in_mem);
+
   #pragma omp parallel for
   for (i = 0; i < size; i++) {
-    u[i] = v[i] = u_prev[i] = v_prev[i] = dens[i] = dens_prev[i] = 0.0f;
+    hu[i] = hv[i] = hu_prev[i] = hv_prev[i] = hd[i] = hd_prev[i] = 0.0f;
   }
 }
 
 static int allocate_data(void) {
-  int size = (N + 2) * (N + 2);
+  int size = (N + 2) * (N + 2) * sizeof(float);
+  checkCudaErrors(cudaMalloc(&du, size));
+  checkCudaErrors(cudaMalloc(&du_prev, size));
+  checkCudaErrors(cudaMalloc(&dv, size));
+  checkCudaErrors(cudaMalloc(&dv_prev, size));
+  checkCudaErrors(cudaMalloc(&dd, size));
+  checkCudaErrors(cudaMalloc(&dd_prev, size));
+  hu = (float *)_mm_malloc(size, 32);
+  hv = (float *)_mm_malloc(size, 32);
+  hu_prev = (float *)_mm_malloc(size, 32);
+  hv_prev = (float *)_mm_malloc(size, 32);
+  hd = (float *)_mm_malloc(size, 32);
+  hd_prev = (float *)_mm_malloc(size, 32);
 
-  u = (float *)_mm_malloc(size * sizeof(float), 32);
-  v = (float *)_mm_malloc(size * sizeof(float), 32);
-  u_prev = (float *)_mm_malloc(size * sizeof(float), 32);
-  v_prev = (float *)_mm_malloc(size * sizeof(float), 32);
-  dens = (float *)_mm_malloc(size * sizeof(float), 32);
-  dens_prev = (float *)_mm_malloc(size * sizeof(float), 32);
-
-  if (!u || !v || !u_prev || !v_prev || !dens || !dens_prev) {
+  if (!hu || !hv || !hu_prev || !hv_prev || !hd || !hd_prev) {
     fprintf(stderr, "cannot allocate data\n");
     return (0);
   }
@@ -140,11 +163,11 @@ static void one_step(void) {
   static double step_ns_p_cell = 0.0;
 
   start_t = wtime();
-  react(dens_prev, u_prev, v_prev);
+  react(hd_prev, hu_prev, hv_prev);
   react_ns_p_cell = 1.0e9 * (wtime() - start_t) / (N * N);
 
   start_t = wtime();
-  #pragma omp parallel firstprivate(dens, u, v, dens_prev, u_prev, v_prev, diff, visc, dt)
+  #pragma omp parallel firstprivate(hd, hu, hv, hd_prev, hu_prev, hv_prev, diff, visc, dt)
   {
     int threads = omp_get_num_threads();
     int strip_size = (N + threads - 1) / threads;
@@ -152,7 +175,24 @@ static void one_step(void) {
     for(int tid = 0; tid < threads; tid++){
       int from = tid * strip_size + 1;
       int to = MIN((tid + 1) * strip_size + 1, N + 1);
-      step(N, dens, u, v, dens_prev, u_prev, v_prev, diff, visc, dt, from, to);
+
+      size_t size_in_mem = (N + 2) * (N + 2) * sizeof(float);
+      checkCudaErrors(cudaMemcpy(dd, hd, size_in_mem, cudaMemcpyHostToDevice));
+      checkCudaErrors(cudaMemcpy(du, hu, size_in_mem, cudaMemcpyHostToDevice));
+      checkCudaErrors(cudaMemcpy(dv, hv, size_in_mem, cudaMemcpyHostToDevice));
+      checkCudaErrors(cudaMemcpy(dd_prev, hd_prev, size_in_mem, cudaMemcpyHostToDevice));
+      checkCudaErrors(cudaMemcpy(du_prev, hu_prev, size_in_mem, cudaMemcpyHostToDevice));
+      checkCudaErrors(cudaMemcpy(dv_prev, hv_prev, size_in_mem, cudaMemcpyHostToDevice));
+      step(N, diff, visc, dt,
+           dd, du, dv, dd_prev, du_prev, dv_prev,
+           from, to);
+      checkCudaErrors(cudaDeviceSynchronize());
+      checkCudaErrors(cudaMemcpy(hd, dd, size_in_mem, cudaMemcpyDeviceToHost));
+      checkCudaErrors(cudaMemcpy(hu, du, size_in_mem, cudaMemcpyDeviceToHost));
+      checkCudaErrors(cudaMemcpy(hv, dv, size_in_mem, cudaMemcpyDeviceToHost));
+      checkCudaErrors(cudaMemcpy(hd_prev, dd_prev, size_in_mem, cudaMemcpyDeviceToHost));
+      checkCudaErrors(cudaMemcpy(hu_prev, du_prev, size_in_mem, cudaMemcpyDeviceToHost));
+      checkCudaErrors(cudaMemcpy(hv_prev, dv_prev, size_in_mem, cudaMemcpyDeviceToHost));
     }
   }
   step_ns_p_cell = 1.0e9 * (wtime() - start_t) / (N * N);
