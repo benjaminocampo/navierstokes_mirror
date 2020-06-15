@@ -13,13 +13,13 @@
 
   =======================================================================
 */
-
 #include <GL/glut.h>
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <x86intrin.h>
 #include <omp.h>
+#include <thrust/extrema.h>
 
 /* macros */
 
@@ -190,45 +190,39 @@ static void draw_density(void) {
   ----------------------------------------------------------------------
 */
 
-static void react(float *d, float *uu, float *vv) {
+static void react(void) {
   int i, j, size = (N + 2) * (N + 2);
 
   float max_velocity2 = 0.0f; // TODO: Remove initialization because it already starts in -infinity
   float max_density = 0.0f; // TODO: Remove initialization because it already starts in -infinity
-  // TODO: Try using default(firstprivate)
-  // TODO: Are this parallel fors matching our strip distribution
-  #pragma omp parallel for default(none) private(i) firstprivate(size, uu, vv, d) reduction(max: max_velocity2, max_density)
+
   for (i = 0; i < size; i++) {
-    if (max_velocity2 < uu[i] * uu[i] + vv[i] * vv[i]) {
-      max_velocity2 = uu[i] * uu[i] + vv[i] * vv[i];
-    }
-    if (max_density < d[i]) {
-      max_density = d[i];
+    if (max_velocity2 < hu_prev[i] * hu_prev[i] + hv_prev[i] * hv_prev[i]) {
+      max_velocity2 = hu_prev[i] * hu_prev[i] + hv_prev[i] * hv_prev[i];
     }
   }
 
-  #pragma omp parallel for
+  typedef thrust::device_ptr<float> dfloatp;
+  dfloatp tdd_prev(dd_prev);
+  max_density = *thrust::max_element(tdd_prev, tdd_prev + size);
+
   for (i = 0; i < size; i++) {
-    uu[i] = vv[i] = d[i] = 0.0f;
+    hu_prev[i] = hv_prev[i] = hd_prev[i] = 0.0f;
   }
 
   if (max_velocity2 < 0.0000005f) {
-    // TODO: This should be touched by the middle strip thread
-    uu[IX(N / 2, N / 2)] = force * 10.0f;
-    vv[IX(N / 2, N / 2)] = force * 10.0f;
-    #pragma omp parallel for collapse(2)
+    hu_prev[IX(N / 2, N / 2)] = force * 10.0f;
+    hv_prev[IX(N / 2, N / 2)] = force * 10.0f;
     for (int y = 64; y < N; y += 64)
       for (int x = 64; x < N; x += 64) {
-        uu[IX(x, y)] = force * 1000.0f * (N / 2 - y) / (N / 2);
-        vv[IX(x, y)] = force * 1000.0f * (N / 2 - x) / (N / 2);
+        hu_prev[IX(x, y)] = force * 1000.0f * (N / 2 - y) / (N / 2);
+        hv_prev[IX(x, y)] = force * 1000.0f * (N / 2 - x) / (N / 2);
       }
   }
   if (max_density < 1.0f) {
-    // TODO: This should be touched by the middle strip thread
-    d[IX(N / 2, N / 2)] = source * 10.0f;
-    #pragma omp parallel for collapse(2)
+    hd_prev[IX(N / 2, N / 2)] = source * 10.0f;
     for (int y = 64; y < N; y += 64)
-      for (int x = 64; x < N; x += 64) d[IX(x, y)] = source * 1000.0f;
+      for (int x = 64; x < N; x += 64) hd_prev[IX(x, y)] = source * 1000.0f;
   }
 
   if (!mouse_down[0] && !mouse_down[2]) return;
@@ -239,12 +233,12 @@ static void react(float *d, float *uu, float *vv) {
   if (i < 1 || i > N || j < 1 || j > N) return;
 
   if (mouse_down[0]) {
-    uu[IX(i, j)] = force * (mx - omx);
-    vv[IX(i, j)] = force * (omy - my);
+    hu_prev[IX(i, j)] = force * (mx - omx);
+    hv_prev[IX(i, j)] = force * (omy - my);
   }
 
   if (mouse_down[2]) {
-    d[IX(i, j)] = source;
+    hd_prev[IX(i, j)] = source;
   }
 
   omx = mx;
@@ -307,7 +301,7 @@ static void idle_func(void) {
   static double step_ns_p_cell = 0.0;
 
   start_t = wtime();
-  react(hd_prev, hu_prev, hv_prev);
+  react();
 
   react_ns_p_cell += 1.0e9 * (wtime() - start_t) / (N * N);
 
