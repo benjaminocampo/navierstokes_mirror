@@ -190,6 +190,61 @@ static void draw_density(void) {
   ----------------------------------------------------------------------
 */
 
+/*
+// XXX: Manual density reduction
+__global__
+void gpu_reduce_max(float *array, float *out){
+  unsigned int gtid = blockIdx.x * blockDim.x + threadIdx.x;
+  unsigned int tid = threadIdx.x;
+  unsigned int lane = tid % 32;
+  __shared__ float block_out;
+  if(tid == 0) {
+    *out = 0.0f;
+    block_out = 0.0f;
+  }
+
+  __syncthreads();
+
+  // Read 32 elements
+  float elem = array[gtid];
+  __syncwarp();
+
+  // Reduce max of those 32
+  elem = MAX(elem, __shfl_down_sync(0xFFFFFFFF, elem, 16));
+  __syncwarp();
+  elem = MAX(elem, __shfl_down_sync(0xFFFFFFFF, elem, 8));
+  __syncwarp();
+  elem = MAX(elem, __shfl_down_sync(0xFFFFFFFF, elem, 4));
+  __syncwarp();
+  elem = MAX(elem, __shfl_down_sync(0xFFFFFFFF, elem, 2));
+  __syncwarp();
+  elem = MAX(elem, __shfl_down_sync(0xFFFFFFFF, elem, 1));
+  __syncwarp();
+
+  if (lane == 0)
+    atomicMax(&block_out, elem);
+
+  __syncthreads();
+
+  if (tid == 0)
+    atomicMax(out, block_out);
+}
+*/
+
+// XXX: Thrust velocity reduction
+typedef thrust::device_ptr<float> dfloatp;
+typedef thrust::tuple<dfloatp, dfloatp> dfloatp2;
+struct compare_dfloatp2 {
+  __device__
+  bool operator()(dfloatp2 lhs, dfloatp2 rhs) {
+    float lu = *lhs.get<0>();
+    float lv = *lhs.get<1>();
+    float ru = *rhs.get<0>();
+    float rv = *rhs.get<1>();
+    return lu * lu + lv * lv < ru * ru + rv * rv;
+  }
+};
+
 static void react(void) {
   int i, j, size = (N + 2) * (N + 2);
 
@@ -202,9 +257,33 @@ static void react(void) {
     }
   }
 
+  // XXX: Thrust velocity reduction
+  dfloatp tdu_prev(du_prev);
+  dfloatp tdv_prev(dv_prev);
+  thrust::zip_iterator<dfloatp2> tduv_prev_begin =
+    thrust::make_zip_iterator(thrust::make_tuple(tdu_prev, tdv_prev));
+  thrust::zip_iterator<dfloatp2> tduv_prev_end =
+    thrust::make_zip_iterator(thrust::make_tuple(tdu_prev + size, tdv_prev + size));
+  dfloatp2 mv2 = // Max velocity point
+    *thrust::max_element(tduv_prev_begin, tduv_prev_end, compare_dfloatp2());
+  float mvu = *mv2.get<0>();
+  float mvv = *mv2.get<1>();
+  max_velocity2 = mvu * mvu + mvv * mvv;
+
   typedef thrust::device_ptr<float> dfloatp;
   dfloatp tdd_prev(dd_prev);
   max_density = *thrust::max_element(tdd_prev, tdd_prev + size);
+
+  // XXX: Manual density reduction
+  // TODO: Compare with thrust
+  // size_t size_in_mem = size * sizeof(float);
+  // checkCudaErrors(cudaMemcpy(dd_prev, hd_prev, size_in_mem, cudaMemcpyHostToDevice));
+  // float *hout_maxd, *dout_maxd;
+  // checkCudaErrors(cudaMalloc(&out_maxd, sizeof(float)));
+  // gpu_reduce_max<<<size, 16>>>(dd_prev, dout_maxd);
+  // checkCudaErrors(cudaMemcpy(hout_maxd, dout_maxd, sizeof(float), cudaMemcpyDeviceToHost));
+  // max_density = hout_maxd;
+  // checkCudaErrors(cudaMemcpy(hd_prev, dd_prev, size_in_mem, cudaMemcpyDeviceToHost));
 
   for (i = 0; i < size; i++) {
     hu_prev[i] = hv_prev[i] = hd_prev[i] = 0.0f;
