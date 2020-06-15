@@ -61,6 +61,7 @@ void gpu_set_bnd(unsigned int n, boundary b, float *x) {
 }
 
 // Pre: blockDim.y is even, if not, start needs to shift between row increments.
+// TODO: Move preconditions "Pre:" to asserts
 __global__
 void gpu_lin_solve_rb_step(grid_color color, unsigned int n, float a, float c,
                            const float *__restrict__ same0,
@@ -86,17 +87,6 @@ void gpu_lin_solve_rb_step(grid_color color, unsigned int n, float a, float c,
       )) / c;
     }
   }
-  //int x = start + gtidx;  // [start, width - (1 - start))
-  //int y = 1 + gtidy;      // [1, n]
-//
-  //if(x < width - (1 - start) && y <= n){
-  //  int index = y * width + x;
-  //  same[index] =
-  //      (same0[index] + a * (neigh[index - width] + neigh[index - start] +
-  //                           neigh[index - start + 1] + neigh[index + width])) /
-  //      c;
-  //}
-
 }
 
 void lin_solve_rb_step(grid_color color, unsigned int n, float a, float c,

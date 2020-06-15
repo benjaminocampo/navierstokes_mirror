@@ -322,10 +322,25 @@ static void idle_func(void) {
     for(int tid = 0; tid < threads; tid++){
       int from = tid * strip_size + 1;
       int to = MIN((tid + 1) * strip_size + 1, N + 1);
+
+      size_t size_in_mem = (N + 2) * (N + 2) * sizeof(float);
+      checkCudaErrors(cudaMemcpy(dd, hd, size_in_mem, cudaMemcpyHostToDevice));
+      checkCudaErrors(cudaMemcpy(du, hu, size_in_mem, cudaMemcpyHostToDevice));
+      checkCudaErrors(cudaMemcpy(dv, hv, size_in_mem, cudaMemcpyHostToDevice));
+      checkCudaErrors(cudaMemcpy(dd_prev, hd_prev, size_in_mem, cudaMemcpyHostToDevice));
+      checkCudaErrors(cudaMemcpy(du_prev, hu_prev, size_in_mem, cudaMemcpyHostToDevice));
+      checkCudaErrors(cudaMemcpy(dv_prev, hv_prev, size_in_mem, cudaMemcpyHostToDevice));
       step(N, diff, visc, dt,
-           hd, hu, hv, hd_prev, hu_prev, hv_prev,
            dd, du, dv, dd_prev, du_prev, dv_prev,
            from, to);
+      checkCudaErrors(cudaDeviceSynchronize());
+      checkCudaErrors(cudaMemcpy(hd, dd, size_in_mem, cudaMemcpyDeviceToHost));
+      checkCudaErrors(cudaMemcpy(hu, du, size_in_mem, cudaMemcpyDeviceToHost));
+      checkCudaErrors(cudaMemcpy(hv, dv, size_in_mem, cudaMemcpyDeviceToHost));
+      checkCudaErrors(cudaMemcpy(hd_prev, dd_prev, size_in_mem, cudaMemcpyDeviceToHost));
+      checkCudaErrors(cudaMemcpy(hu_prev, du_prev, size_in_mem, cudaMemcpyDeviceToHost));
+      checkCudaErrors(cudaMemcpy(hv_prev, dv_prev, size_in_mem, cudaMemcpyDeviceToHost));
+
     }
   }
   step_ns_p_cell += 1.0e9 * (wtime() - start_t) / (N * N);
