@@ -216,22 +216,39 @@ struct compare_dfloatp2 {
 static unsigned int div_round_up(unsigned int a, unsigned int b) { return (a + b - 1) / b; }
 
 __global__
-void react_velocity(float* u, float* v, float force, int n) {
-    int gtidx = blockIdx.x * blockDim.x + threadIdx.x;
-    int gtidy = blockIdx.y * blockDim.y + threadIdx.y;
-    int x = (gtidx + 1) * 64;
-    int y = (gtidy + 1) * 64;
+void gpu_react_velocity(float* u, float* v, float force, int n) {
+  int gtidx = blockIdx.x * blockDim.x + threadIdx.x;
+  int gtidy = blockIdx.y * blockDim.y + threadIdx.y;
+  int x = (gtidx + 1) * 64;
+  int y = (gtidy + 1) * 64;
+  if (x < n && y < n) {
     int index = rb_idx(x, y, n + 2);
-    if (x < n && y < n) {
-      u[index] = force * 1000.0f * (n / 2 - y) / (n / 2);
-      v[index] = force * 1000.0f * (n / 2 - x) / (n / 2);
-    }
-    if (gtidx == 0 && gtidy == 0) {
-      int mid_index = rb_idx(n / 2, n / 2, n + 2);
-      u[mid_index] = force * 10.0f;
-      v[mid_index] = force * 10.0f;
-    }
+    u[index] = force * 1000.0f * (n / 2 - y) / (n / 2);
+    v[index] = force * 1000.0f * (n / 2 - x) / (n / 2);
   }
+  if (gtidx == 0 && gtidy == 0) {
+    int mid_index = rb_idx(n / 2, n / 2, n + 2);
+    u[mid_index] = force * 10.0f;
+    v[mid_index] = force * 10.0f;
+  }
+}
+
+__global__
+void gpu_react_density(float* d, float source, int n) {
+  int gtidx = blockIdx.x * blockDim.x + threadIdx.x;
+  int gtidy = blockIdx.y * blockDim.y + threadIdx.y;
+  int x = (gtidx + 1) * 64;
+  int y = (gtidy + 1) * 64;
+
+  if (x < n && y < n) {
+    int index = rb_idx(x, y, n + 2);
+    d[index] = source * 1000.0f;
+  }
+  if (gtidx == 0 && gtidy == 0) {
+    int mid_index = rb_idx(n / 2, n / 2, n + 2);
+    d[mid_index] = source * 10.0f;
+  }
+}
 
 static void react(void) {
   int i, j, size = (N + 2) * (N + 2);
@@ -261,38 +278,22 @@ static void react(void) {
   };
 
   if (max_velocity2 < 0.0000005f)
-    react_velocity<<<grid_dim, block_dim>>>(du_prev, dv_prev, force, N);
+    gpu_react_velocity<<<grid_dim, block_dim>>>(du_prev, dv_prev, force, N);
 
-  // Bring from gpu to assist with the gpu from now on
-  checkCudaErrors(cudaMemcpy(hd_prev, dd_prev, size_in_mem, cudaMemcpyDeviceToHost));
-  checkCudaErrors(cudaMemcpy(hu_prev, du_prev, size_in_mem, cudaMemcpyDeviceToHost));
-  checkCudaErrors(cudaMemcpy(hv_prev, dv_prev, size_in_mem, cudaMemcpyDeviceToHost));
+  if (max_density < 1.0f)
+    gpu_react_density<<<grid_dim, block_dim>>>(dd_prev, source, N);
 
-  if (max_density < 1.0f) {
-    hd_prev[IX(N / 2, N / 2)] = source * 10.0f;
-    for (int y = 64; y < N; y += 64)
-      for (int x = 64; x < N; x += 64) hd_prev[IX(x, y)] = source * 1000.0f;
-  }
-
-
-  if (!mouse_down[0] && !mouse_down[2]) {
-    // Go back to device without mouse input
-    checkCudaErrors(cudaMemcpy(dd_prev, hd_prev, size_in_mem, cudaMemcpyHostToDevice));
-    checkCudaErrors(cudaMemcpy(du_prev, hu_prev, size_in_mem, cudaMemcpyHostToDevice));
-    checkCudaErrors(cudaMemcpy(dv_prev, hv_prev, size_in_mem, cudaMemcpyHostToDevice));
-    return;
-  }
+  if (!mouse_down[0] && !mouse_down[2]) return;
 
   i = (int)((mx / (float)win_x) * N + 1);
   j = (int)(((win_y - my) / (float)win_y) * N + 1);
 
-  if (i < 1 || i > N || j < 1 || j > N) {
-    // Go back to device without invalid mouse input
-    checkCudaErrors(cudaMemcpy(dd_prev, hd_prev, size_in_mem, cudaMemcpyHostToDevice));
-    checkCudaErrors(cudaMemcpy(du_prev, hu_prev, size_in_mem, cudaMemcpyHostToDevice));
-    checkCudaErrors(cudaMemcpy(dv_prev, hv_prev, size_in_mem, cudaMemcpyHostToDevice));
-    return;
-  };
+  if (i < 1 || i > N || j < 1 || j > N) return;
+
+  // Bring grids from gpu and fill mouse info with cpu
+  checkCudaErrors(cudaMemcpy(hd_prev, dd_prev, size_in_mem, cudaMemcpyDeviceToHost));
+  checkCudaErrors(cudaMemcpy(hu_prev, du_prev, size_in_mem, cudaMemcpyDeviceToHost));
+  checkCudaErrors(cudaMemcpy(hv_prev, dv_prev, size_in_mem, cudaMemcpyDeviceToHost));
 
   if (mouse_down[0]) {
     hu_prev[IX(i, j)] = force * (mx - omx);
@@ -306,7 +307,7 @@ static void react(void) {
   omx = mx;
   omy = my;
 
-  // Go back to device with mouse input
+  // Go back to device with mouse input filled
   checkCudaErrors(cudaMemcpy(dd_prev, hd_prev, size_in_mem, cudaMemcpyHostToDevice));
   checkCudaErrors(cudaMemcpy(du_prev, hu_prev, size_in_mem, cudaMemcpyHostToDevice));
   checkCudaErrors(cudaMemcpy(dv_prev, hv_prev, size_in_mem, cudaMemcpyHostToDevice));
@@ -376,12 +377,6 @@ static void idle_func(void) {
   checkCudaErrors(cudaMemcpy(du_prev, hu_prev, size_in_mem, cudaMemcpyHostToDevice));
   checkCudaErrors(cudaMemcpy(dv_prev, hv_prev, size_in_mem, cudaMemcpyHostToDevice));
   react();
-  checkCudaErrors(cudaMemcpy(hd, dd, size_in_mem, cudaMemcpyDeviceToHost));
-  checkCudaErrors(cudaMemcpy(hu, du, size_in_mem, cudaMemcpyDeviceToHost));
-  checkCudaErrors(cudaMemcpy(hv, dv, size_in_mem, cudaMemcpyDeviceToHost));
-  checkCudaErrors(cudaMemcpy(hd_prev, dd_prev, size_in_mem, cudaMemcpyDeviceToHost));
-  checkCudaErrors(cudaMemcpy(hu_prev, du_prev, size_in_mem, cudaMemcpyDeviceToHost));
-  checkCudaErrors(cudaMemcpy(hv_prev, dv_prev, size_in_mem, cudaMemcpyDeviceToHost));
 
   react_ns_p_cell += 1.0e9 * (wtime() - start_t) / (N * N);
 
@@ -394,13 +389,6 @@ static void idle_func(void) {
     for(int tid = 0; tid < threads; tid++){
       int from = tid * strip_size + 1;
       int to = MIN((tid + 1) * strip_size + 1, N + 1);
-
-      checkCudaErrors(cudaMemcpy(dd, hd, size_in_mem, cudaMemcpyHostToDevice));
-      checkCudaErrors(cudaMemcpy(du, hu, size_in_mem, cudaMemcpyHostToDevice));
-      checkCudaErrors(cudaMemcpy(dv, hv, size_in_mem, cudaMemcpyHostToDevice));
-      checkCudaErrors(cudaMemcpy(dd_prev, hd_prev, size_in_mem, cudaMemcpyHostToDevice));
-      checkCudaErrors(cudaMemcpy(du_prev, hu_prev, size_in_mem, cudaMemcpyHostToDevice));
-      checkCudaErrors(cudaMemcpy(dv_prev, hv_prev, size_in_mem, cudaMemcpyHostToDevice));
       step(N, diff, visc, dt,
            dd, du, dv, dd_prev, du_prev, dv_prev,
            from, to);
@@ -411,7 +399,6 @@ static void idle_func(void) {
       checkCudaErrors(cudaMemcpy(hd_prev, dd_prev, size_in_mem, cudaMemcpyDeviceToHost));
       checkCudaErrors(cudaMemcpy(hu_prev, du_prev, size_in_mem, cudaMemcpyDeviceToHost));
       checkCudaErrors(cudaMemcpy(hv_prev, dv_prev, size_in_mem, cudaMemcpyDeviceToHost));
-
     }
   }
   step_ns_p_cell += 1.0e9 * (wtime() - start_t) / (N * N);
