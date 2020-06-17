@@ -75,12 +75,12 @@ static void clear_data(void) {
   int i, size = (N + 2) * (N + 2);
 
   size_t size_in_mem = size * sizeof(float);
-  cudaMemset(du, 0, size_in_mem);
-  cudaMemset(dv, 0, size_in_mem);
-  cudaMemset(du_prev, 0, size_in_mem);
-  cudaMemset(dv_prev, 0, size_in_mem);
-  cudaMemset(dd, 0, size_in_mem);
-  cudaMemset(dd_prev, 0, size_in_mem);
+  checkCudaErrors(cudaMemset(du, 0, size_in_mem));
+  checkCudaErrors(cudaMemset(dv, 0, size_in_mem));
+  checkCudaErrors(cudaMemset(du_prev, 0, size_in_mem));
+  checkCudaErrors(cudaMemset(dv_prev, 0, size_in_mem));
+  checkCudaErrors(cudaMemset(dd, 0, size_in_mem));
+  checkCudaErrors(cudaMemset(dd_prev, 0, size_in_mem));
 
   #pragma omp parallel for
   for (i = 0; i < size; i++) {
@@ -217,23 +217,26 @@ struct compare_dfloatp2 {
 static void react(void) {
   int i, j, size = (N + 2) * (N + 2);
 
-  float max_velocity2 = 0.0f; // TODO: Remove initialization because it already starts in -infinity
-  float max_density = 0.0f; // TODO: Remove initialization because it already starts in -infinity
-
   zip_iterator<dfloatp2> uvs_begin = make_zip_iterator(make_tuple(du_prev, dv_prev));
   zip_iterator<dfloatp2> uvs_end = make_zip_iterator(make_tuple(du_prev + size, dv_prev + size));
   zip_iterator<dfloatp2> zmaxvel2 = max_element(uvs_begin, uvs_end, compare_dfloatp2());
   dfloatp2 mv2 = zmaxvel2.get_iterator_tuple();
   float mvu = *mv2.get<0>();
   float mvv = *mv2.get<1>();
-  max_velocity2 = mvu * mvu + mvv * mvv;
+  float max_velocity2 = mvu * mvu + mvv * mvv;
 
   dfloatp tdd_prev(dd_prev);
-  max_density = *thrust::max_element(tdd_prev, tdd_prev + size);
+  float max_density = *thrust::max_element(tdd_prev, tdd_prev + size);
 
-  for (i = 0; i < size; i++) {
-    hu_prev[i] = hv_prev[i] = hd_prev[i] = 0.0f;
-  }
+  size_t size_in_mem = size * sizeof(float);
+  checkCudaErrors(cudaMemset(du_prev, 0, size_in_mem));
+  checkCudaErrors(cudaMemset(dv_prev, 0, size_in_mem));
+  checkCudaErrors(cudaMemset(dd_prev, 0, size_in_mem));
+
+  // Bring zeroed memory from device to host to fill it up with reacted source
+  checkCudaErrors(cudaMemcpy(hd_prev, dd_prev, size_in_mem, cudaMemcpyDeviceToHost));
+  checkCudaErrors(cudaMemcpy(hu_prev, du_prev, size_in_mem, cudaMemcpyDeviceToHost));
+  checkCudaErrors(cudaMemcpy(hv_prev, dv_prev, size_in_mem, cudaMemcpyDeviceToHost));
 
   if (max_velocity2 < 0.0000005f) {
     hu_prev[IX(N / 2, N / 2)] = force * 10.0f;
@@ -250,12 +253,25 @@ static void react(void) {
       for (int x = 64; x < N; x += 64) hd_prev[IX(x, y)] = source * 1000.0f;
   }
 
-  if (!mouse_down[0] && !mouse_down[2]) return;
+
+  if (!mouse_down[0] && !mouse_down[2]) {
+    // Go back to device without mouse input
+    checkCudaErrors(cudaMemcpy(dd_prev, hd_prev, size_in_mem, cudaMemcpyHostToDevice));
+    checkCudaErrors(cudaMemcpy(du_prev, hu_prev, size_in_mem, cudaMemcpyHostToDevice));
+    checkCudaErrors(cudaMemcpy(dv_prev, hv_prev, size_in_mem, cudaMemcpyHostToDevice));
+    return;
+  }
 
   i = (int)((mx / (float)win_x) * N + 1);
   j = (int)(((win_y - my) / (float)win_y) * N + 1);
 
-  if (i < 1 || i > N || j < 1 || j > N) return;
+  if (i < 1 || i > N || j < 1 || j > N) {
+    // Go back to device without invalid mouse input
+    checkCudaErrors(cudaMemcpy(dd_prev, hd_prev, size_in_mem, cudaMemcpyHostToDevice));
+    checkCudaErrors(cudaMemcpy(du_prev, hu_prev, size_in_mem, cudaMemcpyHostToDevice));
+    checkCudaErrors(cudaMemcpy(dv_prev, hv_prev, size_in_mem, cudaMemcpyHostToDevice));
+    return;
+  };
 
   if (mouse_down[0]) {
     hu_prev[IX(i, j)] = force * (mx - omx);
@@ -268,6 +284,11 @@ static void react(void) {
 
   omx = mx;
   omy = my;
+
+  // Go back to device with mouse input
+  checkCudaErrors(cudaMemcpy(dd_prev, hd_prev, size_in_mem, cudaMemcpyHostToDevice));
+  checkCudaErrors(cudaMemcpy(du_prev, hu_prev, size_in_mem, cudaMemcpyHostToDevice));
+  checkCudaErrors(cudaMemcpy(dv_prev, hv_prev, size_in_mem, cudaMemcpyHostToDevice));
 
   return;
 }
@@ -324,9 +345,22 @@ static void idle_func(void) {
   static double one_second = 0.0;
   static double react_ns_p_cell = 0.0;
   static double step_ns_p_cell = 0.0;
+  size_t size_in_mem = (N + 2) * (N + 2) * sizeof(float);
 
   start_t = wtime();
+  checkCudaErrors(cudaMemcpy(dd, hd, size_in_mem, cudaMemcpyHostToDevice));
+  checkCudaErrors(cudaMemcpy(du, hu, size_in_mem, cudaMemcpyHostToDevice));
+  checkCudaErrors(cudaMemcpy(dv, hv, size_in_mem, cudaMemcpyHostToDevice));
+  checkCudaErrors(cudaMemcpy(dd_prev, hd_prev, size_in_mem, cudaMemcpyHostToDevice));
+  checkCudaErrors(cudaMemcpy(du_prev, hu_prev, size_in_mem, cudaMemcpyHostToDevice));
+  checkCudaErrors(cudaMemcpy(dv_prev, hv_prev, size_in_mem, cudaMemcpyHostToDevice));
   react();
+  checkCudaErrors(cudaMemcpy(hd, dd, size_in_mem, cudaMemcpyDeviceToHost));
+  checkCudaErrors(cudaMemcpy(hu, du, size_in_mem, cudaMemcpyDeviceToHost));
+  checkCudaErrors(cudaMemcpy(hv, dv, size_in_mem, cudaMemcpyDeviceToHost));
+  checkCudaErrors(cudaMemcpy(hd_prev, dd_prev, size_in_mem, cudaMemcpyDeviceToHost));
+  checkCudaErrors(cudaMemcpy(hu_prev, du_prev, size_in_mem, cudaMemcpyDeviceToHost));
+  checkCudaErrors(cudaMemcpy(hv_prev, dv_prev, size_in_mem, cudaMemcpyDeviceToHost));
 
   react_ns_p_cell += 1.0e9 * (wtime() - start_t) / (N * N);
 
@@ -340,7 +374,6 @@ static void idle_func(void) {
       int from = tid * strip_size + 1;
       int to = MIN((tid + 1) * strip_size + 1, N + 1);
 
-      size_t size_in_mem = (N + 2) * (N + 2) * sizeof(float);
       checkCudaErrors(cudaMemcpy(dd, hd, size_in_mem, cudaMemcpyHostToDevice));
       checkCudaErrors(cudaMemcpy(du, hu, size_in_mem, cudaMemcpyHostToDevice));
       checkCudaErrors(cudaMemcpy(dv, hv, size_in_mem, cudaMemcpyHostToDevice));
