@@ -190,19 +190,44 @@ static void draw_density(void) {
   ----------------------------------------------------------------------
 */
 
+using thrust::device_ptr;
+using thrust::tuple;
+using thrust::zip_iterator;
+using thrust::zip_iterator;
+using thrust::make_zip_iterator;
+using thrust::make_tuple;
+using thrust::max_element;
+
+typedef device_ptr<float> dfloatp;
+typedef tuple<dfloatp, dfloatp> dfloatp2;
+typedef tuple<float, float> tfloat2;
+
+struct compare_dfloatp2 {
+  __device__
+  bool operator()(tfloat2 lhs, tfloat2 rhs) {
+    float lu = lhs.get<0>();
+    float lv = lhs.get<1>();
+    float ru = rhs.get<0>();
+    float rv = rhs.get<1>();
+    return lu * lu + lv * lv < ru * ru + rv * rv;
+  }
+};
+
+
 static void react(void) {
   int i, j, size = (N + 2) * (N + 2);
 
   float max_velocity2 = 0.0f; // TODO: Remove initialization because it already starts in -infinity
   float max_density = 0.0f; // TODO: Remove initialization because it already starts in -infinity
 
-  for (i = 0; i < size; i++) {
-    if (max_velocity2 < hu_prev[i] * hu_prev[i] + hv_prev[i] * hv_prev[i]) {
-      max_velocity2 = hu_prev[i] * hu_prev[i] + hv_prev[i] * hv_prev[i];
-    }
-  }
+  zip_iterator<dfloatp2> uvs_begin = make_zip_iterator(make_tuple(du_prev, dv_prev));
+  zip_iterator<dfloatp2> uvs_end = make_zip_iterator(make_tuple(du_prev + size, dv_prev + size));
+  zip_iterator<dfloatp2> zmaxvel2 = max_element(uvs_begin, uvs_end, compare_dfloatp2());
+  dfloatp2 mv2 = zmaxvel2.get_iterator_tuple();
+  float mvu = *mv2.get<0>();
+  float mvv = *mv2.get<1>();
+  max_velocity2 = mvu * mvu + mvv * mvv;
 
-  typedef thrust::device_ptr<float> dfloatp;
   dfloatp tdd_prev(dd_prev);
   max_density = *thrust::max_element(tdd_prev, tdd_prev + size);
 
