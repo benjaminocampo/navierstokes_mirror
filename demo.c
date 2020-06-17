@@ -213,12 +213,32 @@ struct compare_dfloatp2 {
   }
 };
 
+static unsigned int div_round_up(unsigned int a, unsigned int b) { return (a + b - 1) / b; }
+
+__global__
+void react_velocity(float* u, float* v, float force, int n) {
+    int gtidx = blockIdx.x * blockDim.x + threadIdx.x;
+    int gtidy = blockIdx.y * blockDim.y + threadIdx.y;
+    int x = (gtidx + 1) * 64;
+    int y = (gtidy + 1) * 64;
+    int index = rb_idx(x, y, n + 2);
+    if (x < n && y < n) {
+      u[index] = force * 1000.0f * (n / 2 - y) / (n / 2);
+      v[index] = force * 1000.0f * (n / 2 - x) / (n / 2);
+    }
+    if (gtidx == 0 && gtidy == 0) {
+      int mid_index = rb_idx(n / 2, n / 2, n + 2);
+      u[mid_index] = force * 10.0f;
+      v[mid_index] = force * 10.0f;
+    }
+  }
 
 static void react(void) {
   int i, j, size = (N + 2) * (N + 2);
 
   zip_iterator<dfloatp2> uvs_begin = make_zip_iterator(make_tuple(du_prev, dv_prev));
   zip_iterator<dfloatp2> uvs_end = make_zip_iterator(make_tuple(du_prev + size, dv_prev + size));
+  // TODO: max_element has an implicit cudaDeviceSynchronize that we should get rid off.
   zip_iterator<dfloatp2> zmaxvel2 = max_element(uvs_begin, uvs_end, compare_dfloatp2());
   dfloatp2 mv2 = zmaxvel2.get_iterator_tuple();
   float mvu = *mv2.get<0>();
@@ -226,6 +246,7 @@ static void react(void) {
   float max_velocity2 = mvu * mvu + mvv * mvv;
 
   dfloatp tdd_prev(dd_prev);
+  // TODO: Same as above.
   float max_density = *thrust::max_element(tdd_prev, tdd_prev + size);
 
   size_t size_in_mem = size * sizeof(float);
@@ -233,20 +254,20 @@ static void react(void) {
   checkCudaErrors(cudaMemset(dv_prev, 0, size_in_mem));
   checkCudaErrors(cudaMemset(dd_prev, 0, size_in_mem));
 
-  // Bring zeroed memory from device to host to fill it up with reacted source
+  dim3 block_dim{16, 16};
+  dim3 grid_dim{ // The gridblock mapping is one thread per reactionary point
+    div_round_up(div_round_up(N, 64), block_dim.x),
+    div_round_up(div_round_up(N, 64), block_dim.y)
+  };
+
+  if (max_velocity2 < 0.0000005f)
+    react_velocity<<<grid_dim, block_dim>>>(du_prev, dv_prev, force, N);
+
+  // Bring from gpu to assist with the gpu from now on
   checkCudaErrors(cudaMemcpy(hd_prev, dd_prev, size_in_mem, cudaMemcpyDeviceToHost));
   checkCudaErrors(cudaMemcpy(hu_prev, du_prev, size_in_mem, cudaMemcpyDeviceToHost));
   checkCudaErrors(cudaMemcpy(hv_prev, dv_prev, size_in_mem, cudaMemcpyDeviceToHost));
 
-  if (max_velocity2 < 0.0000005f) {
-    hu_prev[IX(N / 2, N / 2)] = force * 10.0f;
-    hv_prev[IX(N / 2, N / 2)] = force * 10.0f;
-    for (int y = 64; y < N; y += 64)
-      for (int x = 64; x < N; x += 64) {
-        hu_prev[IX(x, y)] = force * 1000.0f * (N / 2 - y) / (N / 2);
-        hv_prev[IX(x, y)] = force * 1000.0f * (N / 2 - x) / (N / 2);
-      }
-  }
   if (max_density < 1.0f) {
     hd_prev[IX(N / 2, N / 2)] = source * 10.0f;
     for (int y = 64; y < N; y += 64)
