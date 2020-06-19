@@ -7,6 +7,9 @@ __global__
 void gpu_set_bnd(unsigned int n, boundary b, float *x);
 
 __global__
+void gpu_set_bnd_rb(unsigned int n, boundary b, float *x);
+
+__global__
 void gpu_lin_solve_rb_step(grid_color color,unsigned int n, float a, float c,
                            const float * same0, const float * neigh,
                            float * same);

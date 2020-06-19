@@ -32,7 +32,6 @@ static void lin_solve(unsigned int n, boundary b, const float a, const float c,
                       float *__restrict__ dx, float *__restrict__ dx0,
                       const unsigned int from, const unsigned int to) {
   unsigned int color_size = (n + 2) * ((n + 2) / 2);
-  // cudaMemcpy does not allow const pointers in dst.
   float *dred0 = dx0;
   float *dblk0 = dx0 + color_size;
   float *dred = dx;
@@ -45,7 +44,7 @@ static void lin_solve(unsigned int n, boundary b, const float a, const float c,
   for (unsigned int k = 0; k < 20; ++k) {
     gpu_lin_solve_rb_step<<<grid_dim, block_dim>>>(RED, n, a, c, dred0, dblk, dred);
     gpu_lin_solve_rb_step<<<grid_dim, block_dim>>>(BLACK, n, a, c, dblk0, dred, dblk);
-    gpu_set_bnd<<<div_round_up(n + 2, block_dim.x), block_dim.x>>>(n, b, dx);
+    gpu_set_bnd_rb<<<grid_dim, block_dim>>>(n, b, dx);
   }
 }
 
