@@ -39,7 +39,7 @@ void gpu_set_bnd(unsigned int n, boundary b, float *x) {
 }
 
 
-__global__
+__device__
 void gpu_set_bnd_rb(unsigned int n, boundary b, float *x) {
   assert(
     blockDim.y % 2 == 0 &&
@@ -99,8 +99,7 @@ void gpu_set_bnd_rb(unsigned int n, boundary b, float *x) {
   }
 }
 
-
-__global__
+__device__
 void gpu_lin_solve_rb_step(grid_color color, unsigned int n, float a, float c,
                            const float *__restrict__ same0,
                            const float *__restrict__ neigh,
@@ -128,6 +127,23 @@ void gpu_lin_solve_rb_step(grid_color color, unsigned int n, float a, float c,
           neigh[index + width]
       )) / c;
     }
+  }
+}
+
+__global__
+void gpu_lin_solve(unsigned int n, boundary b, const float a, const float c,
+                   float *__restrict__ dx, float *__restrict__ dx0) {
+  unsigned int color_size = (n + 2) * ((n + 2) / 2);
+  float *dred0 = dx0;
+  float *dblk0 = dx0 + color_size;
+  float *dred = dx;
+  float *dblk = dx + color_size;
+
+  for (unsigned int k = 0; k < 20; ++k) {
+    gpu_lin_solve_rb_step(RED, n, a, c, dred0, dblk, dred);
+    gpu_lin_solve_rb_step(BLACK, n, a, c, dblk0, dred, dblk);
+    gpu_set_bnd_rb(n, b, dx);
+    // TODO: sync group;
   }
 }
 

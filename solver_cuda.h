@@ -15,6 +15,10 @@ void gpu_lin_solve_rb_step(grid_color color,unsigned int n, float a, float c,
                            float * same);
 
 __global__
+void gpu_lin_solve(unsigned int n, boundary b, const float a, const float c,
+                   float *__restrict__ dx, float *__restrict__ dx0);
+
+__global__
 void gpu_advect_rb(grid_color color, unsigned int n, float dt,
                    float *samed, float *sameu, float *samev,
                    const float *samed0, const float *sameu0, const float *samev0,

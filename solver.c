@@ -28,31 +28,16 @@
 
 static unsigned int div_round_up(unsigned int a, unsigned int b) { return (a + b - 1) / b; }
 
-static void lin_solve(unsigned int n, boundary b, const float a, const float c,
-                      float *__restrict__ dx, float *__restrict__ dx0,
-                      const unsigned int from, const unsigned int to) {
-  unsigned int color_size = (n + 2) * ((n + 2) / 2);
-  float *dred0 = dx0;
-  float *dblk0 = dx0 + color_size;
-  float *dred = dx;
-  float *dblk = dx + color_size;
-
-  // TODO: Move up block_dim and grid_dim
-  unsigned int width = (n + 2) / 2;
-  const dim3 block_dim{16, 16};
-  const dim3 grid_dim{div_round_up(width, block_dim.x), n / block_dim.y};
-  for (unsigned int k = 0; k < 20; ++k) {
-    gpu_lin_solve_rb_step<<<grid_dim, block_dim>>>(RED, n, a, c, dred0, dblk, dred);
-    gpu_lin_solve_rb_step<<<grid_dim, block_dim>>>(BLACK, n, a, c, dblk0, dred, dblk);
-    gpu_set_bnd_rb<<<grid_dim, block_dim>>>(n, b, dx);
-  }
-}
-
 static void diffuse(unsigned int n, boundary b, float diff, float dt,
                     float *dx, float *dx0,
                     const unsigned int from, const unsigned int to) {
   const float a = dt * diff * n * n;
-  lin_solve(n, b, a, 1 + 4 * a, dx, dx0, from, to);
+
+  // TODO: Move {block, grid}_dims up in the call hierarchy
+  size_t width = (n + 2) / 2;
+  dim3 block_dim{16, 16};
+  dim3 grid_dim{div_round_up(width, block_dim.x), n / block_dim.y};
+  gpu_lin_solve<<<grid_dim, block_dim>>>(n, b, a, 1 + 4 * a, dx, dx0);
 }
 
 static void advect(unsigned int n,
@@ -113,7 +98,7 @@ static void project(unsigned int n,
   gpu_set_bnd<<<div_round_up(n + 2, block_dim.x), block_dim.x>>>(n, NONE, du0);
   #pragma omp barrier
 
-  lin_solve(n, NONE, 1, 4, du0, dv0, from, to);
+  gpu_lin_solve<<<grid_dim, block_dim>>>(n, NONE, 1, 4, du0, dv0);
   #pragma omp barrier
 
   gpu_project_rb_step2<<<grid_dim, block_dim>>>(n, RED, dredu, dredv, dblku0);
