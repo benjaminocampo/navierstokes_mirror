@@ -176,23 +176,28 @@ void gpu_react_density(float* d, float source, int n) {
 static void react(void) {
   int size = (N + 2) * (N + 2);
 
-  zip_iterator<dfloatp2> uvs_begin = make_zip_iterator(make_tuple(du_prev, dv_prev));
-  zip_iterator<dfloatp2> uvs_end = make_zip_iterator(make_tuple(du_prev + size, dv_prev + size));
+  // zip_iterator<dfloatp2> uvs_begin = make_zip_iterator(make_tuple(du_prev, dv_prev));
+  // zip_iterator<dfloatp2> uvs_end = make_zip_iterator(make_tuple(du_prev + size, dv_prev + size));
   // TODO: max_element has an implicit cudaDeviceSynchronize that we should get rid off.
+  /*
   zip_iterator<dfloatp2> zmaxvel2 = max_element(uvs_begin, uvs_end, compare_dfloatp2());
   dfloatp2 mv2 = zmaxvel2.get_iterator_tuple();
   float mvu = *mv2.get<0>();
   float mvv = *mv2.get<1>();
   float max_velocity2 = mvu * mvu + mvv * mvv;
-
+  */
+  float max_velocity2 = 0.1f;
+/*
   dfloatp tdd_prev(dd_prev);
   // TODO: Same as above.
   float max_density = *thrust::max_element(tdd_prev, tdd_prev + size);
+  */
+  float max_density = 0.1f;
 
   size_t size_in_mem = size * sizeof(float);
-  checkCudaErrors(cudaMemset(du_prev, 0, size_in_mem));
-  checkCudaErrors(cudaMemset(dv_prev, 0, size_in_mem));
-  checkCudaErrors(cudaMemset(dd_prev, 0, size_in_mem));
+  checkCudaErrors(cudaMemsetAsync(du_prev, 0, size_in_mem));
+  checkCudaErrors(cudaMemsetAsync(dv_prev, 0, size_in_mem));
+  checkCudaErrors(cudaMemsetAsync(dd_prev, 0, size_in_mem));
 
   dim3 block_dim{16, 16};
   dim3 grid_dim{ // The gridblock mapping is one thread per reactionary point
@@ -296,6 +301,14 @@ int main(int argc, char **argv) {
   checkCudaErrors(cudaMemcpy(dd_prev, hd_prev, size_in_mem, cudaMemcpyHostToDevice));
   checkCudaErrors(cudaMemcpy(du_prev, hu_prev, size_in_mem, cudaMemcpyHostToDevice));
   checkCudaErrors(cudaMemcpy(dv_prev, hv_prev, size_in_mem, cudaMemcpyHostToDevice));
+
+///////////
+// Vary the i bound to 512, 1024 to see that kernel launch queue has a limit
+for (size_t i = 0; i < 0; i++) {
+  checkCudaErrors(cudaMemsetAsync(du_prev, i, size_in_mem));
+}
+
+/////////////
 
   printf("total_ns,react,vel_step,dens_step\n");
   for (i = 0; i < steps; i++) one_step();
