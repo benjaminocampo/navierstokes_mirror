@@ -33,6 +33,14 @@
 #include "helper_cuda.h"
 #include "helper_string.h"
 
+static cudaStream_t streams[32768];
+static cudaStream_t get_new_stream() {
+  static int i = 0;
+  cudaStreamCreate(&streams[i]);
+  i++;
+  return streams[i - 1];
+}
+
 /* global variables */
 
 static int N, steps;
@@ -206,10 +214,10 @@ static void react(void) {
   };
 
   if (max_velocity2 < 0.0000005f)
-    gpu_react_velocity<<<grid_dim, block_dim>>>(du_prev, dv_prev, force, N);
+    gpu_react_velocity<<<grid_dim, block_dim, 0, get_new_stream()>>>(du_prev, dv_prev, force, N);
 
   if (max_density < 1.0f)
-    gpu_react_density<<<grid_dim, block_dim>>>(dd_prev, source, N);
+    gpu_react_density<<<grid_dim, block_dim, 0, get_new_stream()>>>(dd_prev, source, N);
 }
 
 static void one_step(void) {

@@ -26,6 +26,14 @@
     x = tmp;         \
   }
 
+static cudaStream_t streams[32768];
+static cudaStream_t get_new_stream() {
+  static int i = 0;
+  cudaStreamCreate(&streams[i]);
+  i++;
+  return streams[i - 1];
+}
+
 static unsigned int div_round_up(unsigned int a, unsigned int b) { return (a + b - 1) / b; }
 
 static void lin_solve(unsigned int n, boundary b, const float a, const float c,
@@ -43,9 +51,9 @@ static void lin_solve(unsigned int n, boundary b, const float a, const float c,
   const dim3 block_dim{16, 16};
   const dim3 grid_dim{div_round_up(width, block_dim.x), n / block_dim.y};
   for (unsigned int k = 0; k < 20; ++k) {
-    gpu_lin_solve_rb_step<<<grid_dim, block_dim>>>(RED, n, a, c, dred0, dblk, dred);
-    gpu_lin_solve_rb_step<<<grid_dim, block_dim>>>(BLACK, n, a, c, dblk0, dred, dblk);
-    gpu_set_bnd<<<div_round_up(n + 2, block_dim.x), block_dim.x>>>(n, b, dx);
+    gpu_lin_solve_rb_step<<<grid_dim, block_dim, 0, get_new_stream()>>>(RED, n, a, c, dred0, dblk, dred);
+    gpu_lin_solve_rb_step<<<grid_dim, block_dim, 0, get_new_stream()>>>(BLACK, n, a, c, dblk0, dred, dblk);
+    gpu_set_bnd<<<div_round_up(n + 2, block_dim.x), block_dim.x, 0, get_new_stream()>>>(n, b, dx);
   }
 }
 
@@ -78,14 +86,14 @@ static void advect(unsigned int n,
   const dim3 block_dim{16, 16};
   const dim3 grid_dim{div_round_up(width, block_dim.x), n / block_dim.y};
 
-  gpu_advect_rb<<<grid_dim, block_dim>>>(
+  gpu_advect_rb<<<grid_dim, block_dim, 0, get_new_stream()>>>(
     RED, n, dt, dredd, dredu, dredv, dredd0, dredu0, dredv0, dd0, du0, dv0
   );
-  gpu_advect_rb<<<grid_dim, block_dim>>>(
+  gpu_advect_rb<<<grid_dim, block_dim, 0, get_new_stream()>>>(
     BLACK, n, dt, dblkd, dblku, dblkv, dblkd0, dblku0, dblkv0, dd0, du0, dv0
   );
-  gpu_set_bnd<<<div_round_up(n + 2, block_dim.x), block_dim.x>>>(n, VERTICAL, du);
-  gpu_set_bnd<<<div_round_up(n + 2, block_dim.x), block_dim.x>>>(n, HORIZONTAL, dv);
+  gpu_set_bnd<<<div_round_up(n + 2, block_dim.x), block_dim.x, 0, get_new_stream()>>>(n, VERTICAL, du);
+  gpu_set_bnd<<<div_round_up(n + 2, block_dim.x), block_dim.x, 0, get_new_stream()>>>(n, HORIZONTAL, dv);
 }
 
 static void project(unsigned int n,
@@ -105,24 +113,24 @@ static void project(unsigned int n,
   dim3 block_dim{16, 16};
   dim3 grid_dim{div_round_up(width, block_dim.x), n / block_dim.y};
 
-  gpu_project_rb_step1<<<grid_dim, block_dim>>>(n, RED, dredu0, dredv0, dblku, dblkv);
-  gpu_project_rb_step1<<<grid_dim, block_dim>>>(n, BLACK, dblku0, dblkv0, dredu, dredv);
+  gpu_project_rb_step1<<<grid_dim, block_dim, 0, get_new_stream()>>>(n, RED, dredu0, dredv0, dblku, dblkv);
+  gpu_project_rb_step1<<<grid_dim, block_dim, 0, get_new_stream()>>>(n, BLACK, dblku0, dblkv0, dredu, dredv);
   // TODO: What to do with all the pragma omp barriers?
   #pragma omp barrier
 
-  gpu_set_bnd<<<div_round_up(n + 2, block_dim.x), block_dim.x>>>(n, NONE, dv0);
-  gpu_set_bnd<<<div_round_up(n + 2, block_dim.x), block_dim.x>>>(n, NONE, du0);
+  gpu_set_bnd<<<div_round_up(n + 2, block_dim.x), block_dim.x, 0, get_new_stream()>>>(n, NONE, dv0);
+  gpu_set_bnd<<<div_round_up(n + 2, block_dim.x), block_dim.x, 0, get_new_stream()>>>(n, NONE, du0);
   #pragma omp barrier
 
   lin_solve(n, NONE, 1, 4, du0, dv0, from, to);
   #pragma omp barrier
 
-  gpu_project_rb_step2<<<grid_dim, block_dim>>>(n, RED, dredu, dredv, dblku0);
-  gpu_project_rb_step2<<<grid_dim, block_dim>>>(n, BLACK, dblku, dblkv, dredu0);
+  gpu_project_rb_step2<<<grid_dim, block_dim, 0, get_new_stream()>>>(n, RED, dredu, dredv, dblku0);
+  gpu_project_rb_step2<<<grid_dim, block_dim, 0, get_new_stream()>>>(n, BLACK, dblku, dblkv, dredu0);
   #pragma omp barrier
 
-  gpu_set_bnd<<<div_round_up(n + 2, block_dim.x), block_dim.x>>>(n, VERTICAL, du);
-  gpu_set_bnd<<<div_round_up(n + 2, block_dim.x), block_dim.x>>>(n, HORIZONTAL, dv);
+  gpu_set_bnd<<<div_round_up(n + 2, block_dim.x), block_dim.x, 0, get_new_stream()>>>(n, VERTICAL, du);
+  gpu_set_bnd<<<div_round_up(n + 2, block_dim.x), block_dim.x, 0, get_new_stream()>>>(n, HORIZONTAL, dv);
 }
 
 void step(unsigned int n, float diff, float visc, float dt,
@@ -134,9 +142,9 @@ void step(unsigned int n, float diff, float visc, float dt,
   dim3 grid_dim{n / block_dim.x, n / block_dim.y};
 
   // TODO: These launches can be unsynchronized inside the device, specify that
-  gpu_add_source<<<grid_dim, block_dim>>>(n, dd, dd0, dt);
-  gpu_add_source<<<grid_dim, block_dim>>>(n, du, du0, dt);
-  gpu_add_source<<<grid_dim, block_dim>>>(n, dv, dv0, dt);
+  gpu_add_source<<<grid_dim, block_dim, 0, get_new_stream()>>>(n, dd, dd0, dt);
+  gpu_add_source<<<grid_dim, block_dim, 0, get_new_stream()>>>(n, du, du0, dt);
+  gpu_add_source<<<grid_dim, block_dim, 0, get_new_stream()>>>(n, dv, dv0, dt);
   // TODO : Here would be a barrier of streams
 
   SWAP(dd0, dd);
