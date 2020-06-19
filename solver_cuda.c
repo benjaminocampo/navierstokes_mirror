@@ -48,53 +48,55 @@ void gpu_set_bnd_rb(unsigned int n, boundary b, float *x) {
   const unsigned int cwidth = (n + 2) / 2; // Color grid width
   float * const red = x;
   float * const black = red + (n + 2) * cwidth;
-  const unsigned int red_start = threadIdx.y % 2 == 0;
+  const unsigned int red_start = threadIdx.y % 2 == 1;
   const int grid_width = gridDim.x * blockDim.x;
   const int grid_height = gridDim.y * blockDim.y;
   const int gtidx = blockIdx.x * blockDim.x + threadIdx.x;
   const int gtidy = blockIdx.y * blockDim.y + threadIdx.y;
 
-  // for (int y = 1 + gtidy; y <= n; y += grid_height) {
-    // for (int x = start + gtidx; x < width - (1 - start); x += grid_width) {
-      if (gtidy == 0 && gtidx >= 0 && gtidx < cwidth) { // Thread touches first row
+  for (int y = 1 + gtidy; y <= n; y += grid_height) {
+    for (int x = gtidx; x < cwidth; x += grid_width) {
+      if (y == 1) { // Thread touches first row
         float bounce = b == HORIZONTAL ? -1 : 1;
-        size_t this_idx = idx(gtidx, 0, cwidth);
-        size_t bottom_idx = idx(gtidx, 1, cwidth);
+        size_t this_idx = idx(x, 0, cwidth);
+        size_t bottom_idx = idx(x, 1, cwidth);
         red[this_idx] = bounce * black[bottom_idx];
         black[this_idx] = bounce * red[bottom_idx];
       }
 
-      if (gtidy == n - 1 && gtidx >= 0 && gtidx < cwidth) { // Thread touches last row
+      if (y == n) { // Thread touches last row
         float bounce = b == HORIZONTAL ? -1 : 1;
-        size_t this_idx = idx(gtidx, n + 1, cwidth);
-        size_t top_idx = idx(gtidx, n, cwidth);
+        size_t this_idx = idx(x, n + 1, cwidth);
+        size_t top_idx = idx(x, n, cwidth);
         red[this_idx] = bounce * black[top_idx];
         black[this_idx] = bounce * red[top_idx];
       }
 
-      if (gtidx == 0 && gtidy >= 1 && gtidy <= n) { // Thread touches first column
+      if (x == 0) { // Thread touches first column
         float bounce = b == VERTICAL ? -1 : 1;
-        size_t this_idx = idx(0, gtidy, cwidth);
-        size_t right_idx = idx(0, gtidy, cwidth);
+        size_t this_idx = idx(0, y, cwidth);
+        size_t right_idx = idx(0, y, cwidth);
         if (red_start) red[this_idx] = bounce * black[right_idx];
         else black[this_idx] = bounce * red[right_idx];
       }
 
-      if (gtidx == n / 2 && gtidy >= 1 && gtidy <= n) { // Thread touches last color column
+      if (x == cwidth - 1) { // Thread touches last color column
         float bounce = b == VERTICAL ? -1 : 1;
-        size_t this_idx = idx(cwidth - 1, gtidy, cwidth);
-        size_t left_idx = idx(cwidth - 1, gtidy, cwidth);
+        size_t this_idx = idx(cwidth - 1, y, cwidth);
+        size_t left_idx = idx(cwidth - 1, y, cwidth);
         if (red_start) black[this_idx] = bounce * red[left_idx];
         else red[this_idx] = bounce * black[left_idx];
       }
-
-    if (gtidx == 0 && gtidy == 0)
-    {
-      x[IX(0, 0)] = 0.5f * (x[IX(1, 0)] + x[IX(0, 1)]);
-      x[IX(0, n + 1)] = 0.5f * (x[IX(1, n + 1)] + x[IX(0, n)]);
-      x[IX(n + 1, 0)] = 0.5f * (x[IX(n, 0)] + x[IX(n + 1, 1)]);
-      x[IX(n + 1, n + 1)] = -0.5f * (x[IX(n, n + 1)] + x[IX(n + 1, n)]);
     }
+  }
+
+  // Corners
+  if (gtidx == 0 && gtidy == 0) {
+    x[IX(0, 0)] = 0.5f * (x[IX(1, 0)] + x[IX(0, 1)]);
+    x[IX(0, n + 1)] = 0.5f * (x[IX(1, n + 1)] + x[IX(0, n)]);
+    x[IX(n + 1, 0)] = 0.5f * (x[IX(n, 0)] + x[IX(n + 1, 1)]);
+    x[IX(n + 1, n + 1)] = -0.5f * (x[IX(n, n + 1)] + x[IX(n + 1, n)]);
+  }
 }
 
 
