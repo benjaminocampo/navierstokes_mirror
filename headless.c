@@ -256,8 +256,15 @@ int main(int argc, char **argv) {
 
   if (!allocate_data()) exit(1);
   clear_data();
+
+  double start_time = wtime();
+
   printf("total_ns,react,vel_step,dens_step\n");
   for (i = 0; i < steps; i++) one_step();
+
+  double program_nspcell = 1.0e9 * (wtime() - start_time) / (N * N * steps);
+  printf("program_nspcell = %lf", program_nspcell);
+
   free_data();
   exit(0);
 }
