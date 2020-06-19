@@ -28,23 +28,15 @@
 
 static unsigned int div_round_up(unsigned int a, unsigned int b) { return (a + b - 1) / b; }
 
-static void lin_solve(unsigned int n, boundary b, float a, float c,
-                      float *__restrict__ dx, float *__restrict__ dx0,
-                      const unsigned int from, const unsigned int to) {
-  unsigned int color_size = (n + 2) * ((n + 2) / 2);
-  // cudaMemcpy does not allow const pointers in dst.
-  float *dred0 = dx0;
-  float *dblk0 = dx0 + color_size;
-  float *dred = dx;
-  float *dblk = dx + color_size;
+cudaGraph_t *create_lin_solve_graph(unsigned int n, boundary b, float a, float c,
+                      float *__restrict__ dred, float *__restrict__ dred0,
+                      float *__restrict__ dblk, float *__restrict__ dblk0,
+                      float *__restrict__ dx){
   unsigned int width = (n + 2) / 2;
-
-  cudaStream_t streamForGraph;
-  cudaGraph_t graph;
-  cudaGraphExec_t graphExec;
-  checkCudaErrors(cudaGraphCreate(&graph, 0));
-  checkCudaErrors(cudaStreamCreate(&streamForGraph));
-
+  cudaGraph_t *graph = (cudaGraph_t *)malloc(sizeof(cudaGraph_t));
+  checkCudaErrors(cudaGraphCreate(graph, 0));
+  // TODO: Find general way to define kernel params.
+  // TODO: Avoid re-definition of block_dim and grid_dim.
   cudaKernelNodeParams kernelNodeParams = {0};
   const dim3 block_dim{16, 16};
   const dim3 grid_dim{div_round_up(width, block_dim.x), n / block_dim.y};
@@ -62,8 +54,8 @@ static void lin_solve(unsigned int n, boundary b, float a, float c,
   checkCudaErrors(
     cudaGraphAddKernelNode(
       &lin_solve_rnode,
-      graph,
-      {},
+      *graph,
+      NULL,
       0,
       &kernelNodeParams
     )
@@ -76,8 +68,8 @@ static void lin_solve(unsigned int n, boundary b, float a, float c,
   checkCudaErrors(
     cudaGraphAddKernelNode(
       &lin_solve_bnode,
-      graph,
-      {},
+      *graph,
+      NULL,
       0,
       &kernelNodeParams
     )
@@ -92,19 +84,40 @@ static void lin_solve(unsigned int n, boundary b, float a, float c,
   kernelNodeParams.extra = NULL;
   void *set_bnd_node_params[3] = {&n, &b, (void *)&dx};
   kernelNodeParams.kernelParams = (void **)set_bnd_node_params;
-  cudaGraphAddKernelNode(
+  cudaGraphNode_t dependencies[2] = {lin_solve_bnode, lin_solve_rnode};
+  size_t ndependencies = 2;
+  checkCudaErrors(
+    cudaGraphAddKernelNode(
       &set_bnd_node,
-      graph,
-      {},
-      0,
+      *graph,
+      dependencies,
+      ndependencies,
       &kernelNodeParams
-    );
-  checkCudaErrors(cudaGraphInstantiate(&graphExec, graph, NULL, NULL, 0));
+    )
+  );
+  return graph;
+}
+
+static void lin_solve(unsigned int n, boundary b, float a, float c,
+                      float *__restrict__ dx, float *__restrict__ dx0,
+                      const unsigned int from, const unsigned int to) {
+  unsigned int color_size = (n + 2) * ((n + 2) / 2);
+  // cudaMemcpy does not allow const pointers in dst.
+  float *dred0 = dx0;
+  float *dblk0 = dx0 + color_size;
+  float *dred = dx;
+  float *dblk = dx + color_size;
+
+  cudaStream_t stream;
+  checkCudaErrors(cudaStreamCreate(&stream));
+  cudaGraph_t *graph = create_lin_solve_graph(n, b, a, c, dred, dred0, dblk, dblk0, dx);
+  cudaGraphExec_t graph_exec;
+  checkCudaErrors(cudaGraphInstantiate(&graph_exec, *graph, NULL, NULL, 0));
   // TODO: Move up block_dim and grid_dim
   for (unsigned int k = 0; k < 20; ++k) {
-    checkCudaErrors(cudaGraphLaunch(graphExec, streamForGraph));
+    checkCudaErrors(cudaGraphLaunch(graph_exec, stream));
   }
-  checkCudaErrors(cudaStreamSynchronize(streamForGraph));
+  checkCudaErrors(cudaStreamSynchronize(stream));
 }
 
 static void diffuse(unsigned int n, boundary b, float diff, float dt,
