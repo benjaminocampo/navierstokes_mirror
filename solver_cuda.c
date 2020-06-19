@@ -1,7 +1,10 @@
+#include <cooperative_groups.h>
 #include <assert.h>
 #include "indices.h"
 #include "solver.h"
 #include "helper_cuda.h"
+
+using namespace cooperative_groups;
 
 #define IX(x, y) (rb_idx((x), (y), (n + 2)))
 
@@ -133,6 +136,7 @@ void gpu_lin_solve_rb_step(grid_color color, unsigned int n, float a, float c,
 __global__
 void gpu_lin_solve(unsigned int n, boundary b, const float a, const float c,
                    float *__restrict__ dx, float *__restrict__ dx0) {
+  grid_group grid = this_grid();
   unsigned int color_size = (n + 2) * ((n + 2) / 2);
   float *dred0 = dx0;
   float *dblk0 = dx0 + color_size;
@@ -143,7 +147,7 @@ void gpu_lin_solve(unsigned int n, boundary b, const float a, const float c,
     gpu_lin_solve_rb_step(RED, n, a, c, dred0, dblk, dred);
     gpu_lin_solve_rb_step(BLACK, n, a, c, dblk0, dred, dblk);
     gpu_set_bnd_rb(n, b, dx);
-    // TODO: sync group;
+    grid.sync();
   }
 }
 

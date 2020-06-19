@@ -20,6 +20,7 @@
 #include <x86intrin.h>
 #include <omp.h>
 #include <thrust/extrema.h>
+#include <thrust/device_ptr.h>
 
 /* macros */
 
@@ -283,6 +284,12 @@ int main(int argc, char **argv) {
             "steps=%d\n",
             N, dt, diff, visc, force, source, steps);
   }
+
+  // Check cooperative groups support
+  int dev = 0;
+  int supportsCoopLaunch = 0;
+  checkCudaErrors(cudaDeviceGetAttribute(&supportsCoopLaunch, cudaDevAttrCooperativeLaunch, dev));
+  assert(supportsCoopLaunch && "The device does not support cooperative launches");
 
   if (!allocate_data()) exit(1);
   clear_data();
