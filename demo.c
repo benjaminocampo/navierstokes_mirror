@@ -267,9 +267,9 @@ static void react(void) {
   float max_density = *thrust::max_element(tdd_prev, tdd_prev + size);
 
   size_t size_in_mem = size * sizeof(float);
-  checkCudaErrors(cudaMemset(du_prev, 0, size_in_mem));
-  checkCudaErrors(cudaMemset(dv_prev, 0, size_in_mem));
-  checkCudaErrors(cudaMemset(dd_prev, 0, size_in_mem));
+  checkCudaErrors(cudaMemsetAsync(du_prev, 0, size_in_mem));
+  checkCudaErrors(cudaMemsetAsync(dv_prev, 0, size_in_mem));
+  checkCudaErrors(cudaMemsetAsync(dd_prev, 0, size_in_mem));
 
   dim3 block_dim{16, 16};
   dim3 grid_dim{ // The gridblock mapping is one thread per reactionary point
