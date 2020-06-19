@@ -19,6 +19,7 @@
 #include <stdlib.h>
 #include <x86intrin.h>
 #include <omp.h>
+#include <thrust/extrema.h>
 
 /* macros */
 
@@ -112,61 +113,107 @@ static int allocate_data(void) {
   return (1);
 }
 
-static void react(float *d, float *uu, float *vv) {
-  int i, size = (N + 2) * (N + 2);
-  float max_velocity2 = 0.0f; // TODO: Remove initialization because it already starts in -infinity
-  float max_density = 0.0f; // TODO: Remove initialization because it already starts in -infinity
-  // TODO: Try using default(firstprivate)
-  // TODO: Are this parallel fors matching our strip distribution
-  #pragma omp parallel for default(none) private(i) firstprivate(size, uu, vv, d) reduction(max: max_velocity2, max_density)
-  for (i = 0; i < size; i++) {
-    if (max_velocity2 < uu[i] * uu[i] + vv[i] * vv[i]) {
-      max_velocity2 = uu[i] * uu[i] + vv[i] * vv[i];
-    }
-    if (max_density < d[i]) {
-      max_density = d[i];
-    }
-  }
+using thrust::device_ptr;
+using thrust::tuple;
+using thrust::zip_iterator;
+using thrust::zip_iterator;
+using thrust::make_zip_iterator;
+using thrust::make_tuple;
+using thrust::max_element;
 
-  // TODO: Unify these two fors
-  #pragma omp parallel for
-  for (i = 0; i < size; i++) {
-    uu[i] = vv[i] = d[i] = 0.0f;
-  }
+typedef device_ptr<float> dfloatp;
+typedef tuple<dfloatp, dfloatp> dfloatp2;
+typedef tuple<float, float> tfloat2;
 
-  if (max_velocity2 < 0.0000005f) {
-    // TODO: This should be touched by the middle strip thread
-    uu[IX(N / 2, N / 2)] = force * 10.0f;
-    vv[IX(N / 2, N / 2)] = force * 10.0f;
-    #pragma omp parallel for collapse(2)
-    for (int y = 64; y < N; y += 64)
-      for (int x = 64; x < N; x += 64) {
-        uu[IX(x, y)] = force * 1000.0f * (N / 2 - y) / (N / 2);
-        vv[IX(x, y)] = force * 1000.0f * (N / 2 - x) / (N / 2);
-      }
+struct compare_dfloatp2 {
+  __device__
+  bool operator()(tfloat2 lhs, tfloat2 rhs) {
+    float lu = lhs.get<0>();
+    float lv = lhs.get<1>();
+    float ru = rhs.get<0>();
+    float rv = rhs.get<1>();
+    return lu * lu + lv * lv < ru * ru + rv * rv;
   }
-  if (max_density < 1.0f) {
-    // TODO: This should be touched by the middle strip thread
-    d[IX(N / 2, N / 2)] = source * 10.0f;
-    #pragma omp parallel for collapse(2)
-    for (int y = 64; y < N; y += 64)
-      for (int x = 64; x < N; x += 64) d[IX(x, y)] = source * 1000.0f;
+};
+
+static unsigned int div_round_up(unsigned int a, unsigned int b) { return (a + b - 1) / b; }
+
+__global__
+void gpu_react_velocity(float* u, float* v, float force, int n) {
+  int gtidx = blockIdx.x * blockDim.x + threadIdx.x;
+  int gtidy = blockIdx.y * blockDim.y + threadIdx.y;
+  int x = (gtidx + 1) * 64;
+  int y = (gtidy + 1) * 64;
+  if (x < n && y < n) {
+    int index = rb_idx(x, y, n + 2);
+    u[index] = force * 1000.0f * (n / 2 - y) / (n / 2);
+    v[index] = force * 1000.0f * (n / 2 - x) / (n / 2);
   }
-  return;
+  if (gtidx == 0 && gtidy == 0) {
+    int mid_index = rb_idx(n / 2, n / 2, n + 2);
+    u[mid_index] = force * 10.0f;
+    v[mid_index] = force * 10.0f;
+  }
+}
+
+__global__
+void gpu_react_density(float* d, float source, int n) {
+  int gtidx = blockIdx.x * blockDim.x + threadIdx.x;
+  int gtidy = blockIdx.y * blockDim.y + threadIdx.y;
+  int x = (gtidx + 1) * 64;
+  int y = (gtidy + 1) * 64;
+
+  if (x < n && y < n) {
+    int index = rb_idx(x, y, n + 2);
+    d[index] = source * 1000.0f;
+  }
+  if (gtidx == 0 && gtidy == 0) {
+    int mid_index = rb_idx(n / 2, n / 2, n + 2);
+    d[mid_index] = source * 10.0f;
+  }
+}
+
+static void react(void) {
+  int size = (N + 2) * (N + 2);
+
+  zip_iterator<dfloatp2> uvs_begin = make_zip_iterator(make_tuple(du_prev, dv_prev));
+  zip_iterator<dfloatp2> uvs_end = make_zip_iterator(make_tuple(du_prev + size, dv_prev + size));
+  // TODO: max_element has an implicit cudaDeviceSynchronize that we should get rid off.
+  zip_iterator<dfloatp2> zmaxvel2 = max_element(uvs_begin, uvs_end, compare_dfloatp2());
+  dfloatp2 mv2 = zmaxvel2.get_iterator_tuple();
+  float mvu = *mv2.get<0>();
+  float mvv = *mv2.get<1>();
+  float max_velocity2 = mvu * mvu + mvv * mvv;
+
+  dfloatp tdd_prev(dd_prev);
+  // TODO: Same as above.
+  float max_density = *thrust::max_element(tdd_prev, tdd_prev + size);
+
+  size_t size_in_mem = size * sizeof(float);
+  checkCudaErrors(cudaMemset(du_prev, 0, size_in_mem));
+  checkCudaErrors(cudaMemset(dv_prev, 0, size_in_mem));
+  checkCudaErrors(cudaMemset(dd_prev, 0, size_in_mem));
+
+  dim3 block_dim{16, 16};
+  dim3 grid_dim{ // The gridblock mapping is one thread per reactionary point
+    div_round_up(div_round_up(N, 64), block_dim.x),
+    div_round_up(div_round_up(N, 64), block_dim.y)
+  };
+
+  if (max_velocity2 < 0.0000005f)
+    gpu_react_velocity<<<grid_dim, block_dim>>>(du_prev, dv_prev, force, N);
+
+  if (max_density < 1.0f)
+    gpu_react_density<<<grid_dim, block_dim>>>(dd_prev, source, N);
 }
 
 static void one_step(void) {
-  // static int times = 1;
   static double start_t = 0.0;
-  // static double one_second = 0.0;
-  static double react_ns_p_cell = 0.0;
   static double step_ns_p_cell = 0.0;
 
   start_t = wtime();
-  react(hd_prev, hu_prev, hv_prev);
-  react_ns_p_cell = 1.0e9 * (wtime() - start_t) / (N * N);
+  react();
 
-  start_t = wtime();
   #pragma omp parallel firstprivate(hd, hu, hv, hd_prev, hu_prev, hv_prev, diff, visc, dt)
   {
     int threads = omp_get_num_threads();
@@ -175,31 +222,14 @@ static void one_step(void) {
     for(int tid = 0; tid < threads; tid++){
       int from = tid * strip_size + 1;
       int to = MIN((tid + 1) * strip_size + 1, N + 1);
-
-      size_t size_in_mem = (N + 2) * (N + 2) * sizeof(float);
-      checkCudaErrors(cudaMemcpy(dd, hd, size_in_mem, cudaMemcpyHostToDevice));
-      checkCudaErrors(cudaMemcpy(du, hu, size_in_mem, cudaMemcpyHostToDevice));
-      checkCudaErrors(cudaMemcpy(dv, hv, size_in_mem, cudaMemcpyHostToDevice));
-      checkCudaErrors(cudaMemcpy(dd_prev, hd_prev, size_in_mem, cudaMemcpyHostToDevice));
-      checkCudaErrors(cudaMemcpy(du_prev, hu_prev, size_in_mem, cudaMemcpyHostToDevice));
-      checkCudaErrors(cudaMemcpy(dv_prev, hv_prev, size_in_mem, cudaMemcpyHostToDevice));
       step(N, diff, visc, dt,
            dd, du, dv, dd_prev, du_prev, dv_prev,
            from, to);
-      checkCudaErrors(cudaDeviceSynchronize());
-      checkCudaErrors(cudaMemcpy(hd, dd, size_in_mem, cudaMemcpyDeviceToHost));
-      checkCudaErrors(cudaMemcpy(hu, du, size_in_mem, cudaMemcpyDeviceToHost));
-      checkCudaErrors(cudaMemcpy(hv, dv, size_in_mem, cudaMemcpyDeviceToHost));
-      checkCudaErrors(cudaMemcpy(hd_prev, dd_prev, size_in_mem, cudaMemcpyDeviceToHost));
-      checkCudaErrors(cudaMemcpy(hu_prev, du_prev, size_in_mem, cudaMemcpyDeviceToHost));
-      checkCudaErrors(cudaMemcpy(hv_prev, dv_prev, size_in_mem, cudaMemcpyDeviceToHost));
     }
   }
   step_ns_p_cell = 1.0e9 * (wtime() - start_t) / (N * N);
 
-  printf("%lf, %lf, %lf, %lf\n",
-         (react_ns_p_cell + step_ns_p_cell), react_ns_p_cell,
-         step_ns_p_cell, step_ns_p_cell);
+  printf("%lf\n", step_ns_p_cell);
 }
 
 /*
@@ -256,8 +286,31 @@ int main(int argc, char **argv) {
 
   if (!allocate_data()) exit(1);
   clear_data();
+
+  size_t size_in_mem = (N + 2) * (N + 2) * sizeof(float);
+  double start_time = wtime();
+
+  checkCudaErrors(cudaMemcpy(dd, hd, size_in_mem, cudaMemcpyHostToDevice));
+  checkCudaErrors(cudaMemcpy(du, hu, size_in_mem, cudaMemcpyHostToDevice));
+  checkCudaErrors(cudaMemcpy(dv, hv, size_in_mem, cudaMemcpyHostToDevice));
+  checkCudaErrors(cudaMemcpy(dd_prev, hd_prev, size_in_mem, cudaMemcpyHostToDevice));
+  checkCudaErrors(cudaMemcpy(du_prev, hu_prev, size_in_mem, cudaMemcpyHostToDevice));
+  checkCudaErrors(cudaMemcpy(dv_prev, hv_prev, size_in_mem, cudaMemcpyHostToDevice));
+
   printf("total_ns,react,vel_step,dens_step\n");
   for (i = 0; i < steps; i++) one_step();
+  checkCudaErrors(cudaDeviceSynchronize());
+
+  checkCudaErrors(cudaMemcpy(hd, dd, size_in_mem, cudaMemcpyDeviceToHost));
+  checkCudaErrors(cudaMemcpy(hu, du, size_in_mem, cudaMemcpyDeviceToHost));
+  checkCudaErrors(cudaMemcpy(hv, dv, size_in_mem, cudaMemcpyDeviceToHost));
+  checkCudaErrors(cudaMemcpy(hd_prev, dd_prev, size_in_mem, cudaMemcpyDeviceToHost));
+  checkCudaErrors(cudaMemcpy(hu_prev, du_prev, size_in_mem, cudaMemcpyDeviceToHost));
+  checkCudaErrors(cudaMemcpy(hv_prev, dv_prev, size_in_mem, cudaMemcpyDeviceToHost));
+
+  double program_nspcell = 1.0e9 * (wtime() - start_time) / (N * N * steps);
+  printf("program_nspcell = %lf", program_nspcell);
+
   free_data();
   exit(0);
 }
