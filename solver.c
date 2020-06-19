@@ -43,7 +43,7 @@ static void diffuse(unsigned int n, boundary b, float diff, float dt,
   void *kernel_args[] = { (void*)&n, (void*)&b, (void*)&a, (void*)&c, (void*)&dx, (void*)&dx0 };
   dim3 coop_block{5, 2};
   dim3 coop_grid{10};
-  cudaLaunchCooperativeKernel((void*)gpu_lin_solve, coop_grid, coop_block, kernel_args);
+  checkCudaErrors(cudaLaunchCooperativeKernel((void*)gpu_lin_solve, coop_grid, coop_block, kernel_args));
 }
 
 static void advect(unsigned int n,
@@ -111,7 +111,7 @@ static void project(unsigned int n,
   void *kernel_args[] = { (void*)&n, (void*)&b, (void*)&a, (void*)&c, (void*)&du0, (void*)&dv0 };
   dim3 coop_block{5, 2};
   dim3 coop_grid{10};
-  cudaLaunchCooperativeKernel((void*)gpu_lin_solve, coop_grid, coop_block, kernel_args);
+  checkCudaErrors(cudaLaunchCooperativeKernel((void*)gpu_lin_solve, coop_grid, coop_block, kernel_args));
 
   #pragma omp barrier
 

@@ -519,6 +519,7 @@ int main(int argc, char **argv) {
   int supportsCoopLaunch = 0;
   checkCudaErrors(cudaDeviceGetAttribute(&supportsCoopLaunch, cudaDevAttrCooperativeLaunch, dev));
   assert(supportsCoopLaunch && "The device does not support cooperative launches");
+  checkCudaErrors(cudaDeviceSetCacheConfig(cudaFuncCachePreferL1));
 
   if (!allocate_data()) exit(1);
   clear_data();
