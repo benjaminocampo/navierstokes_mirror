@@ -13,6 +13,7 @@
 
   =======================================================================
 */
+#include <thrust/device_ptr.h>
 #include <GL/glut.h>
 #include <assert.h>
 #include <stdio.h>

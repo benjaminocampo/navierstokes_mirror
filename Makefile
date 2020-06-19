@@ -4,8 +4,8 @@ cuda: clean
 	# for more compiling and linking ideas, see -dc and -dlink to mix gcc and nvcc
 
 	# Toggle comments for switching headless/demo compilation
-	# nvcc -DCUDA -x cu demo.c timing.c solver.c solver_cuda.c -o demo -lGL -lGLU -lglut --compiler-options=-fopenmp
-	nvcc -DCUDA -x cu headless.c timing.c solver.c solver_cuda.c -o headless --compiler-options=-fopenmp
+	 nvcc -DCUDA -x cu demo.c timing.c solver.c solver_cuda.c -o demo -lGL -lGLU -lglut --compiler-options=-fopenmp
+	#nvcc -DCUDA -x cu demo.c timing.c solver.c solver_cuda.c -o demo --compiler-options=-fopenmp
 
 BUILD=intrinsics # nonvect | intrinsics | ispc
 
