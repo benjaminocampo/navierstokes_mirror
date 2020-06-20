@@ -166,14 +166,15 @@ static void project(unsigned int n,
   size_t width = (n + 2) / 2;
   dim3 block_dim{16, 16};
   dim3 grid_dim{div_round_up(width, block_dim.x), n / block_dim.y};
+  int size_in_mem = (n + 2) * (n + 2) * sizeof(float);
 
-  gpu_project_rb_step1<<<grid_dim, block_dim>>>(n, RED, dredu0, dredv0, dblku, dblkv);
-  gpu_project_rb_step1<<<grid_dim, block_dim>>>(n, BLACK, dblku0, dblkv0, dredu, dredv);
+  gpu_project_rb_step1<<<grid_dim, block_dim>>>(n, RED, dredv0, dblku, dblkv);
+  gpu_project_rb_step1<<<grid_dim, block_dim>>>(n, BLACK, dblkv0, dredu, dredv);
   // TODO: What to do with all the pragma omp barriers?
   #pragma omp barrier
 
+  checkCudaErrors(cudaMemsetAsync(du0, 0, size_in_mem));
   gpu_set_bnd<<<div_round_up(n + 2, block_dim.x), block_dim.x>>>(n, NONE, dv0);
-  gpu_set_bnd<<<div_round_up(n + 2, block_dim.x), block_dim.x>>>(n, NONE, du0);
   #pragma omp barrier
 
   lin_solve(n, NONE, 1, 4, du0, dv0, from, to);

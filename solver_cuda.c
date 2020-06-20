@@ -138,8 +138,7 @@ void gpu_advect_rb(grid_color color, unsigned int n, float dt,
 }
 
 __global__
-void gpu_project_rb_step1(unsigned int n, grid_color color,
-                          float *__restrict__ sameu0, float *__restrict__ samev0,
+void gpu_project_rb_step1(unsigned int n, grid_color color, float *__restrict__ samev0,
                           float *__restrict__ neighu, float *__restrict__ neighv) {
   const int grid_width = gridDim.x * blockDim.x;
   const int grid_height = gridDim.y * blockDim.y;
@@ -159,7 +158,6 @@ void gpu_project_rb_step1(unsigned int n, grid_color color,
                       (neighu[index - start + 1] - neighu[index - start] +
                        neighv[index + width] - neighv[index - width]) /
                       n;
-      sameu0[index] = 0;
     }
   }
 }

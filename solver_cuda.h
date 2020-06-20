@@ -18,9 +18,8 @@ void gpu_advect_rb(grid_color color, unsigned int n, float dt,
                    const float *d0, const float *u0, const float *v0);
 
 __global__
-void gpu_project_rb_step1(unsigned int n, grid_color color,
-                          float *sameu0, float *samev0,
-                          float *neighu, float *neighv);
+void gpu_project_rb_step1(unsigned int n, grid_color color, 
+                          float *samev0, float *neighu, float *neighv);
 
 __global__
 void gpu_project_rb_step2(unsigned int n, grid_color color,
