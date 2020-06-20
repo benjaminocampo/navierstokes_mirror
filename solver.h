@@ -5,4 +5,4 @@ typedef enum { RED, BLACK } grid_color;
 
 void step(unsigned int n, float diff, float visc, float dt,
           float* dd, float *du, float *dv, float *dd0, float *du0, float *dv0,
-          const unsigned int from, const unsigned int to);
+          cudaStream_t *stream);

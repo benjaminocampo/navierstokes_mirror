@@ -51,6 +51,8 @@ static int win_x, win_y;
 static int mouse_down[3];
 static int omx, omy, mx, my;
 
+cudaStream_t main_stream;
+
 /*
   ----------------------------------------------------------------------
    free/clear/allocate simulation data
@@ -70,6 +72,7 @@ static void free_data(void) {
   if (dv_prev) cudaFree(hv_prev);
   if (dd) cudaFree(hd);
   if (dd_prev) cudaFree(hd_prev);
+  cudaStreamDestroy(main_stream);
 }
 
 static void clear_data(void) {
@@ -97,6 +100,7 @@ static int allocate_data(void) {
   checkCudaErrors(cudaMalloc(&dv_prev, size));
   checkCudaErrors(cudaMalloc(&dd, size));
   checkCudaErrors(cudaMalloc(&dd_prev, size));
+  checkCudaErrors(cudaStreamCreate(&main_stream));
   hu = (float *)_mm_malloc(size, 32);
   hv = (float *)_mm_malloc(size, 32);
   hu_prev = (float *)_mm_malloc(size, 32);
@@ -382,26 +386,16 @@ static void idle_func(void) {
   react_ns_p_cell += 1.0e9 * (wtime() - start_t) / (N * N);
 
   start_t = wtime();
-  #pragma omp parallel firstprivate(hd, hu, hv, hd_prev, hu_prev, hv_prev, diff, visc, dt)
-  {
-    int threads = omp_get_num_threads();
-    int strip_size = (N + threads - 1) / threads;
-    #pragma omp for
-    for(int tid = 0; tid < threads; tid++){
-      int from = tid * strip_size + 1;
-      int to = MIN((tid + 1) * strip_size + 1, N + 1);
-      step(N, diff, visc, dt,
-           dd, du, dv, dd_prev, du_prev, dv_prev,
-           from, to);
-      checkCudaErrors(cudaDeviceSynchronize());
-      checkCudaErrors(cudaMemcpy(hd, dd, size_in_mem, cudaMemcpyDeviceToHost));
-      checkCudaErrors(cudaMemcpy(hu, du, size_in_mem, cudaMemcpyDeviceToHost));
-      checkCudaErrors(cudaMemcpy(hv, dv, size_in_mem, cudaMemcpyDeviceToHost));
-      checkCudaErrors(cudaMemcpy(hd_prev, dd_prev, size_in_mem, cudaMemcpyDeviceToHost));
-      checkCudaErrors(cudaMemcpy(hu_prev, du_prev, size_in_mem, cudaMemcpyDeviceToHost));
-      checkCudaErrors(cudaMemcpy(hv_prev, dv_prev, size_in_mem, cudaMemcpyDeviceToHost));
-    }
-  }
+  step(N, diff, visc, dt,
+       dd, du, dv, dd_prev, du_prev, dv_prev,
+       &main_stream);
+  checkCudaErrors(cudaDeviceSynchronize());
+  checkCudaErrors(cudaMemcpy(hd, dd, size_in_mem, cudaMemcpyDeviceToHost));
+  checkCudaErrors(cudaMemcpy(hu, du, size_in_mem, cudaMemcpyDeviceToHost));
+  checkCudaErrors(cudaMemcpy(hv, dv, size_in_mem, cudaMemcpyDeviceToHost));
+  checkCudaErrors(cudaMemcpy(hd_prev, dd_prev, size_in_mem, cudaMemcpyDeviceToHost));
+  checkCudaErrors(cudaMemcpy(hu_prev, du_prev, size_in_mem, cudaMemcpyDeviceToHost));
+  checkCudaErrors(cudaMemcpy(hv_prev, dv_prev, size_in_mem, cudaMemcpyDeviceToHost));
   step_ns_p_cell += 1.0e9 * (wtime() - start_t) / (N * N);
 
   if (1.0 < wtime() - one_second) { /* at least 1s between stats */
