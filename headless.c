@@ -44,6 +44,12 @@ static float *hd_prev, *hu_prev, *hv_prev;
 static float *dd, *du, *dv;
 static float *dd_prev, *du_prev, *dv_prev;
 
+cudaStream_t main_stream;
+cudaGraphExec_t add_source3;
+cudaGraphExec_t diffuse3;
+cudaEvent_t spread, join_du, join_dv;
+cudaStream_t stream_dd, stream_du, stream_dv;
+
 __attribute__((unused)) static void dump_grid(float *grid) {
   for (int i = 0; i < N; i++) {
     printf("%d [", i);
@@ -71,6 +77,7 @@ static void free_data(void) {
   if (dv_prev) cudaFree(hv_prev);
   if (dd) cudaFree(hd);
   if (dd_prev) cudaFree(hd_prev);
+  cudaStreamDestroy(main_stream);
 }
 
 static void clear_data(void) {
@@ -88,6 +95,16 @@ static void clear_data(void) {
   for (i = 0; i < size; i++) {
     hu[i] = hv[i] = hu_prev[i] = hv_prev[i] = hd[i] = hd_prev[i] = 0.0f;
   }
+}
+
+static void create_stream_events(void) {
+  checkCudaErrors(cudaStreamCreate(&main_stream));
+  checkCudaErrors(cudaEventCreate(&spread));
+  checkCudaErrors(cudaEventCreate(&join_du));
+  checkCudaErrors(cudaEventCreate(&join_dv));
+  checkCudaErrors(cudaStreamCreate(&stream_dd));
+  checkCudaErrors(cudaStreamCreate(&stream_du));
+  checkCudaErrors(cudaStreamCreate(&stream_dv));
 }
 
 static int allocate_data(void) {
@@ -213,20 +230,10 @@ static void one_step(void) {
 
   start_t = wtime();
   react();
+  step(N, diff, visc, dt,
+       dd, du, dv, dd_prev, du_prev, dv_prev,
+       add_source3, diffuse3, main_stream);
 
-  #pragma omp parallel firstprivate(hd, hu, hv, hd_prev, hu_prev, hv_prev, diff, visc, dt)
-  {
-    int threads = omp_get_num_threads();
-    int strip_size = (N + threads - 1) / threads;
-    #pragma omp for
-    for(int tid = 0; tid < threads; tid++){
-      int from = tid * strip_size + 1;
-      int to = MIN((tid + 1) * strip_size + 1, N + 1);
-      step(N, diff, visc, dt,
-           dd, du, dv, dd_prev, du_prev, dv_prev,
-           from, to);
-    }
-  }
   step_ns_p_cell = 1.0e9 * (wtime() - start_t) / (N * N);
 
   printf("%lf\n", step_ns_p_cell);
@@ -286,7 +293,14 @@ int main(int argc, char **argv) {
 
   if (!allocate_data()) exit(1);
   clear_data();
-
+  create_stream_events();
+  create_graph_addsource3(&add_source3,
+    spread, join_du, join_dv, stream_dd, stream_du, stream_dv,
+    N, dt, dd, dd_prev, du, du_prev, dv, dv_prev);
+  create_graph_diffuse3(&diffuse3,
+    spread, join_du, join_dv, stream_dd, stream_du, stream_dv,
+    N, diff, visc, dt, dd, dd_prev, du, du_prev, dv, dv_prev
+  );
   size_t size_in_mem = (N + 2) * (N + 2) * sizeof(float);
   double start_time = wtime();
 
