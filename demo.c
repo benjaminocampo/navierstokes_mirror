@@ -53,6 +53,9 @@ static int omx, omy, mx, my;
 
 cudaStream_t main_stream;
 cudaGraphExec_t add_source3;
+cudaGraphExec_t diffuse3;
+cudaEvent_t spread, join_du, join_dv;
+cudaStream_t stream_dd, stream_du, stream_dv;
 /*
   ----------------------------------------------------------------------
    free/clear/allocate simulation data
@@ -92,6 +95,16 @@ static void clear_data(void) {
   }
 }
 
+static void create_stream_events(void) {
+  checkCudaErrors(cudaStreamCreate(&main_stream));
+  checkCudaErrors(cudaEventCreate(&spread));
+  checkCudaErrors(cudaEventCreate(&join_du));
+  checkCudaErrors(cudaEventCreate(&join_dv));
+  checkCudaErrors(cudaStreamCreate(&stream_dd));
+  checkCudaErrors(cudaStreamCreate(&stream_du));
+  checkCudaErrors(cudaStreamCreate(&stream_dv));
+}
+
 static int allocate_data(void) {
   int size = (N + 2) * (N + 2) * sizeof(float);
   checkCudaErrors(cudaMalloc(&du, size));
@@ -100,7 +113,6 @@ static int allocate_data(void) {
   checkCudaErrors(cudaMalloc(&dv_prev, size));
   checkCudaErrors(cudaMalloc(&dd, size));
   checkCudaErrors(cudaMalloc(&dd_prev, size));
-  checkCudaErrors(cudaStreamCreate(&main_stream));
   hu = (float *)_mm_malloc(size, 32);
   hv = (float *)_mm_malloc(size, 32);
   hu_prev = (float *)_mm_malloc(size, 32);
@@ -382,13 +394,13 @@ static void idle_func(void) {
   checkCudaErrors(cudaMemcpy(du_prev, hu_prev, size_in_mem, cudaMemcpyHostToDevice));
   checkCudaErrors(cudaMemcpy(dv_prev, hv_prev, size_in_mem, cudaMemcpyHostToDevice));
   react();
-
+  checkCudaErrors(cudaDeviceSynchronize());
   react_ns_p_cell += 1.0e9 * (wtime() - start_t) / (N * N);
 
   start_t = wtime();
   step(N, diff, visc, dt,
        dd, du, dv, dd_prev, du_prev, dv_prev,
-       &add_source3, &main_stream);
+       add_source3, diffuse3, main_stream);
   checkCudaErrors(cudaDeviceSynchronize());
   checkCudaErrors(cudaMemcpy(hd, dd, size_in_mem, cudaMemcpyDeviceToHost));
   checkCudaErrors(cudaMemcpy(hu, du, size_in_mem, cudaMemcpyDeviceToHost));
@@ -510,7 +522,14 @@ int main(int argc, char **argv) {
 
   if (!allocate_data()) exit(1);
   clear_data();
-  create_graph_addsource3(&add_source3, N, dt, dd, dd_prev, du, du_prev, dv, dv_prev);
+  create_stream_events();
+  create_graph_addsource3(&add_source3,
+    spread, join_du, join_dv, stream_dd, stream_du, stream_dv,
+    N, dt, dd, dd_prev, du, du_prev, dv, dv_prev);
+  create_graph_diffuse3(&diffuse3,
+    spread, join_du, join_dv, stream_dd, stream_du, stream_dv,
+    N, diff, visc, dt, dd, dd_prev, du, du_prev, dv, dv_prev
+  );
   win_x = 512;
   win_y = 512;
   open_glut_window();
