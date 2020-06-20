@@ -32,7 +32,7 @@
 // static dim3 coop_grid{5, 2};
 
 // rtx 2080 ti
-static dim3 coop_block{32, 16};
+static dim3 coop_block{32, 20};
 static dim3 coop_grid{17, 4};
 
 // Checks wether the hardcoded dimensions are the best for your particular gpu
@@ -47,6 +47,7 @@ void check_coop_dims(void) {
     cudaGetDeviceProperties(&deviceProp, 0);\
     printf("[Error] Subobtimal or invalid coop grid settings detected.\n");
     printf("GPU Detected: %s\n", deviceProp.name);
+    printf("GPU Compute Capability: %d\n", deviceProp.major);
     printf("Using block_size=%d and grid_size=%d\n", block_size, grid_size);
     printf("But the optimal configuration for running gpu_lin_solve would be with block_size=%d and grid_size=%d\n", best_block_size, best_grid_size);
     printf("Change coop_block and coop_grid to match those sizes, and make them the most square-ish you can for optimal performance.\n");
