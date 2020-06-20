@@ -32,69 +32,29 @@ cudaGraph_t *create_lin_solve_graph(unsigned int n, boundary b, float a, float c
                       float *__restrict__ dred, float *__restrict__ dred0,
                       float *__restrict__ dblk, float *__restrict__ dblk0,
                       float *__restrict__ dx){
-  unsigned int width = (n + 2) / 2;
   cudaGraph_t *graph = (cudaGraph_t *)malloc(sizeof(cudaGraph_t));
-  checkCudaErrors(cudaGraphCreate(graph, 0));
-  // TODO: Find general way to define kernel params.
+  cudaStream_t origin_stream, forked_stream;
+  cudaEvent_t fork, join;
+  checkCudaErrors(cudaStreamCreate(&origin_stream));
+  checkCudaErrors(cudaStreamCreate(&forked_stream));
+  checkCudaErrors(cudaEventCreate(&fork));
+  checkCudaErrors(cudaEventCreate(&join));
+  // TODO: width should not be computed here.
   // TODO: Avoid re-definition of block_dim and grid_dim.
-  cudaKernelNodeParams kernelNodeParams = {0};
+  unsigned int width = (n + 2) / 2;
   const dim3 block_dim{16, 16};
   const dim3 grid_dim{div_round_up(width, block_dim.x), n / block_dim.y};
-  kernelNodeParams.gridDim = grid_dim;
-  kernelNodeParams.blockDim = block_dim;
-  kernelNodeParams.extra = NULL;
 
-  // Kernel: gpu_lin_solve_rb_step
-  kernelNodeParams.func = (void *)gpu_lin_solve_rb_step;
-  // RED Node
-  cudaGraphNode_t lin_solve_rnode;
-  grid_color color = RED;
-  void *rnode_params[7] = {&color, &n, &a, &c, (void *)&dred0, (void *)&dblk, (void *)&dred};
-  kernelNodeParams.kernelParams = (void **)rnode_params;
-  checkCudaErrors(
-    cudaGraphAddKernelNode(
-      &lin_solve_rnode,
-      *graph,
-      NULL,
-      0,
-      &kernelNodeParams
-    )
-  );
-  // BLACK Node
-  cudaGraphNode_t lin_solve_bnode;
-  color = BLACK;
-  void *bnode_params[7] = {&color, &n, &a, &c, (void *)&dblk0, (void *)&dred, (void *)&dblk};
-  kernelNodeParams.kernelParams = (void **)bnode_params;
-  checkCudaErrors(
-    cudaGraphAddKernelNode(
-      &lin_solve_bnode,
-      *graph,
-      NULL,
-      0,
-      &kernelNodeParams
-    )
-  );
-  // Kernel: set_bnd
-  cudaGraphNode_t set_bnd_node;
-  kernelNodeParams.func = (void *)gpu_set_bnd;
-  kernelNodeParams.gridDim = dim3(
-    div_round_up(n + 2, block_dim.x), 1, 1
-  );
-  kernelNodeParams.blockDim = dim3(block_dim.x, 1, 1);
-  kernelNodeParams.extra = NULL;
-  void *set_bnd_node_params[3] = {&n, &b, (void *)&dx};
-  kernelNodeParams.kernelParams = (void **)set_bnd_node_params;
-  cudaGraphNode_t dependencies[2] = {lin_solve_bnode, lin_solve_rnode};
-  size_t ndependencies = 2;
-  checkCudaErrors(
-    cudaGraphAddKernelNode(
-      &set_bnd_node,
-      *graph,
-      dependencies,
-      ndependencies,
-      &kernelNodeParams
-    )
-  );
+  checkCudaErrors(cudaStreamBeginCapture(origin_stream, cudaStreamCaptureModeGlobal));
+  cudaEventRecord(fork, origin_stream);
+  cudaStreamWaitEvent(forked_stream, fork, 0);
+  gpu_lin_solve_rb_step<<<grid_dim, block_dim, 0, origin_stream>>>(RED, n, a, c, dred0, dblk, dred);
+  gpu_lin_solve_rb_step<<<grid_dim, block_dim, 0, forked_stream>>>(BLACK, n, a, c, dblk0, dred, dblk);
+  checkCudaErrors(cudaEventRecord(join, forked_stream));
+  checkCudaErrors(cudaStreamWaitEvent(origin_stream, join, 0));
+  gpu_set_bnd<<<div_round_up(n + 2, block_dim.x), block_dim.x, 0, origin_stream>>>(n, b, dx);
+  
+  cudaStreamEndCapture(origin_stream, graph);
   return graph;
 }
 
@@ -107,17 +67,17 @@ static void lin_solve(unsigned int n, boundary b, float a, float c,
   float *dblk0 = dx0 + color_size;
   float *dred = dx;
   float *dblk = dx + color_size;
-
-  cudaStream_t stream;
-  checkCudaErrors(cudaStreamCreate(&stream));
-  cudaGraph_t *graph = create_lin_solve_graph(n, b, a, c, dred, dred0, dblk, dblk0, dx);
+  cudaStream_t stream_for_graph;
+  cudaGraph_t *graph;
   cudaGraphExec_t graph_exec;
+  // TODO: A new graph is created for each step. It should be created once.
+  checkCudaErrors(cudaStreamCreate(&stream_for_graph));
+  graph = create_lin_solve_graph(n, b, a, c, dred, dred0, dblk, dblk0, dx);
   checkCudaErrors(cudaGraphInstantiate(&graph_exec, *graph, NULL, NULL, 0));
-  // TODO: Move up block_dim and grid_dim
-  for (unsigned int k = 0; k < 20; ++k) {
-    checkCudaErrors(cudaGraphLaunch(graph_exec, stream));
+  for(unsigned int k = 0; k < 20; ++k){
+    checkCudaErrors(cudaGraphLaunch(graph_exec, stream_for_graph));
   }
-  checkCudaErrors(cudaStreamSynchronize(stream));
+  checkCudaErrors(cudaStreamSynchronize(stream_for_graph));
 }
 
 static void diffuse(unsigned int n, boundary b, float diff, float dt,
@@ -126,6 +86,8 @@ static void diffuse(unsigned int n, boundary b, float diff, float dt,
   const float a = dt * diff * n * n;
   lin_solve(n, b, a, 1 + 4 * a, dx, dx0, from, to);
 }
+
+
 
 static void advect(unsigned int n,
                    float *dd, float *du, float *dv,
