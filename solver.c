@@ -1,6 +1,7 @@
 #include "solver.h"
 
 #include <x86intrin.h>
+#include <assert.h>
 
 #include "indices.h"
 #include "helper_string.h"
@@ -27,12 +28,31 @@
   }
 
 // gtx 1060 maxq
-static dim3 coop_block{16, 16};
-static dim3 coop_grid{5, 2};
+// static dim3 coop_block{24, 16};
+// static dim3 coop_grid{5, 2};
 
 // rtx 2080 ti
-// static dim3 coop_block{32, 16};
-// static dim3 coop_grid{17, 4};
+static dim3 coop_block{32, 16};
+static dim3 coop_grid{17, 4};
+
+// Checks wether the hardcoded dimensions are the best for your particular gpu
+void check_coop_dims(void) {
+  int best_block_size;
+  int best_grid_size;
+  cudaOccupancyMaxPotentialBlockSize(&best_grid_size, &best_block_size, gpu_lin_solve, 0, 0);
+  int block_size = coop_block.x * coop_block.y * coop_block.z;
+  int grid_size = coop_grid.x * coop_grid.y * coop_grid.z;
+  if (block_size != best_block_size || grid_size != best_grid_size) {
+    cudaDeviceProp deviceProp;
+    cudaGetDeviceProperties(&deviceProp, 0);\
+    printf("[Error] Subobtimal or invalid coop grid settings detected.\n");
+    printf("GPU Detected: %s\n", deviceProp.name);
+    printf("Using block_size=%d and grid_size=%d\n", block_size, grid_size);
+    printf("But the optimal configuration for running gpu_lin_solve would be with block_size=%d and grid_size=%d\n", best_block_size, best_grid_size);
+    printf("Change coop_block and coop_grid to match those sizes, and make them the most square-ish you can for optimal performance.\n");
+    assert(false);
+  }
+}
 
 static unsigned int div_round_up(unsigned int a, unsigned int b) { return (a + b - 1) / b; }
 

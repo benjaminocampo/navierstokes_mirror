@@ -286,10 +286,12 @@ int main(int argc, char **argv) {
   }
 
   // Check cooperative groups support
-  int dev = 0;
   int supportsCoopLaunch = 0;
-  checkCudaErrors(cudaDeviceGetAttribute(&supportsCoopLaunch, cudaDevAttrCooperativeLaunch, dev));
+  checkCudaErrors(cudaDeviceGetAttribute(&supportsCoopLaunch, cudaDevAttrCooperativeLaunch, 0));
   assert(supportsCoopLaunch && "The device does not support cooperative launches");
+  // Check best coop grid size is in use
+  check_coop_dims();
+  // Prefer cache over shared memory
   checkCudaErrors(cudaDeviceSetCacheConfig(cudaFuncCachePreferL1));
 
   if (!allocate_data()) exit(1);
