@@ -71,6 +71,7 @@ static void lin_solve(unsigned int n, boundary b, float a, float c,
   cudaGraph_t *graph;
   cudaGraphExec_t graph_exec;
   // TODO: A new graph is created for each step. It should be created once.
+  // TODO: Create just one graph of lin_solve.
   checkCudaErrors(cudaStreamCreate(&stream_for_graph));
   graph = create_lin_solve_graph(n, b, a, c, dred, dred0, dblk, dblk0, dx);
   checkCudaErrors(cudaGraphInstantiate(&graph_exec, *graph, NULL, NULL, 0));
@@ -111,14 +112,42 @@ static void advect(unsigned int n,
   const dim3 block_dim{16, 16};
   const dim3 grid_dim{div_round_up(width, block_dim.x), n / block_dim.y};
 
-  gpu_advect_rb<<<grid_dim, block_dim>>>(
+  // TODO: A new graph is created for each step. It should be created once.
+  cudaGraph_t graph;
+  cudaGraphExec_t graph_exec;
+  cudaStream_t origin_stream, forked_stream, stream_for_graph;
+  cudaEvent_t fork, join;
+  checkCudaErrors(cudaStreamCreate(&stream_for_graph));
+  checkCudaErrors(cudaStreamCreate(&origin_stream));
+  checkCudaErrors(cudaStreamCreate(&forked_stream));
+  checkCudaErrors(cudaEventCreate(&fork));
+  checkCudaErrors(cudaEventCreate(&join));
+
+  checkCudaErrors(cudaStreamBeginCapture(origin_stream, cudaStreamCaptureModeGlobal));
+  cudaEventRecord(fork, origin_stream);
+  cudaStreamWaitEvent(forked_stream, fork, 0);
+  gpu_advect_rb<<<grid_dim, block_dim, 0, origin_stream>>>(
     RED, n, dt, dredd, dredu, dredv, dredd0, dredu0, dredv0, dd0, du0, dv0
   );
-  gpu_advect_rb<<<grid_dim, block_dim>>>(
+  gpu_advect_rb<<<grid_dim, block_dim, 0, forked_stream>>>(
     BLACK, n, dt, dblkd, dblku, dblkv, dblkd0, dblku0, dblkv0, dd0, du0, dv0
   );
-  gpu_set_bnd<<<div_round_up(n + 2, block_dim.x), block_dim.x>>>(n, VERTICAL, du);
-  gpu_set_bnd<<<div_round_up(n + 2, block_dim.x), block_dim.x>>>(n, HORIZONTAL, dv);
+  checkCudaErrors(cudaEventRecord(join, forked_stream));
+  checkCudaErrors(cudaStreamWaitEvent(origin_stream, join, 0));
+  cudaEventRecord(fork, origin_stream);
+  cudaStreamWaitEvent(forked_stream, fork, 0);
+  gpu_set_bnd<<<div_round_up(n + 2, block_dim.x), block_dim.x, 0, origin_stream>>>(n, VERTICAL, du);
+  gpu_set_bnd<<<div_round_up(n + 2, block_dim.x), block_dim.x, 0, forked_stream>>>(n, HORIZONTAL, dv);
+  checkCudaErrors(cudaEventRecord(join, forked_stream));
+  checkCudaErrors(cudaStreamWaitEvent(origin_stream, join, 0));
+  cudaStreamEndCapture(origin_stream, &graph);
+
+  // Graph Launching
+  checkCudaErrors(cudaGraphInstantiate(&graph_exec, graph, NULL, NULL, 0));
+  for(unsigned int k = 0; k < 20; ++k){
+    checkCudaErrors(cudaGraphLaunch(graph_exec, stream_for_graph));
+  }
+  checkCudaErrors(cudaStreamSynchronize(stream_for_graph));
 }
 
 static void project(unsigned int n,
