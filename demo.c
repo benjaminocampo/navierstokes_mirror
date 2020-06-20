@@ -52,7 +52,7 @@ static int mouse_down[3];
 static int omx, omy, mx, my;
 
 cudaStream_t main_stream;
-
+cudaGraphExec_t add_source3;
 /*
   ----------------------------------------------------------------------
    free/clear/allocate simulation data
@@ -388,7 +388,7 @@ static void idle_func(void) {
   start_t = wtime();
   step(N, diff, visc, dt,
        dd, du, dv, dd_prev, du_prev, dv_prev,
-       &main_stream);
+       &add_source3, &main_stream);
   checkCudaErrors(cudaDeviceSynchronize());
   checkCudaErrors(cudaMemcpy(hd, dd, size_in_mem, cudaMemcpyDeviceToHost));
   checkCudaErrors(cudaMemcpy(hu, du, size_in_mem, cudaMemcpyDeviceToHost));
@@ -510,7 +510,7 @@ int main(int argc, char **argv) {
 
   if (!allocate_data()) exit(1);
   clear_data();
-
+  create_graph_addsource3(&add_source3, N, dt, dd, dd_prev, du, du_prev, dv, dv_prev);
   win_x = 512;
   win_y = 512;
   open_glut_window();

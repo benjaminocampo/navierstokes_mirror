@@ -28,34 +28,37 @@
 
 static unsigned int div_round_up(unsigned int a, unsigned int b) { return (a + b - 1) / b; }
 
-cudaGraph_t *create_lin_solve_graph(unsigned int n, boundary b, float a, float c,
-                      float *__restrict__ dred, float *__restrict__ dred0,
-                      float *__restrict__ dblk, float *__restrict__ dblk0,
-                      float *__restrict__ dx){
-  cudaGraph_t *graph = (cudaGraph_t *)malloc(sizeof(cudaGraph_t));
-  cudaStream_t origin_stream, forked_stream;
-  cudaEvent_t fork, join;
-  checkCudaErrors(cudaStreamCreate(&origin_stream));
-  checkCudaErrors(cudaStreamCreate(&forked_stream));
-  checkCudaErrors(cudaEventCreate(&fork));
-  checkCudaErrors(cudaEventCreate(&join));
-  // TODO: width should not be computed here.
-  // TODO: Avoid re-definition of block_dim and grid_dim.
-  unsigned int width = (n + 2) / 2;
-  const dim3 block_dim{16, 16};
-  const dim3 grid_dim{div_round_up(width, block_dim.x), n / block_dim.y};
-
-  checkCudaErrors(cudaStreamBeginCapture(origin_stream, cudaStreamCaptureModeGlobal));
-  cudaEventRecord(fork, origin_stream);
-  cudaStreamWaitEvent(forked_stream, fork, 0);
-  gpu_lin_solve_rb_step<<<grid_dim, block_dim, 0, origin_stream>>>(RED, n, a, c, dred0, dblk, dred);
-  gpu_lin_solve_rb_step<<<grid_dim, block_dim, 0, forked_stream>>>(BLACK, n, a, c, dblk0, dred, dblk);
-  checkCudaErrors(cudaEventRecord(join, forked_stream));
-  checkCudaErrors(cudaStreamWaitEvent(origin_stream, join, 0));
-  gpu_set_bnd<<<div_round_up(n + 2, block_dim.x), block_dim.x, 0, origin_stream>>>(n, b, dx);
+void create_graph_addsource3(cudaGraphExec_t *graph_exec,
+                             unsigned int n, float dt,
+                             float *dd, float *dd0,
+                             float *du, float *du0,
+                             float *dv, float *dv0){
+  dim3 block_dim{16, 16};
+  dim3 grid_dim{n / block_dim.x, n / block_dim.y};
+  cudaGraph_t graph;
+  cudaEvent_t spread, join_du, join_dv;
+  cudaStream_t stream_dd, stream_du, stream_dv;
+  checkCudaErrors(cudaEventCreate(&spread));
+  checkCudaErrors(cudaEventCreate(&join_du));
+  checkCudaErrors(cudaEventCreate(&join_dv));
+  checkCudaErrors(cudaStreamCreate(&stream_dd));
+  checkCudaErrors(cudaStreamCreate(&stream_du));
+  checkCudaErrors(cudaStreamCreate(&stream_dv));
+  checkCudaErrors(cudaStreamBeginCapture(stream_dd, cudaStreamCaptureModeGlobal));    
   
-  cudaStreamEndCapture(origin_stream, graph);
-  return graph;
+  cudaEventRecord(spread, stream_dd);
+  cudaStreamWaitEvent(stream_du, spread, 0);
+  cudaStreamWaitEvent(stream_dv, spread, 0);
+  gpu_add_source<<<grid_dim, block_dim, 0, stream_dd>>>(n, dd, dd0, dt);
+  gpu_add_source<<<grid_dim, block_dim, 0, stream_du>>>(n, du, du0, dt);
+  gpu_add_source<<<grid_dim, block_dim, 0, stream_dv>>>(n, dv, dv0, dt);
+  cudaEventRecord(join_du, stream_du);
+  cudaEventRecord(join_dv, stream_dv);
+  cudaStreamWaitEvent(stream_dd, join_du, 0);
+  cudaStreamWaitEvent(stream_dd, join_dv, 0);
+
+  checkCudaErrors(cudaStreamEndCapture(stream_dd, &graph));
+  checkCudaErrors(cudaGraphInstantiate(graph_exec, graph, NULL, NULL, 0));
 }
 
 static void lin_solve(unsigned int n, boundary b, float a, float c,
@@ -182,16 +185,10 @@ static void project(unsigned int n,
 
 void step(unsigned int n, float diff, float visc, float dt,
           float* dd, float *du, float *dv, float *dd0, float *du0, float *dv0,
-          cudaStream_t *__restrict__ stream) {
-
-  // TODO: Probably this should be the only place where block and grid_dim are defined
-  dim3 block_dim{16, 16};
-  dim3 grid_dim{n / block_dim.x, n / block_dim.y};
+          cudaGraphExec_t *add_source3, cudaStream_t *__restrict__ stream) {
 
   // TODO: These launches can be unsynchronized inside the device, specify that
-  gpu_add_source<<<grid_dim, block_dim, 0, *stream>>>(n, dd, dd0, dt);
-  gpu_add_source<<<grid_dim, block_dim, 0, *stream>>>(n, du, du0, dt);
-  gpu_add_source<<<grid_dim, block_dim, 0, *stream>>>(n, dv, dv0, dt);
+  checkCudaErrors(cudaGraphLaunch(*add_source3, *stream));
   // TODO : Here would be a barrier of streams
 
   SWAP(dd0, dd);
