@@ -5,8 +5,9 @@ typedef enum { RED, BLACK } grid_color;
 
 void step(unsigned int n, float diff, float visc, float dt,
           float* dd, float *du, float *dv, float *dd0, float *du0, float *dv0,
-          cudaStream_t stream_dd, cudaStream_t stream_du, cudaStream_t stream_dv,
-          cudaEvent_t spread, cudaEvent_t join_du, cudaEvent_t join_dv);
+          cudaStream_t stream0, cudaStream_t stream1, cudaStream_t stream2,
+          cudaEvent_t spread, cudaEvent_t join_stream0, cudaEvent_t join_stream1,
+          cudaEvent_t join_stream2);
 
 void create_graph_addsource3(cudaGraphExec_t *graph_exec,
                              cudaEvent_t spread, cudaEvent_t join_du,

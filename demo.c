@@ -53,8 +53,8 @@ static int omx, omy, mx, my;
 
 cudaGraphExec_t add_source3;
 cudaGraphExec_t diffuse3;
-cudaEvent_t spread, join_du, join_dv;
-cudaStream_t stream_dd, stream_du, stream_dv;
+cudaEvent_t spread, join_stream0, join_stream1, join_stream2;
+cudaStream_t stream0, stream1, stream2;
 /*
   ----------------------------------------------------------------------
    free/clear/allocate simulation data
@@ -74,9 +74,9 @@ static void free_data(void) {
   if (dv_prev) cudaFree(hv_prev);
   if (dd) cudaFree(hd);
   if (dd_prev) cudaFree(hd_prev);
-  cudaStreamDestroy(stream_dd);
-  cudaStreamDestroy(stream_du);
-  cudaStreamDestroy(stream_dv);
+  cudaStreamDestroy(stream0);
+  cudaStreamDestroy(stream1);
+  cudaStreamDestroy(stream2);
 }
 
 static void clear_data(void) {
@@ -98,11 +98,12 @@ static void clear_data(void) {
 
 static void create_stream_events(void) {
   checkCudaErrors(cudaEventCreate(&spread));
-  checkCudaErrors(cudaEventCreate(&join_du));
-  checkCudaErrors(cudaEventCreate(&join_dv));
-  checkCudaErrors(cudaStreamCreate(&stream_dd));
-  checkCudaErrors(cudaStreamCreate(&stream_du));
-  checkCudaErrors(cudaStreamCreate(&stream_dv));
+  checkCudaErrors(cudaEventCreate(&join_stream0));
+  checkCudaErrors(cudaEventCreate(&join_stream1));
+  checkCudaErrors(cudaEventCreate(&join_stream2));
+  checkCudaErrors(cudaStreamCreate(&stream0));
+  checkCudaErrors(cudaStreamCreate(&stream1));
+  checkCudaErrors(cudaStreamCreate(&stream2));
 }
 
 static int allocate_data(void) {
@@ -400,8 +401,8 @@ static void idle_func(void) {
   start_t = wtime();
   step(N, diff, visc, dt,
        dd, du, dv, dd_prev, du_prev, dv_prev,
-       stream_dd, stream_du, stream_dv,
-       spread, join_du, join_dv);
+       stream0, stream1, stream2,
+       spread, join_stream0, join_stream1, join_stream2);
   checkCudaErrors(cudaDeviceSynchronize());
   checkCudaErrors(cudaMemcpy(hd, dd, size_in_mem, cudaMemcpyDeviceToHost));
   checkCudaErrors(cudaMemcpy(hu, du, size_in_mem, cudaMemcpyDeviceToHost));
@@ -525,10 +526,10 @@ int main(int argc, char **argv) {
   clear_data();
   create_stream_events();
   //create_graph_addsource3(&add_source3,
-  //  spread, join_du, join_dv, stream_dd, stream_du, stream_dv,
+  //  spread, join_stream1, join_stream2, stream0, stream1, stream2,
   //  N, dt, dd, dd_prev, du, du_prev, dv, dv_prev);
   //create_graph_diffuse3(&diffuse3,
-  //  spread, join_du, join_dv, stream_dd, stream_du, stream_dv,
+  //  spread, join_stream1, join_stream2, stream0, stream1, stream2,
   //  N, diff, visc, dt, dd, dd_prev, du, du_prev, dv, dv_prev
   //);
   win_x = 512;

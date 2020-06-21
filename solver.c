@@ -101,7 +101,9 @@ static void advect(unsigned int n,
 
 static void project(unsigned int n,
                     float *du, float *dv, float *du0, float *dv0,
-                    cudaStream_t stream) {
+                    cudaStream_t stream0, cudaStream_t stream1,
+                    cudaEvent_t spread, cudaEvent_t join_stream0,
+                    cudaEvent_t join_stream1) {
   unsigned int color_size = (n + 2) * ((n + 2) / 2);
   float *dredu = du;
   float *dredv = dv;
@@ -117,44 +119,54 @@ static void project(unsigned int n,
   dim3 grid_dim{div_round_up(width, block_dim.x), n / block_dim.y};
   int size_in_mem = (n + 2) * (n + 2) * sizeof(float);
 
-  gpu_project_rb_step1<<<grid_dim, block_dim, 0, stream>>>(
+  gpu_project_rb_step1<<<grid_dim, block_dim, 0, stream0>>>(
     n, RED, dredv0, dblku, dblkv
   );
-  gpu_project_rb_step1<<<grid_dim, block_dim, 0, stream>>>(
+  gpu_project_rb_step1<<<grid_dim, block_dim, 0, stream0>>>(
     n, BLACK, dblkv0, dredu, dredv
   );
-  // TODO: What to do with all the pragma omp barriers?
-  #pragma omp barrier
+  checkCudaErrors(cudaMemsetAsync(du0, 0, size_in_mem, stream1));
 
-  checkCudaErrors(cudaMemsetAsync(du0, 0, size_in_mem, stream));
-  gpu_set_bnd<<<div_round_up(n + 2, block_dim.x), block_dim.x, 0, stream>>>(
+  gpu_set_bnd<<<div_round_up(n + 2, block_dim.x), block_dim.x, 0, stream0>>>(
     n, NONE, dv0
   );
-  #pragma omp barrier
 
-  lin_solve(n, NONE, 1, 4, du0, dv0, stream);
-  #pragma omp barrier
+  cudaEventRecord(join_stream1, stream1);
+  cudaStreamWaitEvent(stream0, join_stream1, 0);
 
-  gpu_project_rb_step2<<<grid_dim, block_dim, 0, stream>>>(
+  lin_solve(n, NONE, 1, 4, du0, dv0, stream0);
+
+  cudaEventRecord(spread, stream0);
+  cudaStreamWaitEvent(stream1, spread, 0);
+
+  gpu_project_rb_step2<<<grid_dim, block_dim, 0, stream0>>>(
     n, RED, dredu, dredv, dblku0
   );
-  gpu_project_rb_step2<<<grid_dim, block_dim, 0, stream>>>(
+  gpu_project_rb_step2<<<grid_dim, block_dim, 0, stream1>>>(
     n, BLACK, dblku, dblkv, dredu0
   );
-  #pragma omp barrier
 
-  gpu_set_bnd<<<div_round_up(n + 2, block_dim.x), block_dim.x, 0, stream>>>(
+  cudaEventRecord(join_stream1, stream1);
+  cudaStreamWaitEvent(stream0, join_stream1, 0);
+
+  cudaEventRecord(spread, stream0);
+  cudaStreamWaitEvent(stream1, spread, 0);
+
+  gpu_set_bnd<<<div_round_up(n + 2, block_dim.x), block_dim.x, 0, stream0>>>(
     n, VERTICAL, du
   );
-  gpu_set_bnd<<<div_round_up(n + 2, block_dim.x), block_dim.x, 0, stream>>>(
+  gpu_set_bnd<<<div_round_up(n + 2, block_dim.x), block_dim.x, 0, stream1>>>(
     n, HORIZONTAL, dv
   );
+
+  cudaEventRecord(join_stream1, stream1);
+  cudaStreamWaitEvent(stream0, join_stream1, 0);
 }
 
 void create_graph_addsource3(cudaGraphExec_t *graph_exec,
-                             cudaEvent_t spread, cudaEvent_t join_du,
-                             cudaEvent_t join_dv, cudaStream_t stream_dd,
-                             cudaStream_t stream_du, cudaStream_t stream_dv,
+                             cudaEvent_t spread, cudaEvent_t join_stream1,
+                             cudaEvent_t join_stream2, cudaStream_t stream0,
+                             cudaStream_t stream1, cudaStream_t stream2,
                              unsigned int n, float dt,
                              float *dd, float *dd0,
                              float *du, float *du0,
@@ -162,109 +174,99 @@ void create_graph_addsource3(cudaGraphExec_t *graph_exec,
   dim3 block_dim{16, 16};
   dim3 grid_dim{n / block_dim.x, n / block_dim.y};
   cudaGraph_t graph;
-  checkCudaErrors(cudaStreamBeginCapture(stream_dd, cudaStreamCaptureModeGlobal));
+  checkCudaErrors(cudaStreamBeginCapture(stream0, cudaStreamCaptureModeGlobal));
 
-  cudaEventRecord(spread, stream_dd);
-  cudaStreamWaitEvent(stream_du, spread, 0);
-  cudaStreamWaitEvent(stream_dv, spread, 0);
-  gpu_add_source<<<grid_dim, block_dim, 0, stream_dd>>>(n, dd, dd0, dt);
-  gpu_add_source<<<grid_dim, block_dim, 0, stream_du>>>(n, du, du0, dt);
-  gpu_add_source<<<grid_dim, block_dim, 0, stream_dv>>>(n, dv, dv0, dt);
-  cudaEventRecord(join_du, stream_du);
-  cudaEventRecord(join_dv, stream_dv);
-  cudaStreamWaitEvent(stream_dd, join_du, 0);
-  cudaStreamWaitEvent(stream_dd, join_dv, 0);
+  cudaEventRecord(spread, stream0);
+  cudaStreamWaitEvent(stream1, spread, 0);
+  cudaStreamWaitEvent(stream2, spread, 0);
+  gpu_add_source<<<grid_dim, block_dim, 0, stream0>>>(n, dd, dd0, dt);
+  gpu_add_source<<<grid_dim, block_dim, 0, stream1>>>(n, du, du0, dt);
+  gpu_add_source<<<grid_dim, block_dim, 0, stream2>>>(n, dv, dv0, dt);
+  cudaEventRecord(join_stream1, stream1);
+  cudaEventRecord(join_stream2, stream2);
+  cudaStreamWaitEvent(stream0, join_stream1, 0);
+  cudaStreamWaitEvent(stream0, join_stream2, 0);
 
-  checkCudaErrors(cudaStreamEndCapture(stream_dd, &graph));
+  checkCudaErrors(cudaStreamEndCapture(stream0, &graph));
   checkCudaErrors(cudaGraphInstantiate(graph_exec, graph, NULL, NULL, 0));
   cudaGraphDestroy(graph);
 }
 
 void create_graph_diffuse3(cudaGraphExec_t *graph_exec,
-                           cudaEvent_t spread, cudaEvent_t join_du,
-                           cudaEvent_t join_dv, cudaStream_t stream_dd,
-                           cudaStream_t stream_du, cudaStream_t stream_dv,
+                           cudaEvent_t spread, cudaEvent_t join_stream1,
+                           cudaEvent_t join_stream2, cudaStream_t stream0,
+                           cudaStream_t stream1, cudaStream_t stream2,
                            unsigned int n, float diff,
                            float visc, float dt,
                            float *dd, float *dd0,
                            float *du, float *du0,
                            float *dv, float *dv0){
   cudaGraph_t graph;
-  checkCudaErrors(cudaStreamBeginCapture(stream_dd, cudaStreamCaptureModeGlobal));
+  checkCudaErrors(cudaStreamBeginCapture(stream0, cudaStreamCaptureModeGlobal));
 
-  cudaEventRecord(spread, stream_dd);
-  cudaStreamWaitEvent(stream_du, spread, 0);
-  cudaStreamWaitEvent(stream_dv, spread, 0);
-  diffuse(n, NONE, diff, dt, dd, dd0, stream_dd);
-  diffuse(n, VERTICAL, visc, dt, du, du0, stream_du);
-  diffuse(n, HORIZONTAL, visc, dt, dv, dv0, stream_dv);
-  cudaEventRecord(join_du, stream_du);
-  cudaEventRecord(join_dv, stream_dv);
-  cudaStreamWaitEvent(stream_dd, join_du, 0);
-  cudaStreamWaitEvent(stream_dd, join_dv, 0);
+  cudaEventRecord(spread, stream0);
+  cudaStreamWaitEvent(stream1, spread, 0);
+  cudaStreamWaitEvent(stream2, spread, 0);
+  diffuse(n, NONE, diff, dt, dd, dd0, stream0);
+  diffuse(n, VERTICAL, visc, dt, du, du0, stream1);
+  diffuse(n, HORIZONTAL, visc, dt, dv, dv0, stream2);
+  cudaEventRecord(join_stream1, stream1);
+  cudaEventRecord(join_stream2, stream2);
+  cudaStreamWaitEvent(stream0, join_stream1, 0);
+  cudaStreamWaitEvent(stream0, join_stream2, 0);
 
-  checkCudaErrors(cudaStreamEndCapture(stream_dd, &graph));
+  checkCudaErrors(cudaStreamEndCapture(stream0, &graph));
   checkCudaErrors(cudaGraphInstantiate(graph_exec, graph, NULL, NULL, 0));
 }
 
 void step(unsigned int n, float diff, float visc, float dt,
           float* dd, float *du, float *dv, float *dd0, float *du0, float *dv0,
-          cudaStream_t stream_dd, cudaStream_t stream_du, cudaStream_t stream_dv,
-          cudaEvent_t spread, cudaEvent_t join_du, cudaEvent_t join_dv) {
+          cudaStream_t stream0, cudaStream_t stream1, cudaStream_t stream2,
+          cudaEvent_t spread, cudaEvent_t join_stream0, cudaEvent_t join_stream1,
+          cudaEvent_t join_stream2) {
 
   // TODO: These launches can be unsynchronized inside the device, specify that  
 
   dim3 block_dim{16, 16};
   dim3 grid_dim{n / block_dim.x, n / block_dim.y};
 
-  cudaEventRecord(spread, stream_dd);
-  cudaStreamWaitEvent(stream_du, spread, 0);
-  cudaStreamWaitEvent(stream_dv, spread, 0);
+  cudaEventRecord(spread, stream0);
+  cudaStreamWaitEvent(stream1, spread, 0);
+  cudaStreamWaitEvent(stream2, spread, 0);
 
-  gpu_add_source<<<grid_dim, block_dim, 0, stream_dd>>>(n, dd, dd0, dt);
-  SWAP(dd0, dd);
-  diffuse(n, NONE, diff, dt, dd, dd0, stream_dd);
+  gpu_add_source<<<grid_dim, block_dim, 0, stream0>>>(n, dv, dv0, dt);
+  SWAP(dv0, dv);
+  diffuse(n, HORIZONTAL, visc, dt, dv, dv0, stream0);
   
-  gpu_add_source<<<grid_dim, block_dim, 0, stream_du>>>(n, du, du0, dt);
+  gpu_add_source<<<grid_dim, block_dim, 0, stream1>>>(n, du, du0, dt);
   SWAP(du0, du);
-  diffuse(n, VERTICAL, visc, dt, du, du0, stream_du);
+  diffuse(n, VERTICAL, visc, dt, du, du0, stream1);
 
-  gpu_add_source<<<grid_dim, block_dim, 0, stream_dv>>>(n, dv, dv0, dt);
-  SWAP(dv0, dv);
-  diffuse(n, HORIZONTAL, visc, dt, dv, dv0, stream_dv);
+  gpu_add_source<<<grid_dim, block_dim, 0, stream2>>>(n, dd, dd0, dt);
+  SWAP(dd0, dd);
+  diffuse(n, NONE, diff, dt, dd, dd0, stream2);
 
-  cudaEventRecord(join_du, stream_du);
-  cudaEventRecord(join_dv, stream_dv);
-  cudaStreamWaitEvent(stream_dd, join_du, 0);
-  cudaStreamWaitEvent(stream_dd, join_dv, 0);
-
-  /* diffuse(n, NONE, diff, dt, dd, dd0, stream_dd);
-  diffuse(n, VERTICAL, visc, dt, du, du0, stream_dd);
-  diffuse(n, HORIZONTAL, visc, dt, dv, dv0, stream_dd);
- */
-
-/*   cudaEventRecord(spread, stream_dd);
-  cudaStreamWaitEvent(stream_du, spread, 0);
-  cudaStreamWaitEvent(stream_dv, spread, 0);
-  cudaEventRecord(join_du, stream_du);
-  cudaEventRecord(join_dv, stream_dv);
-  cudaStreamWaitEvent(stream_dd, join_du, 0);
-  cudaStreamWaitEvent(stream_dd, join_dv, 0);
-  cudaStreamDestroy(stream_du);
-  cudaStreamDestroy(stream_dv); */
-
-  #pragma omp barrier
-
-  project(n, du, dv, du0, dv0, stream_dd);
-  #pragma omp barrier
+  project(
+    n, du, dv, du0, dv0, stream0, stream1,
+    spread, join_stream0, join_stream1
+  );
 
   SWAP(dd0, dd);
   SWAP(du0, du);
   SWAP(dv0, dv);
 
-  advect(n, dd, du, dv, dd0, du0, dv0, dt, stream_dd);
+  cudaEventRecord(join_stream2, stream2);
+  cudaStreamWaitEvent(stream0, join_stream2, 0);
+
+  advect(n, dd, du, dv, dd0, du0, dv0, dt, stream0);
   #pragma omp barrier
 
-  project(n, du, dv, du0, dv0, stream_dd);
+  cudaEventRecord(spread, stream0);
+  cudaStreamWaitEvent(stream1, spread, 0);
+
+  project(
+    n, du, dv, du0, dv0, stream0, stream1,
+    spread, join_stream0, join_stream1
+  );
   #pragma omp barrier
 }
