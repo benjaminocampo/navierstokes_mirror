@@ -51,7 +51,6 @@ static int win_x, win_y;
 static int mouse_down[3];
 static int omx, omy, mx, my;
 
-cudaStream_t main_stream;
 cudaGraphExec_t add_source3;
 cudaGraphExec_t diffuse3;
 cudaEvent_t spread, join_du, join_dv;
@@ -75,7 +74,9 @@ static void free_data(void) {
   if (dv_prev) cudaFree(hv_prev);
   if (dd) cudaFree(hd);
   if (dd_prev) cudaFree(hd_prev);
-  cudaStreamDestroy(main_stream);
+  cudaStreamDestroy(stream_dd);
+  cudaStreamDestroy(stream_du);
+  cudaStreamDestroy(stream_dv);
 }
 
 static void clear_data(void) {
@@ -96,7 +97,6 @@ static void clear_data(void) {
 }
 
 static void create_stream_events(void) {
-  checkCudaErrors(cudaStreamCreate(&main_stream));
   checkCudaErrors(cudaEventCreate(&spread));
   checkCudaErrors(cudaEventCreate(&join_du));
   checkCudaErrors(cudaEventCreate(&join_dv));
@@ -400,7 +400,8 @@ static void idle_func(void) {
   start_t = wtime();
   step(N, diff, visc, dt,
        dd, du, dv, dd_prev, du_prev, dv_prev,
-       add_source3, diffuse3, main_stream);
+       stream_dd, stream_du, stream_dv,
+       spread, join_du, join_dv);
   checkCudaErrors(cudaDeviceSynchronize());
   checkCudaErrors(cudaMemcpy(hd, dd, size_in_mem, cudaMemcpyDeviceToHost));
   checkCudaErrors(cudaMemcpy(hu, du, size_in_mem, cudaMemcpyDeviceToHost));
@@ -523,13 +524,13 @@ int main(int argc, char **argv) {
   if (!allocate_data()) exit(1);
   clear_data();
   create_stream_events();
-  create_graph_addsource3(&add_source3,
-    spread, join_du, join_dv, stream_dd, stream_du, stream_dv,
-    N, dt, dd, dd_prev, du, du_prev, dv, dv_prev);
-  create_graph_diffuse3(&diffuse3,
-    spread, join_du, join_dv, stream_dd, stream_du, stream_dv,
-    N, diff, visc, dt, dd, dd_prev, du, du_prev, dv, dv_prev
-  );
+  //create_graph_addsource3(&add_source3,
+  //  spread, join_du, join_dv, stream_dd, stream_du, stream_dv,
+  //  N, dt, dd, dd_prev, du, du_prev, dv, dv_prev);
+  //create_graph_diffuse3(&diffuse3,
+  //  spread, join_du, join_dv, stream_dd, stream_du, stream_dv,
+  //  N, diff, visc, dt, dd, dd_prev, du, du_prev, dv, dv_prev
+  //);
   win_x = 512;
   win_y = 512;
   open_glut_window();

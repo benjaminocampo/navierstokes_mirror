@@ -209,30 +209,62 @@ void create_graph_diffuse3(cudaGraphExec_t *graph_exec,
 
 void step(unsigned int n, float diff, float visc, float dt,
           float* dd, float *du, float *dv, float *dd0, float *du0, float *dv0,
-          cudaGraphExec_t add_source3, cudaGraphExec_t diffuse3,
-          cudaStream_t __restrict__ stream) {
+          cudaStream_t stream_dd, cudaStream_t stream_du, cudaStream_t stream_dv,
+          cudaEvent_t spread, cudaEvent_t join_du, cudaEvent_t join_dv) {
 
-  // TODO: These launches can be unsynchronized inside the device, specify that
-  checkCudaErrors(cudaGraphLaunch(add_source3, stream));
+  // TODO: These launches can be unsynchronized inside the device, specify that  
+
+  dim3 block_dim{16, 16};
+  dim3 grid_dim{n / block_dim.x, n / block_dim.y};
+
+  cudaEventRecord(spread, stream_dd);
+  cudaStreamWaitEvent(stream_du, spread, 0);
+  cudaStreamWaitEvent(stream_dv, spread, 0);
+
+  gpu_add_source<<<grid_dim, block_dim, 0, stream_dd>>>(n, dd, dd0, dt);
+  SWAP(dd0, dd);
+  diffuse(n, NONE, diff, dt, dd, dd0, stream_dd);
+  
+  gpu_add_source<<<grid_dim, block_dim, 0, stream_du>>>(n, du, du0, dt);
+  SWAP(du0, du);
+  diffuse(n, VERTICAL, visc, dt, du, du0, stream_du);
+
+  gpu_add_source<<<grid_dim, block_dim, 0, stream_dv>>>(n, dv, dv0, dt);
+  SWAP(dv0, dv);
+  diffuse(n, HORIZONTAL, visc, dt, dv, dv0, stream_dv);
+
+  cudaEventRecord(join_du, stream_du);
+  cudaEventRecord(join_dv, stream_dv);
+  cudaStreamWaitEvent(stream_dd, join_du, 0);
+  cudaStreamWaitEvent(stream_dd, join_dv, 0);
+
+  /* diffuse(n, NONE, diff, dt, dd, dd0, stream_dd);
+  diffuse(n, VERTICAL, visc, dt, du, du0, stream_dd);
+  diffuse(n, HORIZONTAL, visc, dt, dv, dv0, stream_dd);
+ */
+
+/*   cudaEventRecord(spread, stream_dd);
+  cudaStreamWaitEvent(stream_du, spread, 0);
+  cudaStreamWaitEvent(stream_dv, spread, 0);
+  cudaEventRecord(join_du, stream_du);
+  cudaEventRecord(join_dv, stream_dv);
+  cudaStreamWaitEvent(stream_dd, join_du, 0);
+  cudaStreamWaitEvent(stream_dd, join_dv, 0);
+  cudaStreamDestroy(stream_du);
+  cudaStreamDestroy(stream_dv); */
+
+  #pragma omp barrier
+
+  project(n, du, dv, du0, dv0, stream_dd);
+  #pragma omp barrier
 
   SWAP(dd0, dd);
   SWAP(du0, du);
   SWAP(dv0, dv);
 
-  checkCudaErrors(cudaGraphLaunch(diffuse3, stream));
-
+  advect(n, dd, du, dv, dd0, du0, dv0, dt, stream_dd);
   #pragma omp barrier
 
-  project(n, du, dv, du0, dv0, stream);
-  #pragma omp barrier
-
-  SWAP(dd0, dd);
-  SWAP(du0, du);
-  SWAP(dv0, dv);
-
-  advect(n, dd, du, dv, dd0, du0, dv0, dt, stream);
-  #pragma omp barrier
-
-  project(n, du, dv, du0, dv0, stream);
+  project(n, du, dv, du0, dv0, stream_dd);
   #pragma omp barrier
 }
