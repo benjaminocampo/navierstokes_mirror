@@ -202,7 +202,7 @@ void step(unsigned int n, float diff, float visc, float dt,
 
   gpu_add_source<<<grid_dim, block_dim, 0, stream0>>>(n, dv, dv0, dt);
   SWAP(dv0, dv);
-  diffuse(n, HORIZONTAL, visc, dt, dv, dv0, stream0, spread, join_stream0, join_stream1);
+  diffuse(n, HORIZONTAL, visc, dt, dv, dv0, stream0, spread, join_stream0, join_stream0);
   
   gpu_add_source<<<grid_dim, block_dim, 0, stream1>>>(n, du, du0, dt);
   SWAP(du0, du);
@@ -210,7 +210,7 @@ void step(unsigned int n, float diff, float visc, float dt,
 
   gpu_add_source<<<grid_dim, block_dim, 0, stream2>>>(n, dd, dd0, dt);
   SWAP(dd0, dd);
-  diffuse(n, NONE, diff, dt, dd, dd0, stream2, spread, join_stream0, join_stream1);
+  diffuse(n, NONE, diff, dt, dd, dd0, stream2, spread, join_stream0, join_stream2);
 
   project(
     n, du, dv, du0, dv0, stream0, stream1,
