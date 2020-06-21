@@ -55,6 +55,8 @@ cudaGraphExec_t add_source3;
 cudaGraphExec_t diffuse3;
 cudaEvent_t spread, join_stream0, join_stream1, join_stream2;
 cudaStream_t stream0, stream1, stream2;
+cudaGraphExec_t step_graph;
+
 /*
   ----------------------------------------------------------------------
    free/clear/allocate simulation data
@@ -399,10 +401,8 @@ static void idle_func(void) {
   react_ns_p_cell += 1.0e9 * (wtime() - start_t) / (N * N);
 
   start_t = wtime();
-  step(N, diff, visc, dt,
-       dd, du, dv, dd_prev, du_prev, dv_prev,
-       stream0, stream1, stream2,
-       spread, join_stream0, join_stream1, join_stream2);
+  cudaGraphLaunch(step_graph, stream0);
+
   checkCudaErrors(cudaDeviceSynchronize());
   checkCudaErrors(cudaMemcpy(hd, dd, size_in_mem, cudaMemcpyDeviceToHost));
   checkCudaErrors(cudaMemcpy(hu, du, size_in_mem, cudaMemcpyDeviceToHost));
@@ -525,6 +525,15 @@ int main(int argc, char **argv) {
   if (!allocate_data()) exit(1);
   clear_data();
   create_stream_events();
+  cudaGraph_t graph;
+  checkCudaErrors(cudaStreamBeginCapture(stream0, cudaStreamCaptureModeGlobal));
+  step(N, diff, visc, dt,
+       dd, du, dv, dd_prev, du_prev, dv_prev,
+       stream0, stream1, stream2,
+       spread, join_stream0, join_stream1, join_stream2);
+  checkCudaErrors(cudaStreamEndCapture(stream0, &graph));
+  checkCudaErrors(cudaGraphInstantiate(&step_graph, graph, NULL, NULL, 0));
+  cudaGraphDestroy(graph);
   win_x = 512;
   win_y = 512;
   open_glut_window();
