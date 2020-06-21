@@ -47,6 +47,10 @@ void gpu_lin_solve_rb_step(grid_color color, unsigned int n, float a, float c,
     blockDim.y % 2 == 0 &&
     "blockDim.y is even, if not, start needs to shift between row increments"
   );
+  // TODO: Make this dynamic shared memory with height and width like:
+  // cache[blockDim.y + 2][blockDim.x + 1];
+  __shared__ float cache[16 + 2][16 + 1];
+
   unsigned int width = (n + 2) / 2;
   unsigned int start = (
     (color == RED && ((threadIdx.y + 1) % 2 == 0)) ||
@@ -59,12 +63,32 @@ void gpu_lin_solve_rb_step(grid_color color, unsigned int n, float a, float c,
   for (int y = 1 + gtidy; y <= n; y += grid_height) {
     for (int x = start + gtidx; x < width - (1 - start); x += grid_width) {
       int index = y * width + x;
+
+      int aindex = y * width + x - start; // Aligned index
+      int cx = threadIdx.x; // Cache indexes
+      int cy = threadIdx.y + 1;
+      // Load tile core to shared mem
+      cache[cy][cx] = neigh[aindex];
+      // Load halo upper row
+      if (threadIdx.y == 0) cache[0][cx] = neigh[aindex - width];
+      // Load halo lower row
+      if (threadIdx.y == blockDim.y - 1) cache[blockDim.y + 1][cx] = neigh[aindex + width];
+      // Load last column
+      if (threadIdx.x == 0) {
+        cache[cy][blockDim.x] = neigh[aindex + blockDim.x];
+        // Load the two last column points from the tile halo
+        if (threadIdx.y == 0) cache[0][blockDim.x] = neigh[aindex - width + blockDim.x];
+        if (threadIdx.y == blockDim.y - 1) cache[blockDim.y + 1][blockDim.x] = neigh[aindex + width + blockDim.x];
+      }
+      __syncthreads();
+
       same[index] = (same0[index] + a * (
-          neigh[index - width] +
-          neigh[index - start] +
-          neigh[index - start + 1] +
-          neigh[index + width]
+          cache[threadIdx.y][threadIdx.x + start] + // Up
+          cache[threadIdx.y + 1][threadIdx.x] + // Left
+          cache[threadIdx.y + 1][threadIdx.x + 1] + // Right
+          cache[threadIdx.y + 2][threadIdx.x + start] // Down
       )) / c;
+      __syncthreads();
     }
   }
 }
