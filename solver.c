@@ -66,7 +66,9 @@ static void diffuse(unsigned int n, boundary b, float diff, float dt,
 static void advect(unsigned int n,
                    float *dd, float *du, float *dv,
                    float *dd0, float *du0, float *dv0,
-                   float dt, cudaStream_t stream) {
+                   float dt, cudaStream_t stream0, cudaStream_t stream1,
+                   cudaEvent_t spread, cudaEvent_t join_stream0,
+                   cudaEvent_t join_stream1) {
   unsigned int color_size = (n + 2) * ((n + 2) / 2);
   float *dredd = dd;
   float *dredu = du;
@@ -85,18 +87,31 @@ static void advect(unsigned int n,
   const dim3 block_dim{16, 16};
   const dim3 grid_dim{div_round_up(width, block_dim.x), n / block_dim.y};
 
-  gpu_advect_rb<<<grid_dim, block_dim, 0, stream>>>(
+  cudaEventRecord(spread, stream0);
+  cudaStreamWaitEvent(stream1, spread, 0);
+
+  gpu_advect_rb<<<grid_dim, block_dim, 0, stream0>>>(
     RED, n, dt, dredd, dredu, dredv, dredd0, dredu0, dredv0, dd0, du0, dv0
   );
-  gpu_advect_rb<<<grid_dim, block_dim, 0, stream>>>(
+  gpu_advect_rb<<<grid_dim, block_dim, 0, stream1>>>(
     BLACK, n, dt, dblkd, dblku, dblkv, dblkd0, dblku0, dblkv0, dd0, du0, dv0
   );
-  gpu_set_bnd<<<div_round_up(n + 2, block_dim.x), block_dim.x, 0, stream>>>(
+
+  cudaEventRecord(join_stream1, stream1);
+  cudaStreamWaitEvent(stream0, join_stream1, 0);
+
+  cudaEventRecord(spread, stream0);
+  cudaStreamWaitEvent(stream1, spread, 0);
+
+  gpu_set_bnd<<<div_round_up(n + 2, block_dim.x), block_dim.x, 0, stream0>>>(
     n, VERTICAL, du
   );
-  gpu_set_bnd<<<div_round_up(n + 2, block_dim.x), block_dim.x, 0, stream>>>(
+  gpu_set_bnd<<<div_round_up(n + 2, block_dim.x), block_dim.x, 0, stream1>>>(
     n, HORIZONTAL, dv
   );
+
+  cudaEventRecord(join_stream1, stream1);
+  cudaStreamWaitEvent(stream0, join_stream1, 0);
 }
 
 static void project(unsigned int n,
@@ -258,7 +273,10 @@ void step(unsigned int n, float diff, float visc, float dt,
   cudaEventRecord(join_stream2, stream2);
   cudaStreamWaitEvent(stream0, join_stream2, 0);
 
-  advect(n, dd, du, dv, dd0, du0, dv0, dt, stream0);
+  advect(
+    n, dd, du, dv, dd0, du0, dv0, dt,
+    stream0, stream1, spread, join_stream0, join_stream1
+  );
   #pragma omp barrier
 
   cudaEventRecord(spread, stream0);
