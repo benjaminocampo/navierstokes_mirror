@@ -31,7 +31,9 @@ static unsigned int div_round_up(unsigned int a, unsigned int b) { return (a + b
 
 static void lin_solve(unsigned int n, boundary b, float a, float c,
                       float *__restrict__ dx, float *__restrict__ dx0,
-                      cudaStream_t stream) {
+                      cudaStream_t stream0, cudaStream_t stream1,
+                      cudaEvent_t spread, cudaEvent_t join_stream0,
+                      cudaEvent_t join_stream1) {
   unsigned int color_size = (n + 2) * ((n + 2) / 2);
   // cudaMemcpy does not allow const pointers in dst.
   float *dred0 = dx0;
@@ -43,22 +45,27 @@ static void lin_solve(unsigned int n, boundary b, float a, float c,
   const dim3 grid_dim{div_round_up(width, block_dim.x), n / block_dim.y};
 
   for(unsigned int k = 0; k < 20; ++k){
-    gpu_lin_solve_rb_step<<<grid_dim, block_dim, 0, stream>>>(
+    gpu_lin_solve_rb_step<<<grid_dim, block_dim, 0, stream0>>>(
       RED, n, a, c, dred0, dblk, dred
     );
-    gpu_lin_solve_rb_step<<<grid_dim, block_dim, 0, stream>>>(
+    gpu_lin_solve_rb_step<<<grid_dim, block_dim, 0, stream1>>>(
       BLACK, n, a, c, dblk0, dred, dblk
     );
-    gpu_set_bnd<<<div_round_up(n + 2, block_dim.x), block_dim.x, 0, stream>>>(
+    cudaEventRecord(join_stream1, stream1);
+    cudaStreamWaitEvent(stream0, join_stream1, 0);
+    gpu_set_bnd<<<div_round_up(n + 2, block_dim.x), block_dim.x, 0, stream0>>>(
       n, b, dx
     );
+    cudaEventRecord(spread, stream0);
+    cudaStreamWaitEvent(stream1, spread, 0);
   }
 }
 
 static void diffuse(unsigned int n, boundary b, float diff, float dt,
-                    float *dx, float *dx0, cudaStream_t stream) {
+                    float *dx, float *dx0, cudaStream_t stream, cudaEvent_t spread,
+                    cudaEvent_t join_stream0, cudaEvent_t join_stream1) {
   const float a = dt * diff * n * n;
-  lin_solve(n, b, a, 1 + 4 * a, dx, dx0, stream);
+  lin_solve(n, b, a, 1 + 4 * a, dx, dx0, stream, stream, spread, join_stream0, join_stream1);
 }
 
 
@@ -149,7 +156,7 @@ static void project(unsigned int n,
   cudaEventRecord(join_stream1, stream1);
   cudaStreamWaitEvent(stream0, join_stream1, 0);
 
-  lin_solve(n, NONE, 1, 4, du0, dv0, stream0);
+  lin_solve(n, NONE, 1, 4, du0, dv0, stream0, stream1, spread, join_stream0, join_stream1);
 
   cudaEventRecord(spread, stream0);
   cudaStreamWaitEvent(stream1, spread, 0);
@@ -178,62 +185,6 @@ static void project(unsigned int n,
   cudaStreamWaitEvent(stream0, join_stream1, 0);
 }
 
-void create_graph_addsource3(cudaGraphExec_t *graph_exec,
-                             cudaEvent_t spread, cudaEvent_t join_stream1,
-                             cudaEvent_t join_stream2, cudaStream_t stream0,
-                             cudaStream_t stream1, cudaStream_t stream2,
-                             unsigned int n, float dt,
-                             float *dd, float *dd0,
-                             float *du, float *du0,
-                             float *dv, float *dv0){
-  dim3 block_dim{16, 16};
-  dim3 grid_dim{n / block_dim.x, n / block_dim.y};
-  cudaGraph_t graph;
-  checkCudaErrors(cudaStreamBeginCapture(stream0, cudaStreamCaptureModeGlobal));
-
-  cudaEventRecord(spread, stream0);
-  cudaStreamWaitEvent(stream1, spread, 0);
-  cudaStreamWaitEvent(stream2, spread, 0);
-  gpu_add_source<<<grid_dim, block_dim, 0, stream0>>>(n, dd, dd0, dt);
-  gpu_add_source<<<grid_dim, block_dim, 0, stream1>>>(n, du, du0, dt);
-  gpu_add_source<<<grid_dim, block_dim, 0, stream2>>>(n, dv, dv0, dt);
-  cudaEventRecord(join_stream1, stream1);
-  cudaEventRecord(join_stream2, stream2);
-  cudaStreamWaitEvent(stream0, join_stream1, 0);
-  cudaStreamWaitEvent(stream0, join_stream2, 0);
-
-  checkCudaErrors(cudaStreamEndCapture(stream0, &graph));
-  checkCudaErrors(cudaGraphInstantiate(graph_exec, graph, NULL, NULL, 0));
-  cudaGraphDestroy(graph);
-}
-
-void create_graph_diffuse3(cudaGraphExec_t *graph_exec,
-                           cudaEvent_t spread, cudaEvent_t join_stream1,
-                           cudaEvent_t join_stream2, cudaStream_t stream0,
-                           cudaStream_t stream1, cudaStream_t stream2,
-                           unsigned int n, float diff,
-                           float visc, float dt,
-                           float *dd, float *dd0,
-                           float *du, float *du0,
-                           float *dv, float *dv0){
-  cudaGraph_t graph;
-  checkCudaErrors(cudaStreamBeginCapture(stream0, cudaStreamCaptureModeGlobal));
-
-  cudaEventRecord(spread, stream0);
-  cudaStreamWaitEvent(stream1, spread, 0);
-  cudaStreamWaitEvent(stream2, spread, 0);
-  diffuse(n, NONE, diff, dt, dd, dd0, stream0);
-  diffuse(n, VERTICAL, visc, dt, du, du0, stream1);
-  diffuse(n, HORIZONTAL, visc, dt, dv, dv0, stream2);
-  cudaEventRecord(join_stream1, stream1);
-  cudaEventRecord(join_stream2, stream2);
-  cudaStreamWaitEvent(stream0, join_stream1, 0);
-  cudaStreamWaitEvent(stream0, join_stream2, 0);
-
-  checkCudaErrors(cudaStreamEndCapture(stream0, &graph));
-  checkCudaErrors(cudaGraphInstantiate(graph_exec, graph, NULL, NULL, 0));
-}
-
 void step(unsigned int n, float diff, float visc, float dt,
           float* dd, float *du, float *dv, float *dd0, float *du0, float *dv0,
           cudaStream_t stream0, cudaStream_t stream1, cudaStream_t stream2,
@@ -251,15 +202,15 @@ void step(unsigned int n, float diff, float visc, float dt,
 
   gpu_add_source<<<grid_dim, block_dim, 0, stream0>>>(n, dv, dv0, dt);
   SWAP(dv0, dv);
-  diffuse(n, HORIZONTAL, visc, dt, dv, dv0, stream0);
+  diffuse(n, HORIZONTAL, visc, dt, dv, dv0, stream0, spread, join_stream0, join_stream1);
   
   gpu_add_source<<<grid_dim, block_dim, 0, stream1>>>(n, du, du0, dt);
   SWAP(du0, du);
-  diffuse(n, VERTICAL, visc, dt, du, du0, stream1);
+  diffuse(n, VERTICAL, visc, dt, du, du0, stream1, spread, join_stream0, join_stream1);
 
   gpu_add_source<<<grid_dim, block_dim, 0, stream2>>>(n, dd, dd0, dt);
   SWAP(dd0, dd);
-  diffuse(n, NONE, diff, dt, dd, dd0, stream2);
+  diffuse(n, NONE, diff, dt, dd, dd0, stream2, spread, join_stream0, join_stream1);
 
   project(
     n, du, dv, du0, dv0, stream0, stream1,

@@ -525,13 +525,6 @@ int main(int argc, char **argv) {
   if (!allocate_data()) exit(1);
   clear_data();
   create_stream_events();
-  //create_graph_addsource3(&add_source3,
-  //  spread, join_stream1, join_stream2, stream0, stream1, stream2,
-  //  N, dt, dd, dd_prev, du, du_prev, dv, dv_prev);
-  //create_graph_diffuse3(&diffuse3,
-  //  spread, join_stream1, join_stream2, stream0, stream1, stream2,
-  //  N, diff, visc, dt, dd, dd_prev, du, du_prev, dv, dv_prev
-  //);
   win_x = 512;
   win_y = 512;
   open_glut_window();
