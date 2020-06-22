@@ -38,33 +38,36 @@ void gpu_set_bnd(unsigned int n, boundary b, float *x) {
   }
 }
 
-__global__
-void gpu_lin_solve_rb_step(grid_color color, unsigned int n, float a, float c,
-                           const float *__restrict__ same0,
-                           const float *__restrict__ neigh,
-                           float *__restrict__ same) {
-  assert(
-    blockDim.y % 2 == 0 &&
-    "blockDim.y is even, if not, start needs to shift between row increments"
-  );
-  unsigned int width = (n + 2) / 2;
-  unsigned int start = (
-    (color == RED && ((threadIdx.y + 1) % 2 == 0)) ||
-    (color == BLACK && ((threadIdx.y + 1) % 2 == 1))
-  );
+__global__ void gpu_lin_solve_rb_step(const grid_color color,
+                                      const unsigned int n, const float a,
+                                      const float c,
+                                      const float *const __restrict__ same0,
+                                      const float *const __restrict__ neigh,
+                                      float *const __restrict__ same) {
+  // assert( // TODO: Uncomment and add -DNDEBUG to makefile
+  //   blockDim.y % 2 == 0 &&
+  //   "blockDim.y is even, if not, start needs to shift between row increments"
+  // );
+  const unsigned int width = (n + 2) / 2;
+  const bool is_odd_row = threadIdx.y & 1;
+  const unsigned int start = (color == RED && is_odd_row) || (color == BLACK && !is_odd_row);
   const int grid_width = gridDim.x * blockDim.x;
   const int grid_height = gridDim.y * blockDim.y;
   const int gtidx = blockIdx.x * blockDim.x + threadIdx.x;
   const int gtidy = blockIdx.y * blockDim.y + threadIdx.y;
+  const int row_limit = width - (1 - start);
+  const float invc = 1 / c;
   for (int y = 1 + gtidy; y <= n; y += grid_height) {
-    for (int x = start + gtidx; x < width - (1 - start); x += grid_width) {
+    for (int x = start + gtidx; x < row_limit; x += grid_width) {
       int index = y * width + x;
-      same[index] = (same0[index] + a * (
+      same[index] = invc * (
+        same0[index] + a * (
           neigh[index - width] +
           neigh[index - start] +
           neigh[index - start + 1] +
           neigh[index + width]
-      )) / c;
+        )
+      );
     }
   }
 }

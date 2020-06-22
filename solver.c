@@ -28,19 +28,20 @@
 
 static unsigned int div_round_up(unsigned int a, unsigned int b) { return (a + b - 1) / b; }
 
-static void lin_solve(unsigned int n, boundary b, const float a, const float c,
-                      float *__restrict__ dx, float *__restrict__ dx0,
+static void lin_solve(const unsigned int n, const boundary b, const float a, const float c,
+                      float *const __restrict__ dx, const float *const __restrict__ dx0,
                       const unsigned int from, const unsigned int to) {
-  unsigned int color_size = (n + 2) * ((n + 2) / 2);
+  const unsigned int color_size = (n + 2) * ((n + 2) / 2);
   // cudaMemcpy does not allow const pointers in dst.
-  float *dred0 = dx0;
-  float *dblk0 = dx0 + color_size;
-  float *dred = dx;
-  float *dblk = dx + color_size;
+  const float * const dred0 = dx0;
+  const float * const dblk0 = dx0 + color_size;
+  float * const dred = dx;
+  float * const dblk = dx + color_size;
 
   // TODO: Move up block_dim and grid_dim
-  unsigned int width = (n + 2) / 2;
-  const dim3 block_dim{16, 16};
+  const unsigned int width = (n + 2) / 2;
+  const dim3 block_dim{16, 16}; // GTX 1060 MaxQ
+  // const dim3 block_dim{8, 8}; // RTX 2080 ti
   const dim3 grid_dim{div_round_up(width, block_dim.x), n / block_dim.y};
   for (unsigned int k = 0; k < 20; ++k) {
     gpu_lin_solve_rb_step<<<grid_dim, block_dim>>>(RED, n, a, c, dred0, dblk, dred);
