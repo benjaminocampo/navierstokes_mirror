@@ -20,6 +20,7 @@
 #include <x86intrin.h>
 #include <omp.h>
 #include <thrust/extrema.h>
+#include <thrust/device_ptr.h>
 
 /* macros */
 
@@ -512,6 +513,9 @@ int main(int argc, char **argv) {
   printf("\t Quit by pressing the 'q' key\n");
 
   dvel = 0;
+
+  // Check best coop grid size is in use
+  check_dims();
 
   if (!allocate_data()) exit(1);
   clear_data();

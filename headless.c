@@ -20,6 +20,7 @@
 #include <x86intrin.h>
 #include <omp.h>
 #include <thrust/extrema.h>
+#include <thrust/device_ptr.h>
 
 /* macros */
 
@@ -283,6 +284,9 @@ int main(int argc, char **argv) {
             "steps=%d\n",
             N, dt, diff, visc, force, source, steps);
   }
+
+  // Check best coop grid size is in use
+  check_coop_dims();
 
   if (!allocate_data()) exit(1);
   clear_data();

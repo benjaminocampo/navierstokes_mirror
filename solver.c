@@ -7,6 +7,7 @@
 #include "helper_cuda.h"
 
 #include <omp.h>
+#include <assert.h>
 
 #if defined INTRINSICS
 #include "solver_intrinsics.h"
@@ -27,6 +28,60 @@
   }
 
 static unsigned int div_round_up(unsigned int a, unsigned int b) { return (a + b - 1) / b; }
+
+static dim3 gpu_add_source_grid{4, 5};
+static dim3 gpu_add_source_block{32, 32};
+
+static dim3 gpu_set_bnd_grid{4, 5};
+static dim3 gpu_set_bnd_block{32, 32};
+
+static dim3 gpu_lin_solve_rb_step_grid{4, 5};
+static dim3 gpu_lin_solve_rb_step_block{32, 32};
+
+static dim3 gpu_advect_rb_grid{4, 5};
+static dim3 gpu_advect_rb_block={32, 24};
+
+static dim3 gpu_project_rb_step1_grid{4, 5};
+static dim3 gpu_project_rb_step1_block{32, 32};
+
+static dim3 gpu_project_rb_step2_grid{4, 5};
+static dim3 gpu_project_rb_step2_block{32, 32};
+
+template<class T, typename S>
+static bool matches_best_dims(S name, dim3 grid, dim3 block, T kernel) {
+  int best_block_size;
+  int best_grid_size;
+  cudaOccupancyMaxPotentialBlockSize(&best_grid_size, &best_block_size, kernel, 0, 0);
+  int block_size = block.x * block.y * block.z;
+  int grid_size = grid.x * grid.y * grid.z;
+  bool valid_config = block_size == best_block_size && grid_size == best_grid_size;
+  if (!valid_config) printf(
+    "[%s] Using (grid, block) == (%d, %d). Use (%d, %d) instead\n",
+    name, block_size, grid_size, best_block_size, best_grid_size
+  );
+  return valid_config;
+}
+
+// Checks wether the hardcoded dimensions are the best for your particular gpu
+void check_dims(void) {
+  bool all = true;
+  all &= matches_best_dims("gpu_add_source", gpu_add_source_grid, gpu_add_source_block, gpu_add_source);
+  all &= matches_best_dims("gpu_set_bnd", gpu_set_bnd_grid, gpu_set_bnd_block, gpu_set_bnd);
+  all &= matches_best_dims("gpu_lin_solve_rb_step", gpu_lin_solve_rb_step_grid, gpu_lin_solve_rb_step_block, gpu_lin_solve_rb_step);
+  all &= matches_best_dims("gpu_advect_rb", gpu_advect_rb_grid, gpu_advect_rb_block, gpu_advect_rb);
+  all &= matches_best_dims("gpu_project_rb_step1", gpu_project_rb_step1_grid, gpu_project_rb_step1_block, gpu_project_rb_step1);
+  all &= matches_best_dims("gpu_project_rb_step2", gpu_project_rb_step2_grid, gpu_project_rb_step2_block, gpu_project_rb_step2);
+  if (!all) {
+    cudaDeviceProp deviceProp;
+    cudaGetDeviceProperties(&deviceProp, 0);\
+    printf("[Error] Subobtimal or invalid coop grid settings detected.\n");
+    printf("GPU Detected: %s\n", deviceProp.name);
+    printf("GPU Compute Capability: %d\n", deviceProp.major);
+    printf("Change block and grid for those kernel to match those sizes.\n");
+    printf("Make them as square-ish as possible and keep powers of two for widths.\n");
+    assert(false);
+  }
+}
 
 static void lin_solve(unsigned int n, boundary b, const float a, const float c,
                       float *__restrict__ dx, float *__restrict__ dx0,
