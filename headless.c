@@ -286,7 +286,7 @@ int main(int argc, char **argv) {
   }
 
   // Check best coop grid size is in use
-  check_coop_dims();
+  check_dims();
 
   if (!allocate_data()) exit(1);
   clear_data();
