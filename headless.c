@@ -45,6 +45,7 @@ static float *dd, *du, *dv;
 static float *dd_prev, *du_prev, *dv_prev;
 
 cudaEvent_t spread, join_stream0, join_stream1, join_stream2;
+cudaGraphExec_t step_graph;
 cudaStream_t stream0, stream1, stream2;
 
 __attribute__((unused)) static void dump_grid(float *grid) {
@@ -230,10 +231,7 @@ static void one_step(void) {
   start_t = wtime();
   react();
   checkCudaErrors(cudaDeviceSynchronize());
-  step(N, diff, visc, dt,
-       dd, du, dv, dd_prev, du_prev, dv_prev,
-       stream0, stream1, stream2,
-       spread, join_stream0, join_stream1, join_stream2);
+  cudaGraphLaunch(step_graph, stream0);
 
   step_ns_p_cell = 1.0e9 * (wtime() - start_t) / (N * N);
 
@@ -295,6 +293,16 @@ int main(int argc, char **argv) {
   if (!allocate_data()) exit(1);
   clear_data();
   create_stream_events();
+  cudaGraph_t graph;
+  checkCudaErrors(cudaStreamBeginCapture(stream0, cudaStreamCaptureModeGlobal));
+  step(N, diff, visc, dt,
+       dd, du, dv, dd_prev, du_prev, dv_prev,
+       stream0, stream1, stream2,
+       spread, join_stream0, join_stream1, join_stream2);
+  checkCudaErrors(cudaStreamEndCapture(stream0, &graph));
+  checkCudaErrors(cudaGraphInstantiate(&step_graph, graph, NULL, NULL, 0));
+  cudaGraphDestroy(graph);
+
   size_t size_in_mem = (N + 2) * (N + 2) * sizeof(float);
   double start_time = wtime();
 
