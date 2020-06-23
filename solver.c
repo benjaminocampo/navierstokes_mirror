@@ -41,7 +41,7 @@ static void lin_solve(unsigned int n, boundary b, const float a, const float c,
 
   // TODO: Move up block_dim and grid_dim
   unsigned int width = (n + 2) / 2;
-  const dim3 block_dim{16, 16};
+  const dim3 block_dim{8, 8};
   const dim3 grid_dim{div_round_up(width, block_dim.x), n / block_dim.y};
 
   gpu_lin_solve_rb_step_shtore<<<grid_dim, block_dim>>>(RED, n, a, c, dred0, dblk, dred);

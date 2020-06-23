@@ -38,8 +38,8 @@ void gpu_set_bnd(unsigned int n, boundary b, float *x) {
   }
 }
 
-#define BW 16
-#define BH 16
+#define BW 8
+#define BH 8
 
 __global__
 void gpu_lin_solve_rb_step_shtore(grid_color color, unsigned int n, float a, float c,
