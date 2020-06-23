@@ -285,6 +285,8 @@ int main(int argc, char **argv) {
             N, dt, diff, visc, force, source, steps);
   }
 
+  checkCudaErrors(cudaDeviceSetCacheConfig(cudaFuncCachePreferL1));
+
   if (!allocate_data()) exit(1);
   clear_data();
 
