@@ -56,17 +56,15 @@ void gpu_lin_solve_rb_step(grid_color color, unsigned int n, float a, float c,
   const int grid_height = gridDim.y * blockDim.y;
   const int gtidx = blockIdx.x * blockDim.x + threadIdx.x;
   const int gtidy = blockIdx.y * blockDim.y + threadIdx.y;
-  for (int y = 1 + gtidy; y <= n; y += grid_height) {
-    for (int x = start + gtidx; x < width - (1 - start); x += grid_width) {
-      int index = y * width + x;
-      same[index] = (same0[index] + a * (
-          neigh[index - width] +
-          neigh[index - start] +
-          neigh[index - start + 1] +
-          neigh[index + width]
-      )) / c;
-    }
-  }
+  const int y = 1 + gtidy;
+  const int x = start + gtidx;
+  int index = y * width + x;
+  same[index] = (same0[index] + a * (
+      neigh[index - width] +
+      neigh[index - start] +
+      neigh[index - start + 1] +
+      neigh[index + width]
+  )) / c;
 }
 
 __global__
