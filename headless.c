@@ -20,6 +20,7 @@
 #include <x86intrin.h>
 #include <omp.h>
 #include <thrust/extrema.h>
+#include <thrust/device_ptr.h>
 
 /* macros */
 
@@ -330,7 +331,7 @@ for (size_t i = 0; i < 0; i++) {
   checkCudaErrors(cudaMemcpy(hv_prev, dv_prev, size_in_mem, cudaMemcpyDeviceToHost));
 
   double program_nspcell = 1.0e9 * (wtime() - start_time) / (N * N * steps);
-  printf("program_nspcell = %lf", program_nspcell);
+  printf("program_nspcell = %lf\n", program_nspcell);
 
   free_data();
   exit(0);
