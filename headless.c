@@ -66,12 +66,12 @@ static void free_data(void) {
   if (hv_prev) _mm_free(hv_prev);
   if (hd) _mm_free(hd);
   if (hd_prev) _mm_free(hd_prev);
-  if (du) cudaFree(hu);
-  if (dv) cudaFree(hv);
-  if (du_prev) cudaFree(hu_prev);
-  if (dv_prev) cudaFree(hv_prev);
-  if (dd) cudaFree(hd);
-  if (dd_prev) cudaFree(hd_prev);
+  if (du) cudaFree(du);
+  if (dv) cudaFree(dv);
+  if (du_prev) cudaFree(du_prev);
+  if (dv_prev) cudaFree(dv_prev);
+  if (dd) cudaFree(dd);
+  if (dd_prev) cudaFree(dd_prev);
 }
 
 static void clear_data(void) {

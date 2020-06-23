@@ -7,6 +7,7 @@
 #include "helper_cuda.h"
 
 #include <omp.h>
+#include <assert.h>
 
 #if defined INTRINSICS
 #include "solver_intrinsics.h"
@@ -42,11 +43,17 @@ static void lin_solve(unsigned int n, boundary b, const float a, const float c,
   unsigned int width = (n + 2) / 2;
   const dim3 block_dim{16, 16};
   const dim3 grid_dim{div_round_up(width, block_dim.x), n / block_dim.y};
-  for (unsigned int k = 0; k < 20; ++k) {
-    gpu_lin_solve_rb_step<<<grid_dim, block_dim>>>(RED, n, a, c, dred0, dblk, dred);
-    gpu_lin_solve_rb_step<<<grid_dim, block_dim>>>(BLACK, n, a, c, dblk0, dred, dblk);
+
+  gpu_lin_solve_rb_step_shtore<<<grid_dim, block_dim>>>(RED, n, a, c, dred0, dblk, dred);
+  gpu_lin_solve_rb_step_shtore<<<grid_dim, block_dim>>>(BLACK, n, a, c, dblk0, dred, dblk);
+  gpu_set_bnd<<<div_round_up(n + 2, block_dim.x), block_dim.x>>>(n, b, dx);
+  for (unsigned int k = 0; k < 1; ++k) {
+    gpu_lin_solve_rb_step_shload<<<grid_dim, block_dim>>>(RED, n, a, c, dred0, dblk, dred);
+    gpu_lin_solve_rb_step_shload<<<grid_dim, block_dim>>>(BLACK, n, a, c, dblk0, dred, dblk);
     gpu_set_bnd<<<div_round_up(n + 2, block_dim.x), block_dim.x>>>(n, b, dx);
   }
+  cudaDeviceSynchronize();
+  assert(0);
 }
 
 static void diffuse(unsigned int n, boundary b, float diff, float dt,

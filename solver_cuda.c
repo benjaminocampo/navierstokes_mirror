@@ -38,6 +38,100 @@ void gpu_set_bnd(unsigned int n, boundary b, float *x) {
   }
 }
 
+#define BW 16
+#define BH 16
+
+__global__
+void gpu_lin_solve_rb_step_shtore(grid_color color, unsigned int n, float a, float c,
+                           const float *__restrict__ same0,
+                           const float *__restrict__ neigh,
+                           float *__restrict__ same) {
+
+  __shared__ float csame0[BH][BW];
+  __shared__ int bx;
+  __shared__ int by;
+  __shared__ int id1;
+  __shared__ int id2; // May be needed for padding and reducing bank conflicts
+
+  unsigned int width = (n + 2) / 2;
+  unsigned int start = (
+    (color == RED && ((threadIdx.y + 1) % 2 == 0)) ||
+    (color == BLACK && ((threadIdx.y + 1) % 2 == 1))
+  );
+  const int grid_width = gridDim.x * blockDim.x;
+  const int grid_height = gridDim.y * blockDim.y;
+  const int gtidx = blockIdx.x * blockDim.x + threadIdx.x;
+  const int gtidy = blockIdx.y * blockDim.y + threadIdx.y;
+  const int y = 1 + gtidy;
+  const int x = start + gtidx;
+  if (x >= width || y >= n + 1) return;
+
+  int index = y * width + x;
+
+  const float previous = same0[index];
+  csame0[threadIdx.y][threadIdx.x] = previous;
+
+  same[index] = (previous + a * (
+      neigh[index - width] +
+      neigh[index - start] +
+      neigh[index - start + 1] +
+      neigh[index + width]
+  )) / c;
+
+  if (threadIdx.x == 0 && threadIdx.y == 0) {
+    // Save in shared memory to what block this shared memory corresponds to
+    bx = blockIdx.x;
+    by = blockIdx.y;
+    // Save an identifier for checking the microarchitecture does not clean shared mem
+    id1 = bx * by + bx;
+    id2 = bx * by + by;
+  }
+}
+
+__global__
+void gpu_lin_solve_rb_step_shload(grid_color color, unsigned int n, float a, float c,
+                           const float *__restrict__ same0,
+                           const float *__restrict__ neigh,
+                           float *__restrict__ same) {
+
+  __shared__ float csame0[BH][BW];
+  __shared__ int bx;
+  __shared__ int by;
+  __shared__ int id1;
+  __shared__ int id2; // May be needed for padding and reducing bank conflicts
+
+  unsigned int width = (n + 2) / 2;
+  unsigned int start = (
+    (color == RED && ((threadIdx.y + 1) % 2 == 0)) ||
+    (color == BLACK && ((threadIdx.y + 1) % 2 == 1))
+  );
+  const int grid_width = gridDim.x * blockDim.x;
+  const int grid_height = gridDim.y * blockDim.y;
+  const int gtidx = blockIdx.x * blockDim.x + threadIdx.x;
+  const int gtidy = blockIdx.y * blockDim.y + threadIdx.y;
+  const int y = 1 + gtidy;
+  const int x = start + gtidx;
+  if (x >= width || y >= n) return;
+
+  int index = y * width + x;
+
+  // Cache in shared memory same0[index] for this thread
+  float previous;
+  if (id1 == bx * by + bx && id2 == bx * by + by) {
+    printf("[XXX]\n");
+    previous = csame0[threadIdx.y][threadIdx.x];
+  } else {
+    previous = same0[index];
+  }
+
+  same[index] = (previous + a * (
+      neigh[index - width] +
+      neigh[index - start] +
+      neigh[index - start + 1] +
+      neigh[index + width]
+  )) / c;
+}
+
 __global__
 void gpu_lin_solve_rb_step(grid_color color, unsigned int n, float a, float c,
                            const float *__restrict__ same0,
@@ -58,6 +152,8 @@ void gpu_lin_solve_rb_step(grid_color color, unsigned int n, float a, float c,
   const int gtidy = blockIdx.y * blockDim.y + threadIdx.y;
   const int y = 1 + gtidy;
   const int x = start + gtidx;
+  if (x >= width || y >= n + 1) return;
+
   int index = y * width + x;
   same[index] = (same0[index] + a * (
       neigh[index - width] +
