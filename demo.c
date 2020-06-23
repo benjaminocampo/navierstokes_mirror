@@ -20,6 +20,7 @@
 #include <x86intrin.h>
 #include <omp.h>
 #include <thrust/extrema.h>
+#include <thrust/device_ptr.h>
 
 /* macros */
 
