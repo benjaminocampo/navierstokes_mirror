@@ -3,9 +3,11 @@
 # for more compiling and linking ideas, see -dc and -dlink to mix gcc and nvcc
 
 cudademo: clean
-	nvcc -ftz=true -prec-div=false -prec-sqrt=false -use_fast_math -DCUDA -x cu demo.c timing.c solver.c solver_cuda.c -o demo -lGL -lGLU -lglut --compiler-options=-fopenmp
+	# nvcc -arch=sm_61 -ftz=true -prec-div=false -prec-sqrt=false -use_fast_math -DCUDA -x cu demo.c timing.c solver.c solver_cuda.c -o demo -lGL -lGLU -lglut --compiler-options=-fopenmp
+	nvcc -arch=sm_75 -ftz=true -prec-div=false -prec-sqrt=false -use_fast_math -DCUDA -x cu demo.c timing.c solver.c solver_cuda.c -o demo -lGL -lGLU -lglut --compiler-options=-fopenmp
 cudaheadless: clean
-	nvcc -ftz=true -prec-div=false -prec-sqrt=false -use_fast_math -DCUDA -x cu headless.c timing.c solver.c solver_cuda.c -o headless --compiler-options=-fopenmp
+	# nvcc -arch=sm_61 -ftz=true -prec-div=false -prec-sqrt=false -use_fast_math -DCUDA -x cu headless.c timing.c solver.c solver_cuda.c -o headless --compiler-options=-fopenmp
+	nvcc -arch=sm_75 -ftz=true -prec-div=false -prec-sqrt=false -use_fast_math -DCUDA -x cu headless.c timing.c solver.c solver_cuda.c -o headless --compiler-options=-fopenmp
 
 BUILD=intrinsics # nonvect | intrinsics | ispc
 

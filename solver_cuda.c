@@ -57,17 +57,19 @@ __global__ void gpu_lin_solve_rb_step(const grid_color color,
   const int gtidy = blockIdx.y * blockDim.y + threadIdx.y;
   const int row_limit = width - (1 - start);
   const float invc = 1 / c;
+  #pragma unroll
   for (int y = 1 + gtidy; y <= n; y += grid_height) {
+  #pragma unroll
     for (int x = start + gtidx; x < row_limit; x += grid_width) {
       int index = y * width + x;
-      same[index] = invc * (
-        same0[index] + a * (
-          neigh[index - width] +
-          neigh[index - start] +
-          neigh[index - start + 1] +
-          neigh[index + width]
-        )
-      );
+      const float p = __ldg(&same0[index]);
+      const float u = __ldg(&neigh[index - width]);
+      const float r = __ldg(&neigh[index - start]);
+      const float d = __ldg(&neigh[index - start + 1]);
+      const float l = __ldg(&neigh[index + width]);
+      const float result = invc * (p + a * (u + r + d + l));
+      // same[index] = result
+      __stwt((float*)(same + index), (float)result);
     }
   }
 }

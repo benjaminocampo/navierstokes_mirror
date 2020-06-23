@@ -40,8 +40,8 @@ static void lin_solve(const unsigned int n, const boundary b, const float a, con
 
   // TODO: Move up block_dim and grid_dim
   const unsigned int width = (n + 2) / 2;
-  const dim3 block_dim{16, 16}; // GTX 1060 MaxQ
-  // const dim3 block_dim{8, 8}; // RTX 2080 ti
+  // const dim3 block_dim{16, 16}; // GTX 1060 MaxQ
+  const dim3 block_dim{8, 8}; // RTX 2080 ti
   const dim3 grid_dim{div_round_up(width, block_dim.x), n / block_dim.y};
   for (unsigned int k = 0; k < 20; ++k) {
     gpu_lin_solve_rb_step<<<grid_dim, block_dim>>>(RED, n, a, c, dred0, dblk, dred);
