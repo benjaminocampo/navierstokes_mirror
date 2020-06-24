@@ -94,13 +94,12 @@ with. Again the same strategy was used in this case.
 
 ### Kernels
 
-After revising the main functions of *step* let us cover some of the kernels
-that are mentioned above. For each kernel, grid stripe loop was used. It
-consists in looping over the grids, working with the global id of each thread
-related to the current grid that we are working. Here is a part of the
-implementation of *gpu_lin_solve_rb_step* and *set_bnd*. The rest of kernels are
-similar, if you are interested in their implementation, you can glace at them at
-our repository.
+Let us cover some of the kernels that are mentioned above. For each kernel, grid
+stripe loop was used. It consists in looping over the grids, working with the
+global id of each thread related to the current grid that we are working. Here
+is a part of the implementation of *gpu_lin_solve_rb_step* and *set_bnd*. The
+rest of kernels are similar, if you are interested in their implementation, you
+can glace at them at our repository.
 
 ```c
 __global__
@@ -437,6 +436,13 @@ one_step(...){
 }
 ```
 
+Unfortunately it seems that using streams and cuda graphs was not the key of the
+problem since we could not get improvements. In order to see if streams were
+actually used we check it with nvvp that show us a thorougly execution of the
+program. Here we could obtain that *gpu_lin_solve_rb_step* is the 85% of the
+code, and the rest is taken by the other kernels. Maybe we could get some
+concurrency between kernels but they were not the key of the problem.
+
 ## onekernel
 
 One of our main concerns was the cache not being properly utilized as each
@@ -478,8 +484,8 @@ were:
 
 - Not syncing: Removing the `grid.sync()` call above makes the simulation a
   little weird, however it could be still a pretty reasonable approximation for
-  some use cases, and the performance increases significantly (from ~2.5 to
-  ~1.6 with N=4096).
+  some use cases, and the performance increases significantly (from ~2.5 to ~1.6
+  with N=4096).
 - Occupancy API: For using the grid sync feature of CGs we need to use special
   ways of launching kernels and defining their dimensions. In particular the
   number of blocks must match those of the amount of SMs in the device, and the
@@ -532,7 +538,8 @@ As in this version we have exactly one block per SM per the CG requirements, the
 idea is to fill the shared memory of each block with a portion of its sub grid
 and use shared memory when the grid strid loop needs to use memory that is
 cached there. Unfortunately in our tests the with and without the added
-conditional were in all cases worst than stepburst. The grid synchronization was still a heavy hit on performance.
+conditional were in all cases worst than stepburst. The grid synchronization was
+still a heavy hit on performance.
 
 ### stepburst-occupancy
 
