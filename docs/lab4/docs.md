@@ -24,11 +24,11 @@ each step, calls to a set of functions.
 **Simulation Step**
 
 - *react*
-- *step*:
-  - *addsource*
-  - *diffuse*
-  - *project*
-  - *advect*
+- *step*: <!-- 4 space tab needed for pandoc -->
+    - *addsource*
+    - *diffuse*
+    - *project*
+    - *advect*
 
 The migration process consisted in implementing them one by one, and checking if
 the simulation keeps well after it. Obviously, since they were developed in an
@@ -353,12 +353,12 @@ just commented the following lines:
 
 Yep, we are cheating a bit, but the result of this trick astonished us, since we
 did not increase so much the performance. Why? We uncover that the number of
-kernel launches that can be queued is limited, so our idea of launching the
-entire program and just wait for the result is not possible. Fortunately, we
-discover it before implementing it. Imagine the amount of time that we have lost
-if we inmersed ourselves to accomplish this "optimization". We had already seen
-that cub allows reductions without blocking so that implies that react had to be
-implemented again.
+kernel launches that can be queued is limited to around 1024, so our idea of
+launching the entire program and just wait for the result is not possible.
+Fortunately, we discover it before implementing it. Imagine the amount of time
+that we have lost if we inmersed ourselves to accomplish this "optimization". We
+had already seen that cub allows reductions without blocking so that implies
+that react had to be implemented again.
 
 ## streamburst
 
@@ -637,8 +637,11 @@ Notice in the conditional from `_shload` we check that our undefined shared
 memory effectively has the correct values, one could ask about the ratio in
 which this check effectively "finds" what it is looking for, here are the
 results:
-- GTX 1060 MaxQ: N <= 64 => 100%, N == 512 or N == 2048 => 50%
-- RTX 2080 Ti: N <= 64 => 100%, N == 512 => 25%, N == 2048 => 2.21%
+
+| GPU | $N \leq 64$ | $N = 512$ | $N = 2048$ |
+| --- | --- | --- | --- |
+| GTX 1060 MaxQ | 100% | 50% | 50% |
+| RTX 2080 Ti | 100% | 25% | 2.21% |
 
 So from one side, it seems that the new turing architecture does something with
 undefined shared memory that makes it not as reliable as in pascal. In pascal
