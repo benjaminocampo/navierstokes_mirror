@@ -135,15 +135,8 @@ was converted into a kernel.
 # reactburst: kernels
 ```c
 __global__
-void gpu_lin_solve_rb_step(grid_color color, unsigned int n, float a, float c,
-                           const float *__restrict__ same0,
-                           const float *__restrict__ neigh,
-                           float *__restrict__ same) {
-  ... // assignments
-  const int grid_width = gridDim.x * blockDim.x;
-  const int grid_height = gridDim.y * blockDim.y;
-  const int gtidx = blockIdx.x * blockDim.x + threadIdx.x;
-  const int gtidy = blockIdx.y * blockDim.y + threadIdx.y;
+void gpu_lin_solve_rb_step(...) {
+  ... // initialize grid_width, grid_height, gtidx and gtidx
   for (int y = 1 + gtidy; y <= n; y += grid_height) {
     for (int x = start + gtidx; x < width - (1 - start); x += grid_width) {
       int index = y * width + x;
@@ -157,7 +150,7 @@ void gpu_lin_solve_rb_step(grid_color color, unsigned int n, float a, float c,
   }
 }
 ```
-- For each kernel, grid stride loop was used.
+- For each kernel, grid stride loop was implemented (even if unused).
 - looping over the grids, working with the global id of each thread related
 to the current grid that we are working.
 - project and advect are similar.
@@ -165,21 +158,13 @@ to the current grid that we are working.
 # reactburst: kernels
 ```c
 __global__
-void gpu_set_bnd(unsigned int n, boundary b, float *x) {
+void gpu_set_bnd(...) {
   const int grid_width = gridDim.x * blockDim.x;
   const int gtid = blockIdx.x * blockDim.x + threadIdx.x;
-  for (unsigned int i = 1 + gtid; i <= n; i += grid_width) {
-    x[IX(0, i)] = b == VERTICAL ? -x[IX(1, i)] : x[IX(1, i)];
-    x[IX(n + 1, i)] = b == VERTICAL ? -x[IX(n, i)] : x[IX(n, i)];
-    x[IX(i, 0)] = b == HORIZONTAL ? -x[IX(i, 1)] : x[IX(i, 1)];
-    x[IX(i, n + 1)] = b == HORIZONTAL ? -x[IX(i, n)] : x[IX(i, n)];
-  }
-  if(gtid == 0) {
-    x[IX(0, 0)] = 0.5f * (x[IX(1, 0)] + x[IX(0, 1)]);
-    x[IX(0, n + 1)] = 0.5f * (x[IX(1, n + 1)] + x[IX(0, n)]);
-    x[IX(n + 1, 0)] = 0.5f * (x[IX(n, 0)] + x[IX(n + 1, 1)]);
-    x[IX(n + 1, n + 1)] = -0.5f * (x[IX(n, n + 1)] + x[IX(n + 1, n)]);
-  }
+  for (unsigned int i = 1 + gtid; i <= n; i += grid_width)
+    ... // fill i cell of {first, last} ⨯ {row, column}
+  if (gtid == 0)
+    ... // fill the four corners
 }
 ```
 - Again, grid stride loop over 1 dimension.
@@ -187,21 +172,23 @@ void gpu_set_bnd(unsigned int n, boundary b, float *x) {
 ---
 # reactburst: pitfalls
 ```c
-react(hd_prev, hu_prev, hv_prev);
+react(hd_prev, hu_prev, hv_prev); // Works on host
+
 checkCudaErrors(cudaMemcpy(dd_prev, hd_prev, size_in_m,cudaMemcpyHostToDevice));
 checkCudaErrors(cudaMemcpy(du_prev, hu_prev, size_in_m, cudaMemcpyHostToDevice));
 checkCudaErrors(cudaMemcpy(dv_prev, hv_prev, size_in_m, cudaMemcpyHostToDevice));
 
-step(N, diff, visc, dt,
-dd, du, dv, dd_prev, du_prev, dv_prev,
-from, to);
+step( // Works on device
+  N, diff, visc, dt, dd, du, dv, dd_prev, du_prev, dv_prev, from, to
+);
 
 checkCudaErrors(cudaDeviceSynchronize());
 checkCudaErrors(cudaMemcpy(hd_prev, dd_prev, size_in_m, cudaMemcpyDeviceToHost));
 checkCudaErrors(cudaMemcpy(hu_prev, du_prev, size_in_m, cudaMemcpyDeviceToHost));
 checkCudaErrors(cudaMemcpy(hv_prev, dv_prev, size_in_m, cudaMemcpyDeviceToHost));
 ```
-- *react* is computed by the host.
+
+- `react` is computed by the host. `step` by device.
 - We can not avoid a synchronization and copies from host to device at that
 point for each simulation step.
 ---
@@ -264,55 +251,42 @@ if (max_density < 1.0f) {
 # threactburst: Reductions
 ```c
 // Reduction 2
-struct compare_dfloatp2 {
+// Note: Not real c++ syntax, a more pythonic pseudocode
+
+struct compare_dfloatp2 { // Comparisson functor
   __device__
   bool operator()(tfloat2 lhs, tfloat2 rhs) {
-    float lu = lhs.get<0>();
-    float lv = lhs.get<1>();
-    float ru = rhs.get<0>();
-    float rv = rhs.get<1>();
-    return lu * lu + lv * lv < ru * ru + rv * rv;
+    ... // compute which cell is faster
+    return is_rhs_faster;
   }
 };
 
-  zip_iterator<dfloatp2> uvs_begin = make_zip_iterator(
-    make_tuple(du_prev, dv_prev)
-  );
-  zip_iterator<dfloatp2> uvs_end = make_zip_iterator(
-    make_tuple(du_prev + size, dv_prev + size)
-  );
-  zip_iterator<dfloatp2> zmaxvel2 = max_element(
-    uvs_begin,
-    uvs_end,
-    compare_dfloatp2()
-  );
-  // Implicit cudaDeviceSynchronize();
-  dfloatp2 mv2 = zmaxvel2.get_iterator_tuple();
-  float mvu = *mv2.get<0>();
-  float mvv = *mv2.get<1>();
-  float max_velocity2 = mvu * mvu + mvv * mvv;
+auto uvs_begin = zip(du_prev, dv_prev);
+auto uvs_end = zip(du_prev + size, dv_prev + size)
+auto zmaxvel2 = max_element(uvs_begin, uvs_end, compare_dfloatp2());
+dfloatp2 mv2 = zmaxvel2.get_iterator_tuple();
+float mvu = *mv2[0]; // Implicit cudaDeviceSynchronize()
+float mvv = *mv2[1]; // on device pointer dereference
+float max_velocity2 = mvu * mvu + mvv * mvv;
 ```
 ---
 # threactburst: launches and memsets
 ```c
-  // Memsets and kernel launches
-  size_t size_in_mem = size * sizeof(float);
-  checkCudaErrors(cudaMemset(du_prev, 0, size_in_mem));
-  checkCudaErrors(cudaMemset(dv_prev, 0, size_in_mem));
-  checkCudaErrors(cudaMemset(dd_prev, 0, size_in_mem));
+// Memsets and kernel launches
+size_t size_in_mem = size * sizeof(float);
+checkCudaErrors(cudaMemsetAsync(du_prev, 0, size_in_mem));
+checkCudaErrors(cudaMemsetAsync(dv_prev, 0, size_in_mem));
+checkCudaErrors(cudaMemsetAsync(dd_prev, 0, size_in_mem));
 
-  dim3 block_dim{16, 16};
-   // The gridblock mapping is one thread per reactionary point
-  dim3 grid_dim{
-    div_round_up(div_round_up(N, 64), block_dim.x),
-    div_round_up(div_round_up(N, 64), block_dim.y)
-  };
-  if (max_velocity2 < 0.0000005f)
-    gpu_react_velocity<<<grid_dim, block_dim>>>(du_prev, dv_prev, force, N);
+// The gridblock mapping is one thread per reactionary point
+dim3 block_dim{16, 16};
+dim3 grid_dim{N / 64 / block_dim.x, N / 64 / block_dim.y}; // rounded up div
 
-  if (max_density < 1.0f)
-    gpu_react_density<<<grid_dim, block_dim>>>(dd_prev, source, N);
-}
+if (max_velocity2 < 0.0000005f)
+  gpu_react_velocity<<<grid_dim, block_dim>>>(du_prev, dv_prev, force, N);
+
+if (max_density < 1.0f)
+  gpu_react_density<<<grid_dim, block_dim>>>(dd_prev, source, N);
 ```
 
 - Note: We are not dealing with how react and step communicate, so those copies
@@ -325,24 +299,25 @@ class: center, middle
 It is time to make copies between react and step dissapear!
 
 ```c
-for (i = 0; i < steps; i++) one_step();
-// Copies are placed at the end
-checkCudaErrors(cudaDeviceSynchronize());
-checkCudaErrors(cudaMemcpy(hd, dd, size_in_mem,cudaMemcpyDeviceToHost));
-checkCudaErrors(cudaMemcpy(hu, du, size_in_mem,cudaMemcpyDeviceToHost));
-checkCudaErrors(cudaMemcpy(hv, dv, size_in_mem,cudaMemcpyDeviceToHost));
-checkCudaErrors(cudaMemcpy(hd_prev, dd_prev, size_in_mem,cudaMemcpyDeviceToHost));
-checkCudaErrors(cudaMemcpy(hu_prev, du_prev, size_in_mem,cudaMemcpyDeviceToHost));
-checkCudaErrors(cudaMemcpy(hv_prev, dv_prev, size_in_mem,cudaMemcpyDeviceToHost));
+int main() {
+  initialize_grids();
+  for (i = 0; i < steps; i++) one_step();
+  cudaMemcpy(hd, dd, size_in_mem,cudaMemcpyDeviceToHost);
+  cudaMemcpy(hu, du, size_in_mem,cudaMemcpyDeviceToHost);
+  cudaMemcpy(hv, dv, size_in_mem,cudaMemcpyDeviceToHost);
+  cudaMemcpy(hd_prev, dd_prev, size_in_mem,cudaMemcpyDeviceToHost);
+  cudaMemcpy(hu_prev, du_prev, size_in_mem,cudaMemcpyDeviceToHost);
+  cudaMemcpy(hv_prev, dv_prev, size_in_mem,cudaMemcpyDeviceToHost);
+}
 ```
 
 - In this version, a bunch of kernels launches are queued up to the thrust
 synchronization.
-- Copies were moved at the end of the simulation.
+- Copies appear now only at the end of the simulation.
 - *react* and *step* use memory that is on the device. So, the CPU does not do
 more than just launch kernels.
-- If it were not for the thrust pitfalls this one would be the *fullburst*
-version that we were aiming for.
+- If it were not for the fact that thrust dereferences are blocking, this one
+would be the *fullburst* version that we were aiming for.
 ---
 class: center, middle
 # reactburst VS threactburst VS stepburst
@@ -355,65 +330,17 @@ class: center, middle
 </div>
 ---
 class: center, middle
-# Failed Versions: fullburst
+# Failed Versions
+<small>*`<rant>`*</small>
 ---
-# fullburst
+# `[1/?]` Failed Versions
 
-```c
-  // zip_iterator<dfloatp2> uvs_begin = make_zip_iterator(
-  //   make_tuple(du_prev, dv_prev)
-  // );
-  // zip_iterator<dfloatp2> uvs_end = make_zip_iterator(
-  //   make_tuple(du_prev + size, dv_prev + size)
-  // );
-  // zip_iterator<dfloatp2> zmaxvel2 = max_element(
-  //   uvs_begin,
-  //   uvs_end,
-  //   compare_dfloatp2()
-  // );
-  // dfloatp2 mv2 = zmaxvel2.get_iterator_tuple();
-  // float mvu = *mv2.get<0>();
-  // float mvv = *mv2.get<1>();
-  // float max_velocity2 = mvu * mvu + mvv * mvv;
-  float max_velocity2 = 0.1f;
-  // dfloatp tdd_prev(dd_prev);
-  // float max_density = *thrust::max_element(tdd_prev, tdd_prev + size);
-  float max_density = 0.1f;
-```
-- Erasing reductions in such a way thrust does not block the entire burst of
-launches
-- We uncovered that the number of kernel launches that can be queued is limited to
-around 1024.
-- Cub allows reductions without blocking so that implies that react had to be
-implemented again. Fortunately, we discovered it before that.
----
-class: center, middle
-# Failed Versions: streamburst
----
-# streamburst
-```c
-static cudaStream_t streams[32768];
-static cudaStream_t get_new_stream() {
-  static int i = 0;
-  cudaStreamCreate(&streams[i]);
-  i++;
-  return streams[i - 1];
-}
+- `fullburst` (experimental): thrust blocking, limited kernel queue, cub non-blocking -
+- `streamburst` (experimental): new stream per launch, unstable, counterproductive workload (~2/~3
+result oscillation)
 
-...
-
-kernel<<< ..., ..., get_new_stream()>>>
-```
-- Another idea was the use of streams in the code and maximize concurrency.
-- Assign one stream to each kernel launch and see what happens.
-- results were oscillating between 2 and 3 ns per cell. They were not better but
-also not worse.
-- Is there overhead if a new stream is created for each kernel launch?
 ---
-class: center, middle
-# Failed Versions: graphburst
----
-# graphburst
+# `[2/?]` graphburst (implemented)
 <div align="center">
   <img src="res/other_imgs/stream-flow.png"
        alt="stream-flow"
@@ -465,15 +392,9 @@ one_step(...){
 </div>
 - 86% of the entire program is linsolve. More than 3 streams!
 ---
-class: center, middle
-# Failed Versions: onekernel
----
-# onekernel
-- Cache flushes after each kernel launch.
-- *linsolve* erases any cache the previous blocks may have fetched.
-- This would imply to re-read twenty times from global memory
-- Idea: Use just one kernel and synchronize threads by means
-of Cooperative Groups
+# `[3/?]` onekernel (implemented)
+- Reuse kernel state (L1 and possibly shared memory)
+- Cooperative Groups
 
 ```c
 __device__ gpu_lin_solve_rb_step(...);
@@ -485,148 +406,45 @@ __global__ gpu_lin_solve(...) {
   }
 }
 ```
-- Groups of threads can be smaller than a warp, bigger than an SM covering an
-entire device worth of threads and even bigger than a device extending over
-multiple devices.
-- We needed a way to synchronize the entire device between
-**gpu_lin_solve_rb_step** launches. Use of **.sync()**
-- **gpu_lin_solve** is now a single kernel that iteratively and in a synchronized
-manner, calls **gpu_lin_solve_rb_step**
+- `grid.sync()` not as optimized in hardware as kernel sync.
+- From ~2.5 to ~3.5 with N=4096, in some settings to ~500.
+- Unsynced possibility? (~2.5 to ~1.6)
+- Occupancy API
+- `cudaDeviceSetCacheConfig`
 ---
-# onekernel
+# `[4/?]` More Failed Version
+- `stepburst-shmem` (implemented): try to use shared memory, smart L1
+- `onekernel-shmem` (experimented): sub grid, does not scale good, conditional to
+where to read, grid.sync() still slower
+- `stepburst-occupancy`: occupancy api, 68 SM, lanes unused
 
-- Synchronization of CG is not very optimized in hardware.
-
-- Decrease in performance (from ~2.5 to ~3.5 with N=4096).
-
-- Not syncing: Removing the **grid.sync()** call above makes the simulation a
-little weird, but the performance increases significantly (from ~2.5 to ~1.6
-with N=4096).
-
-- Occupancy API: Need to use special ways of launching kernels and defining
-their dimensions. The number of blocks must match those of the
-amount of SMs in the device. The number of threads in a block must be
-calculated with the some of the Occupancy API methods.
-
-- Cache Preference: In this example we ought to use the
-**cudaDeviceSetCacheConfig** function which allows us to hint to the device that
-we prefer Cache L1 over shared memory as we are not using none of the latter.
 ---
-class: center, middle
-# Failed Versions: stepburst-shmem
----
-# stepburst-shmem
-```c
-__device__
-void gpu_lin_solve_rb_step(...) {
-  __shared__ float neigh_cache[BLOCK_WIDTH + 2][BLOCK_HEIGHT + 1];
-  ... // load neighbours to cache
-  __syncthreads();
-  same[...] = ... // something related to same0 and neigh_cache but not neigh
-}
-```
-- Using **nvcc -m global_hit_rate**: Hit rate of 40%.
-- We tracked down the following pattern of cache usage (or at least our
-hypothesis for it):
+# `[5/?]` stepburst-roae (implemented)
+<small>*Root of all Evil*</small>
+It applies and discuss lots of minimal and mostly superficial optimizations
 
-<table style="width:100%; border: 1px solid black;">
-  <tr>
-    <th>Accesses</th>
-    <th>Referenced from</th>
-  </tr>
-  <tr>
-    <td>same</td>
-    <td>write miss?</td>
-  </tr>
-  <tr>
-    <td>same0</td>
-    <td>miss</td>
-  </tr>
-  <tr>
-    <td>neigh up</td>
-    <td>hit</td>
-  </tr>
-  <tr>
-    <td>neigh down</td>
-    <td>hit</td>
-  </tr>
-  <tr>
-    <td>neigh left</td>
-    <td>miss</td>
-  </tr>
-  <tr>
-    <td>neigh right</td>
-    <td>vectorized</td>
-  </tr>
-</table>
-- this explains our 40% (2/5) accesses as one of them is vectorized.
----
-class: center, middle
-# Failed Versions: onekernel-shmem
----
-# onekernel-shmem
-- In this version we have exactly one block per SM per the CG requirements.
-
-- Idea: Fill the shared memory of each block with a portion of its sub grid
-and use shared memory when the grid strid loop needs to use memory that is
-cached there.
-
-- Unfortunately in our tests the with and without the added
-conditional were in all cases worst than stepburst.
-
-- The grid synchronization was still a heavy hit on performance.
----
-class: center, middle
-# Failed Versions: stepburst-occupancy
----
-# stepburst-occupancy
-- Idea: Use the ocuppancy api from the *onekernel* implementation
-with the hopes that by dividing the problem to match exactly the hardware it may
-improve the performance, but the opposite happened.
-
-- It seems that dividing the
-problem in weird partitions (in this cases divided by 68 as the RTX 2080 ti has
-68 SMs) is probably subutilizing the vector units.
----
-class: center, middle
-# Failed Versions: stepburst-occupancy
----
-# stepburst-roae
-- As we were running out of good ideas, we implemented all of our bad ones in
-here, the "Root Of All Evil" branch.
-- It applies and discuss lots of minimal and mostly superficial optimizations
----
-# stepburst-roae
 - `cudaDeviceSetCacheConfig`: Hint for increased cache usage as we couldn't use
 shared memory
-
 - Vector loads: `float4`, `int4`, and similar types are supposed to increase a
 bit. Tradeoff: Need to align reads and our memory layout did not allow that.
-
 - `#pragma loop unroll`: For unrolling loops.
-
 - `nvcc` flags: basically `-use_fast_math`.
-
 - Block/grid dims: There were many settings which gave good results, we decided
 to go with 8x8 as 64 is the amount of cuda cores in one SM for the 2080 Ti.
-
 - PTX intrinsics: There are many intrinsics for math (which were already enabled
 by the nvcc flags) and for memory load/store.
-
 - Similar approach as to the *stream* technique we used in lab2 with *__stwt* but it
 didn't give any gains.
-
 - *__ldg* intrinsic which hints that a load should be cached in a read-only
 faster cache, it improved about 2% the performance in our pascal GTX 1060 MaxQ
 but nothing on the target RTX 2080 Ti.
+
 ---
-class: center, middle
-# Failed Versions: stepburst-shidden
----
-# stepburst-shidden
+# `[5/?]` stepburst-shidden (experimental)
 - In practice the driver does not clean shared memory between calls and just
 sets it unused.
 - Idea: Reuse "undefined" shared memory between kernel launches.
+
 ```c
 void lin_solve(...) {
   gpu_lin_solve_rb_step_shtore(RED);
@@ -652,29 +470,23 @@ void gpu_lin_solve_rb_step_shtore(...) {
   // Save appropiaty value of same0 for next kernels
   const float previous = same0[index];
   csame0[threadIdx.y][threadIdx.x] = previous;
-  ... // Get lots of "set but not used" compiler warnings
   ... // regular lin_solve_rb_step using previous instead of same0
 }
+```
+```c
 __global__
 void gpu_lin_solve_rb_step_shload(...) {
   __shared__ float csame0[BLOCK_HEIGHT][BLOCK_WIDTH];
   __shared__ int bx, by, id1, id2;
-  float previous;
-  // Notice most of these variables are undefined
-  if (id1 == bx * by + bx && id2 == bx * by + by) {
-    // Found'em! read "undefined" memory.
-    previous = csame0[threadIdx.y][threadIdx.x];
-  } else {
-    // Read from global memory
-    previous = same0[index]; // (*) There is a catch here, explained in a moment
-  }
+  float previous = id1 == bx * by + bx && id2 == bx * by + by // Undefined vars
+    ? csame0[threadIdx.y][threadIdx.x] // Found'em!
+    : same0[index]; // Regular read to global memory
   ... // Regular lin_solve_rb_step but using bx and by as block indexes instead
 }
 ```
 ---
 # stepburst-shidden
-- The conditional from `_shload` we check that our undefined shared memory
-effectively has the correct values.
+
 - What is the hit ratio in which this check effectively "finds" what is looking
 for?
 
@@ -699,19 +511,9 @@ for?
   </tr>
 </table>
 
-- In pascal half of the reads to same0 in the twenty iterations could be
-avoided.
+- Pascal vs Turing
+- The real implementation has some catches
 
-- Turing architecture does something with undefined shared memory that makes it
-not as reliable as in pascal.
-
-- The **else** in the code above is figurative and does not solve all of our
-problems to make the algorithm correct. 
-
-- When we don't find a hit, our sub grid
-could've been already computed by another block which found the corresponding
-shared memory. **Idea to solve it**: fill all the found-in-undefined-shared-memory
-sub grids, and then all the rest which were not cached.
 ---
 class: center, middle
 # Failed Version: stepburst-tex
@@ -888,42 +690,42 @@ class: center, middle
   </tr>
   <tr>
     <td>128</td>
-    <td>1.05x</td> 
-    <td>10.8x</td> 
-    <td>2.04x</td> 
-    <td>0.79x</td> 
+    <td>1.05x</td>
+    <td>10.8x</td>
+    <td>2.04x</td>
+    <td>0.79x</td>
     <td>18x</td>
   </tr>
   <tr>
     <td>512</td>
-    <td>1.46x</td> 
-    <td>11.1x</td> 
-    <td>15.7x</td> 
-    <td>1.47x</td> 
+    <td>1.46x</td>
+    <td>11.1x</td>
+    <td>15.7x</td>
+    <td>1.47x</td>
     <td>375x</td>
   </tr>
   <tr>
     <td>2048</td>
-    <td>1.69x</td> 
-    <td>11.4x</td> 
-    <td>20.0x</td> 
-    <td>1.57x</td> 
+    <td>1.69x</td>
+    <td>11.4x</td>
+    <td>20.0x</td>
+    <td>1.57x</td>
     <td>608x</td>
   </tr>
   <tr>
     <td>4096</td>
-    <td>2.32x</td> 
-    <td>10.2x</td> 
-    <td>6.87x</td> 
-    <td>5.65x</td> 
+    <td>2.32x</td>
+    <td>10.2x</td>
+    <td>6.87x</td>
+    <td>5.65x</td>
     <td>916x</td>
   </tr>
   <tr>
     <td>8192</td>
-    <td>2.27x</td> 
-    <td>9.85x</td> 
-    <td>6.14x</td> 
-    <td>6.84x</td> 
+    <td>2.27x</td>
+    <td>9.85x</td>
+    <td>6.14x</td>
+    <td>6.84x</td>
     <td>940x</td>
   </tr>
 </table>
