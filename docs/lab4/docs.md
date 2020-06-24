@@ -216,7 +216,7 @@ Here as the comments says we have two reductions needed to compute
 *max_velocity2* and *max_density*. Then, the entire matrices *uu*, *vv*, and
 *d*, are set to 0, so memsets can be used here. Finally those arrays are updated
 so we can tell the GPU to do that for us. Instead of doing the reductions by
-hand, we make the most of what *thrust* (a Cuda library) and C++ have to offer. 
+hand, we make the most of what *thrust* (a Cuda library) and C++ have to offer.
 
 ```c
 // Reduction 1
@@ -310,6 +310,13 @@ checkCudaErrors(cudaMemcpy(hv_prev, dv_prev, size_in_mem,cudaMemcpyDeviceToHost)
 
 <!-- TODO: Put Results here -->
 
+# Failed Versions
+
+The next versions can be found in their respective branches and were failed
+attempts at implementing ideas that in theory should've improved performance but
+didn't, or they were negligible, or improved in our some testing gpus (GTX 1060
+MaxQ) but not in our target hardware (the RTX 2080 Ti).
+
 ## fullburst
 
 We did not want to live with that feeling of "how much performance would have
@@ -398,7 +405,7 @@ the work is unbalanced, but consider that streams increase concurrency using
 resources that other kernels do not use completely. We also wanted to use cuda
 graphs, capturing it by means of *streamCapture* cuda directives. Since one of
 the conditions of these technique is to have a *main stream*, we selected the
-red one to command over the others. 
+red one to command over the others.
 
 The implementation was not so straightforward as the graph looks like, but we
 could do it in such a way that there are no so much changes of the *stepburst*
@@ -430,3 +437,48 @@ one_step(...){
 }
 ```
 
+## onekernel
+
+<!-- TODO: State reuse, iterations, sync, cooperative groups, occupancy
+cache/shared memory distribution preference -->
+
+### stepburst-shmem
+
+<!-- TODO: Bad understanding of shared mem, maybe it could work
+because cache was not working as we expected it to be working -->
+
+### onekernel-shmem
+
+<!-- TODO: Same as above but would've been a lot better -->
+
+### onekernel-shared-1024
+
+<!-- TODO:  -->
+
+### stepburst-occupancy
+
+<!-- TODO: Did not work, better fit the data not the hardware -->
+
+### stepburst-roae
+
+<!-- TODO: Last stroke ldg, stwt, ldlu -->
+<!--
+- vector loads
+- l1/shmem balance
+- cache hints
+- loop unroll
+- flags de nvcc?
+- ptx intrinsics, __ldg, __stwt (strean), __ldlu, math intrinsics
+- block/grid dims tinkering
+-->
+
+### stepburst-shidden
+
+<!-- TODO: undefined reuse of shared memory,
+
+  shidden hits:
+  rtx 2080 ti hits: upto 64**2 all hits, 512**2 25%, 2048**2 2.21%
+  gtx 1060 maxq hits: upto 64**2 all hits, 512**2 and 2048**2 ~50%
+
+  if it wouldve been implented, how to calculate the not-found blocks
+-->
