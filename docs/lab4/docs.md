@@ -439,8 +439,58 @@ one_step(...){
 
 ## onekernel
 
-<!-- TODO: State reuse, iterations, sync, cooperative groups, occupancy
-cache/shared memory distribution preference -->
+One of our main concerns was the cache not being properly utilized as each
+lin_solve kernel launch erases any cache the previous blocks may have fetched,
+and by the nature of the problem, this would imply to re-read twenty times from
+global memory.
+
+To prevent this, in recent versions of CUDA the feature of Cooperative Groups
+(CG) was introduced. This are groups of threads that can be smaller than a warp,
+bigger than an SM covering an entire device worth of threads and even bigger
+than a device extending over multiple devices. CG offer lots of possibilities
+that are discussed more in depth in [this
+article](https://developer.nvidia.com/blog/cooperative-groups/) but for our
+particular case, what we needed was a way to synchronize the entire device
+between `gpu_lin_solve_rb_step` launches, and the cooperative groups `.sync()`
+method does exactly that. So in this way we could make `gpu_lin_solve` to be a
+single kernel that iteratively and in a synchronized manner, calls
+`gpu_lin_solve_rb_step` device functions and syncs them with `grid.sync()` as
+follows:
+
+```c
+__device__ gpu_lin_solve_rb_step(...);
+__global__ gpu_lin_solve(...) {
+  for (int k = 0; k < 20; k++) {
+    gpu_lin_solve_rb_step(RED, ...);
+    gpu_lin_solve_rb_step(BLACK, ...);
+    grid.sync();
+  }
+}
+```
+
+Unfortunately it seems that the [grid synchronization
+feature](https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#grid-synchronization-cg)
+of the CG is not very optimized in hardware yet (at least up to turing), and
+unfortunately we saw a decrease in performance (from ~2.5 to ~3.5).
+
+Some points that we need to mention that appeared during this implementation
+were:
+
+- Not syncing: Removing the `grid.sync()` call above makes the simulation a
+  little weird, however it could be still a pretty reasonable approximation for
+  some use cases, and the performance increases significantly (from ~2.5 to
+  ~1.6).
+- Occupancy API: For using the grid sync feature of CGs we need to use special
+  ways of launching kernels and defining their dimensions. In particular the
+  number of blocks must match those of the amount of SMs in the device, and the
+  number of threads in a block must be calculated with the some of the Occupancy
+  API methods.
+- Cache Preference: In this example we ought to use the
+  `cudaDeviceSetCacheConfig` function which allows us to hint to the device that
+  we prefer Cache L1 over shared memory as we are not using none of the latter.
+  However in all of our tests in this and other implementations it seems that
+  the device is smart enough to tell which setting to use as the performance
+  doesn't improve.
 
 ### stepburst-shmem
 
