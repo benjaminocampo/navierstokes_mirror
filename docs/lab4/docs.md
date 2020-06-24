@@ -771,10 +771,22 @@ bottom right cell in the following way is a correct parallel implementation.
 
 ![Loop skewing, borrowed from the paper](res/other_imgs/loop-skewing.png)
 
-# Conclusions
+## Conclusions
 
-<!-- TODO: Write something -->
-<!-- TODO: Resulting graphs -->
+Here we can se all our results during these course. Before CP we would not have
+considered the use of vectorization, omp, cuda, and even compiler flags. So we
+thought the best way to close the subject would be compare all our bests tricks
+and optimizations. Note that in the comparison between lab3 and lab4, we got
+better results with cheaper hardware. This is due to the high bandwith that the
+GPU offers us.
+
+![lab3 vs lab4](res/other_imgs/3_lab3_lab4.png)
+
+![lab2 vs lab3 vs lab4](res/other_imgs/2_lab2_lab3_lab4.png)
+
+![lab1 vs lab2 vs lab3 vs lab4](res/other_imgs/1_lab1_lab2_lab3_lab4.png)
+
+![Without CP vs lab1 vs lab2 vs lab3 vs lab4](res/other_imgs/0_O0_lab1_lab2_lab3_lab4.png)
 
 ## Speedup Table
 
