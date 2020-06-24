@@ -18,11 +18,11 @@ number of lines to be rewritten (more than a 1000 lines of code). Another
 obstacle that we had to confront was the CPU-GPU communication. Since their
 communication was expensive, minimizing synchronizations between them was
 crucial to maintain the simulation at its maximum speed. In order to do so, the
-entire program should be launched to the GPU at the beggining. After all the
-grid-updates were completed, results were returned to the CPU. We nick named
-this process as *fullburst*. That is what we were aiming. There is just one
+entire program should be launched to the GPU at the beginning. After all the
+grid-updates were completed, results were returned to the CPU. We nicknamed
+this process as `fullburst`. That is what we were aiming. There is just one
 small detail. Moving everything in a bunch leads to failures, and hours looking
-for their bugs. How can we move everything in that way without loosing the
+for their bugs. How can we move everything in that way without losing the
 patience?
 
 Remember that the simulation consists of a number of updates or steps, and for
@@ -30,12 +30,12 @@ each step, calls to a set of functions.
 
 **Simulation Step**
 
-- *react*
-- *step*: <!-- 4 space tab needed for pandoc -->
-    - *addsource*
-    - *diffuse*
-    - *project*
-    - *advect*
+- `react`
+- `step`: <!-- 4 space tab needed for pandoc -->
+    - `addsource`
+    - `diffuse`
+    - `project`
+    - `advect`
 
 The migration process consisted in implementing them one by one, and checking if
 the simulation keeps well after it. Obviously, since they were developed in an
@@ -43,8 +43,8 @@ incremental way, synchronizations with the host were needed. But it was
 momentary until the migration was fully-implemented. It might be thought as the
 device "asking for help to the host", since it can not handle the rest of the
 functions. We also had to take into account which snippet of code should be a
-*kernel*. Since one of the easiest way to synchronyze threads in the GPU is
-through *kernels*, some dependencies were dealed with them. We are not
+`kernel`. Since one of the easiest way to synchronize threads in the GPU is
+through `kernels`, some dependencies were dealt with them. We are not
 mentioning changes of signatures, makefile rules, deletion of omp pragmas,
 includes, allocation of device and host data, etc. They were also developed by
 means of little changes but were not the core of the migration.
@@ -53,10 +53,10 @@ means of little changes but were not the core of the migration.
 
 ## reactburst
 
-During the migration, we dealed with the function *step*, i.e, implement that
+During the migration, we dealt with the function `step`, i.e, implement that
 procedure in such a way that is executed in the device. This version was called
-*reactburst* since step was computed by the GPU, but *react* was still performed
-by the CPU (without changes from the lab 3). This is how the execution of step
+`reactburst` since step was computed by the GPU, but `react` was still performed
+by the CPU (without changes from the lab 3). This is how the execution of `step`
 is:
 
 ![migration_step](res/migration_imgs/graph-dependency.png)
@@ -66,35 +66,34 @@ host function that launches other kernels.
 
 ### add_source
 
-In this case was straighforward, since *add_source* is not a complex function
-and *diffuse* can not start without the previous execution of *add_source*. It
+In this case was straightforward, since `add_source` is not a complex function
+and `diffuse` can not start without the previous execution of `add_source`. It
 was converted into a kernel.
 
 ### diffuse
 
-*diffuse* was splitted in three kernel launches. Two of them were calls to
-*lin_solve_rb_step* to compute Gauss-Seidel for RED and BLACK cells. These
+`diffuse` was split in three kernel launches. Two of them were calls to
+`lin_solve_rb_step` to compute Gauss-Seidel for RED and BLACK cells. These
 kernels had to compute just the half of the simulation matrix so the block and
-grid dimensions were chosen in a way that fits better for them. Since *set_bnd*
-depens on the previous two kernel calls, a synchronyzation goes between them. So
-another different kernel was created for its execution. Note that *set_bnd* is
-launched in one dimension with different block and grid dims since it does not
-need to update the entire grid.
-<!-- TODO: Talk about the choice of block_dim -->
+grid dimensions were chosen in a way that fits better for them. Since `set_bnd`
+depends on the previous two kernel calls, a synchronization goes between them.
+So another different kernel was created for its execution. Note that `set_bnd`
+is launched in one dimension with different block and grid dims since it does
+not need to update the entire grid.
 
 ![migration_step](res/migration_imgs/diffuse.png)
 
 ### project
 
-*project* is one of the longest in terms of kernel launches, since it consits of
-two parts and an execution of linsolve. As the previous case, they had some
-dependencies so project had to be splitted in sub kernels as above.
+`project` is one of the longest in terms of kernel launches, since it consists of
+two parts and an execution of `lin_solve`. As the previous case, they had some
+dependencies so project had to be split in sub kernels as above.
 
 ![migration_step](res/migration_imgs/project.png)
 
 ### advect
 
-After developing the previous two functions. *advect* was not so hard to deal
+After developing the previous two functions. `advect` was not so hard to deal
 with. Again the same strategy was used in this case.
 
 ![migration_step](res/migration_imgs/advect.png)
@@ -104,9 +103,9 @@ with. Again the same strategy was used in this case.
 Let us cover some of the kernels that are mentioned above. For each kernel, grid
 stripe loop was used. It consists in looping over the grids, working with the
 global id of each thread related to the current grid that we are working. Here
-is a part of the implementation of *gpu_lin_solve_rb_step* and *set_bnd*. The
+is a part of the implementation of `gpu_lin_solve_rb_step` and `set_bnd`. The
 rest of kernels are similar, if you are interested in their implementation, you
-can glace at them at our repository.
+can glance at them at our repository.
 
 ```c
 __global__
@@ -156,9 +155,9 @@ void gpu_set_bnd(unsigned int n, boundary b, float *x) {
 ### Pitfalls
 
 In order to complete one update of the grid, and count one step of the
-simulation, both *react* and *step* have to be performed. Since *react* is
+simulation, both `react` and `step` have to be performed. Since `react` is
 computed by the host we can not avoid a synchronization and copies from host to
-device at that point. This is what we have in *headless.c* for each simulation
+device at that point. This is what we have in `headless.c` for each simulation
 step.
 
 ```c
@@ -179,7 +178,7 @@ checkCudaErrors(cudaMemcpy(hv_prev, dv_prev, size_in_m, cudaMemcpyDeviceToHost))
 ```
 
 ## threactburst
-Obviously, the bottleneck of *reactburst* is how *react* is computed. So let us
+Obviously, the bottleneck of `reactburst` is how `react` is computed. So let us
 get deep into that function to see what can be done to make it faster.
 
 ```c
@@ -215,10 +214,11 @@ if (max_density < 1.0f) {
 ```
 
 Here as the comments says we have two reductions needed to compute
-*max_velocity2* and *max_density*. Then, the entire matrices *uu*, *vv*, and
-*d*, are set to 0, so memsets can be used here. Finally those arrays are updated
-so we can tell the GPU to do that for us. Instead of doing the reductions by
-hand, we make the most of what *thrust* (a Cuda library) and C++ have to offer.
+`max_velocity2` and `max_density`. Then, the entire matrices `uu`, `vv`, and
+`d`, are set to 0, so `memsets` can be used here. Finally those arrays are
+updated so we can tell the GPU to do that for us. Instead of doing the
+reductions by hand, we make the most of what `thrust` (a Cuda library) and C++
+have to offer.
 
 ```c
 // Reduction 1
@@ -281,16 +281,16 @@ struct compare_dfloatp2 {
 
 Note that in this version we are not dealing with how react and step
 communicate, so those copies that were shown above are still here in
-*threactburst*.
+`threactburst`.
 
 ## stepburst
 
-It is time to make copies between react and step dissapear. In this version, a
+It is time to make copies between `react` and `step` disappear. In this version, a
 bunch of kernels launches are queued up to the thrust synchronization. In order
 to do so, copies were moved at the end of the simulation. So everything that is touched in the program belongs to the device. This can be accomplished since
-the GPU works by itself, i.e, react and step use memory that is on the device.
+the GPU works by itself, i.e, `react` and `step` use memory that is on the device.
 So, the CPU does not do more just launch kernels. If it were not for the thrust
-pitfalls this one would be the *fullburst* version that we were aiming for.
+pitfalls this one would be the `fullburst` version that we were aiming for.
 
 ```c
 for (i = 0; i < steps; i++) one_step();
@@ -304,6 +304,10 @@ checkCudaErrors(cudaMemcpy(hu_prev, du_prev, size_in_mem,cudaMemcpyDeviceToHost)
 checkCudaErrors(cudaMemcpy(hv_prev, dv_prev, size_in_mem,cudaMemcpyDeviceToHost));
 ```
 
+## Migation Results
+
+![reactburst vs threactburst vs stepburst](res/graphs/reactburst_threactburst_stepburst.png)
+
 # Failed Versions
 
 The next versions can be found in their respective branches and were failed
@@ -314,9 +318,9 @@ MaxQ) but not in our target hardware (the RTX 2080 Ti).
 ## fullburst
 
 We did not want to live with that feeling of "how much performance would have
-been obtained if *fullburst* were implemented?" In order to check it, we did a
+been obtained if `fullburst` were implemented?" In order to check it, we did a
 little test that consisted in erasing the reductions in such a way thrust does
-not block the entire burst of launches, but still keeping *react*. In summary we
+not block the entire burst of launches, but still keeping `react`. In summary we
 just commented the following lines:
 
 ```c
@@ -350,7 +354,7 @@ did not increase so much the performance. Why? We uncovered that the number of
 kernel launches that can be queued is limited to around 1024, so our idea of
 launching the entire program and just wait for the result is not possible.
 Fortunately, we discovered it before implementing it. Imagine the amount of time
-that we have lost if we inmersed ourselves to accomplish this "optimization". We
+that we have lost if we immersed ourselves to accomplish this "optimization". We
 had already seen that cub allows reductions without blocking so that implies
 that react had to be implemented again.
 
@@ -360,7 +364,7 @@ Another idea was the use of streams in the code and maximize concurrency.
 Nevertheless we did not get wildly deep into it since streams require more than
 a few changes in the code. What we learn after 3 laboratories is to test an idea
 before losing hours on a chair in front of a screen with implementations that
-are not goint to be fruitful. The idea was to assign one stream to each kernel
+are not going to be fruitful. The idea was to assign one stream to each kernel
 launch and see what happens. Something like:
 
 ```c
@@ -388,7 +392,7 @@ new stream is created for each kernel launch.
 After doing that experiment we decide to tackle an implementation with streams
 but also using cuda graphs. So first we needed to analyze where the dependencies
 were placed in order to assign properly job/kernels for them. Looking at the
-graph we traced in reactburst, we can expand it to see kernel dependencies and
+graph we traced in `reactburst`, we can expand it to see kernel dependencies and
 find which kernel launches can be executed with other one.
 
 ![migration_step](res/other_imgs/stream-flow.png)
@@ -396,15 +400,15 @@ find which kernel launches can be executed with other one.
 As we can see in the graph, we divided the work in three streams. It might look
 the work is unbalanced, but consider that streams increase concurrency using
 resources that other kernels do not use completely. We also wanted to use cuda
-graphs, capturing it by means of *streamCapture* cuda directives. Since one of
-the conditions of these technique is to have a *main stream*, we selected the
+graphs, capturing it by means of `streamCapture` cuda directives. Since one of
+the conditions of these technique is to have a `main stream`, we selected the
 red one to command over the others.
 
 The implementation was not so straightforward as the graph looks like, but we
-could do it in such a way that there are no so much changes of the *stepburst*
-version. At the beggining of the program, events and streams were created and
-then one call to step was performed enclosed by *cudaStreamBeginCapture* and
-*cudaStreamEndCapture*. After it, it returned an instance of graph is created
+could do it in such a way that there are no so much changes of the `stepburst`
+version. At the beginning of the program, events and streams were created and
+then one call to step was performed enclosed by `cudaStreamBeginCapture` and
+`cudaStreamEndCapture`. After it, it returned an instance of graph is created
 and finally launched.
 
 ```c
@@ -432,8 +436,8 @@ one_step(...){
 
 Unfortunately it seems that using streams and cuda graphs was not the key of the
 problem since we could not get improvements. In order to see if streams were
-actually used we check it with nvvp that show us a thorougly execution of the
-program. Here we could obtain that *gpu_lin_solve_rb_step* is the 85% of the
+actually used we check it with nvvp that show us a thoroughly execution of the
+program. Here we could obtain that `gpu_lin_solve_rb_step` is the 85% of the
 code, and the rest is taken by the other kernels. Maybe we could get some
 concurrency between kernels but they were not the key of the problem.
 
@@ -441,11 +445,11 @@ concurrency between kernels but they were not the key of the problem.
 
 The cuda programming guide and lots of posts praise the use of texture memory
 instead of reading from global memory. Especially for stencil patterns.
-Nevertheless its implementation would be a little painfull for us, since
+Nevertheless its implementation would be a little painful for us, since
 textures must be declared in file scope (In order to be known at compile time),
 we can not pass them by parameter. That would lead to so many changes in
 functions signatures and hours of testing correctness. Instead of that, we test
-it with the kernel *gpu_lin_solve_rb_step* checking if they speedup that kernel.
+it with the kernel `gpu_lin_solve_rb_step` checking if they speed up that kernel.
 
 ```c
 __global__
@@ -480,19 +484,19 @@ for (unsigned int k = 0; k < 20; ++k) {
 cudaUnbindTexture(tex_dred);
 ```
 
-Then using *nvprof* we could measure the time needed to run this kernel with the
+Then using `nvprof` we could measure the time needed to run this kernel with the
 older one. Unfortunately for us, results were so similar. We discovered later
 that Turing mershes the cache L1 and the texture cache in such a way that when
 we launch kernels both caches are used. We also wanted to use textures in
-*advect* to take the most of *interpolations*. But we could not use it due to
+`advect` to take the most of `interpolations`. But we could not use it due to
 red-black organization. The idea was to bind a matrix **dd**, **du**, and
-**dv**, to a texture and avoid parsing float coordenates to indexes.
+**dv**, to a texture and avoid parsing float coordinates to indexes.
 Nevertheless, we need the indexes to know if a cell is RED or BLACK.
 
 ## onekernel
 
 One of our main concerns was the cache not being properly utilized as each
-lin_solve kernel launch erases any cache the previous blocks may have fetched,
+`lin_solve` kernel launch erases any cache the previous blocks may have fetched,
 and by the nature of the problem, this would imply to re-read twenty times from
 global memory.
 
@@ -593,7 +597,7 @@ We brought the idea of using the occupancy api from the onekernel implementation
 with the hopes that by dividing the problem to match exactly the hardware it may
 improve the performance, but the opposite happened. It seems that dividing the
 problem in weird partitions (in this cases divided by 68 as the RTX 2080 ti has
-68 SMs) is probably subutilizing the vector units.
+68 SMs) is probably sub utilizing the vector units.
 
 ### stepburst-roae
 
@@ -650,7 +654,7 @@ void gpu_lin_solve_rb_step_shtore(...) {
     id1 = bx * by + bx; id2 = bx * by + by;
   }
 
-  // Save appropiaty value of same0 for next kernels
+  // Save appropriate value of same0 for next kernels
   const float previous = same0[index];
   csame0[threadIdx.y][threadIdx.x] = previous;
 
@@ -773,24 +777,24 @@ bottom right cell in the following way is a correct parallel implementation.
 
 ## Conclusions
 
-Here we can se all our results during these course. Before CP we would not have
+Here we can see all our results during these course. Before CP we would not have
 considered the use of vectorization, omp, cuda, and even compiler flags. So we
 thought the best way to close the subject would be compare all our bests tricks
 and optimizations. Note that in the comparison between lab3 and lab4, we got
-better results with cheaper hardware. This is due to the high bandwith that the
+better results with cheaper hardware. This is due to the high bandwidth that the
 GPU offers us.
 
-![lab3 vs lab4](res/other_imgs/3_lab3_lab4.png)
+![lab3 vs lab4](res/graphs/3_lab3_lab4.png)
 
-![lab2 vs lab3 vs lab4](res/other_imgs/2_lab2_lab3_lab4.png)
+![lab2 vs lab3 vs lab4](res/graphs/2_lab2_lab3_lab4.png)
 
-![lab1 vs lab2 vs lab3 vs lab4](res/other_imgs/1_lab1_lab2_lab3_lab4.png)
+![lab1 vs lab2 vs lab3 vs lab4](res/graphs/1_lab1_lab2_lab3_lab4.png)
 
-![Without CP vs lab1 vs lab2 vs lab3 vs lab4](res/other_imgs/0_O0_lab1_lab2_lab3_lab4.png)
+![Without CP vs lab1 vs lab2 vs lab3 vs lab4](res/graphs/0_O0_lab1_lab2_lab3_lab4.png)
 
-## Speedup Table
+## Speed Up Table
 
-Speedup with respect from the previous versiono (starting with the `-O0`
+Speed up with respect from the previous version (starting with the `-O0`
 implementation)
 
 | N    | lab1  | lab2  | lab3  | lab4  | total  |
