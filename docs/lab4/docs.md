@@ -494,8 +494,37 @@ were:
 
 ### stepburst-shmem
 
-<!-- TODO: Bad understanding of shared mem, maybe it could work
-because cache was not working as we expected it to be working -->
+A lot of places talked wonders about the usage of shared memory even in trivial
+[examples](https://developer.nvidia.com/blog/using-shared-memory-cuda-cc/) where
+the cache L1 should work perfectly fine so we decided to give it a try.
+
+```c
+__device__
+void gpu_lin_solve_rb_step(...) {
+  __shared__ float neigh_cache[BLOCK_WIDTH + 2][BLOCK_HEIGHT + 1];
+  ... // load neighbours to cache
+  __syncthreads();
+  same[...] = ... // something related to same0 and neigh_cache but not neigh
+}
+```
+
+Later on we profiled with `nvcc -m global_hit_rate` and discovered a hit rate of
+40%. With this and by commenting and discommenting reads, we tracked down the
+following pattern of cache usage (or at least our hypothesis for it):
+
+| Access | Referenced from |
+| --- | --- | --- |
+| same | write miss? |
+| same0 | miss |
+| neigh up | hit |
+| neigh down | hit |
+| neigh left | miss |
+| neigh right | vectorized |
+
+So this explains our 40% (2/5) accesses as one of them is vectorized. Then we
+did an experiment and not a full implementation of the same idea but putting
+same0 in shared as it would've been easier for not having to deal with the
+neighbours halo, but still it did not give gains.
 
 ### onekernel-shmem
 
