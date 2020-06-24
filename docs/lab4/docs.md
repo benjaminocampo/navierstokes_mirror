@@ -3,6 +3,13 @@
 - Benjamín Ocampo: nicolasbenjaminocampo@gmail.com
 - Mateo de Mayo: mateodemayo@gmail.com
 
+# Hardware
+
+- RTX 2080 Ti (target device): 68 Turing SMs
+- GTX 1060 MaxQ (test device): 10 Pascal SMs
+
+![Pascal and Turing SMs](res/other_imgs/sms.png)
+
 # Migration: from CPU to GPU
 
 Before putting our hands over the work and looking up optimizations, we needed
@@ -454,8 +461,8 @@ To prevent this, in recent versions of CUDA the feature of Cooperative Groups
 (CG) was introduced. This are groups of threads that can be smaller than a warp,
 bigger than an SM covering an entire device worth of threads and even bigger
 than a device extending over multiple devices. CG offer lots of possibilities
-that are discussed more in depth in [this
-article](https://developer.nvidia.com/blog/cooperative-groups/) but for our
+that are discussed more in depth in [**this
+article**](https://developer.nvidia.com/blog/cooperative-groups/) but for our
 particular case, what we needed was a way to synchronize the entire device
 between `gpu_lin_solve_rb_step` launches, and the cooperative groups `.sync()`
 method does exactly that. So in this way we could make `gpu_lin_solve` to be a
@@ -474,8 +481,8 @@ __global__ gpu_lin_solve(...) {
 }
 ```
 
-Unfortunately it seems that the [grid synchronization
-feature](https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#grid-synchronization-cg)
+Unfortunately it seems that the [**grid synchronization
+feature**](https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#grid-synchronization-cg)
 of the CG is not very optimized in hardware yet (at least up to turing), and
 unfortunately we saw a decrease in performance (from ~2.5 to ~3.5 with N=4096).
 
@@ -501,7 +508,7 @@ were:
 ### stepburst-shmem
 
 A lot of places talked wonders about the usage of shared memory even in trivial
-[examples](https://developer.nvidia.com/blog/using-shared-memory-cuda-cc/) where
+[**examples**](https://developer.nvidia.com/blog/using-shared-memory-cuda-cc/) where
 the cache L1 should work perfectly fine so we decided to give it a try.
 
 ```c
@@ -558,13 +565,13 @@ and mostly superficial optimizations, which are as follows:
 - `cudaDeviceSetCacheConfig`: Hint for increased cache usage as we couldn't use
   shared memory
 - Vector loads: `float4`, `int4`, and similar types are supposed to increase a
-  bit [the overall
-  bandwidth](https://developer.nvidia.com/blog/cuda-pro-tip-increase-performance-with-vectorized-memory-access/)
+  bit [**the overall
+  bandwidth**](https://developer.nvidia.com/blog/cuda-pro-tip-increase-performance-with-vectorized-memory-access/)
   but for using them we needed to make aligned reads and our memory layout did
   not allow that.
 - `#pragma loop unroll`: For unrolling loops.
 - `nvcc` flags: basically `-use_fast_math` and
-  [friends](https://docs.nvidia.com/cuda/cuda-c-best-practices-guide/index.html#nvcc-compiler-switches).
+  [**friends**](https://docs.nvidia.com/cuda/cuda-c-best-practices-guide/index.html#nvcc-compiler-switches).
 - Block/grid dims: There were many settings which gave good results, we decided
   to go with 8x8 as 64 is the amount of cuda cores in one SM for the 2080 Ti.
 - PTX intrinsics: There are many intrinsics for math (which were already enabled
@@ -659,3 +666,86 @@ grids, and then all the rest which were not cached.
 So because of that implementation complication and the fact that in turing, our
 target architecture, would not make a notorious difference, we decided not to
 finish implementing the idea.
+
+# Honorable Mentions
+
+During the development with CUDA, lots of appealing options and names appeared
+and so we thought it could be a good idea to mention some of them.
+
+## Thrust vs CUB vs ModernGPU
+
+[**These**](https://nvlabs.github.io/cub/index.html#sec7) are three libraries that
+you may encounter while looking for cuda helper libraries, the focus of each one
+is different and so you should know which one to look for.
+
+- Thrust: focuses on ease of use, and high level abstractions that run not only
+  on CUDA but also on OpenMP, OpenACC and others. Thrust uses CUB at its core.
+- CUB: on the other hand is a specific, performance oriented library for CUDA,
+  it is more cumbersome to use but it is more flexible as well. We particularly
+  notice the ability of CUB to do reductions on device while thrust forces you
+  to bring the result to host.
+- ModernGPU: Is more of a learning oriented library that is made to be read and
+  not so much used, the codebase prioritize ease of understanding and novel
+  ideas to get inspired from. It is a go to if you are trying to solve a problem
+  in a novel way.
+
+## CPU-GPU Implementation
+
+We did not get to implement an heterogenous version which uses both OpenMP and
+CUDA, but we thought about it a lot. The rough idea of implementation would've
+been to reuse our OpenMP strip-divided version delimiting the grid with a
+particular row index. In each step the CPU and GPU need to interchange the
+topmost (or bottommost) row to the other and continue its work.
+
+## Turing Specialized Hardware
+
+Turing implements [**two
+pieces**](https://developer.nvidia.com/blog/nvidia-turing-architecture-in-depth/)
+of novel hardware that we considered to use but did not really found a good
+application for them to dig into an test implementation.
+
+- Tensor Cores: Are special functional units in each SM (8 of them in each SM)
+  dedicated to 4x4 matrix fused multiply and add.
+- RT Cores: Are a piece of dedicated hardware found in each SM that solves two
+  problems related to ray tracing: ray casting (intersection test) and boundary
+  volume hierarchy traversal (BVH).
+
+## cuSOLVER
+
+[**cuSOLVER**](https://docs.nvidia.com/cuda/cusolver/index.html) is a library
+that implements many linear solvers in CUDA, unfortunately there was no explicit
+"Gauss-Seidel Relaxation" solver and our numerical analysis knowledge did not
+help much helping us to recognize which solver would've been of use in our case.
+
+## Loop Skewing
+
+Loop or Time skewing algorithms for solving stencil problems are what [**this
+paper**](https://dl.acm.org/doi/pdf/10.1145/1953611.1953617) calls the
+*Wavefront Pattern* and it was a concept we bumped into many times on our
+searches. We never got to implement it but the idea is relatively simple:
+
+In our gauss-seidel traversal, if you consider the dependencies of each cell,
+you will notice that diagonal cells do not have any dependency between them, and
+as such they can be computed in parallel, having each iteration of a parallel
+loop traverse *(like wavefronts)* from the upper left cell in diagonals to the
+bottom right cell in the following way is a correct parallel implementation.
+
+![Loop skewing, borrowed from the paper](res/other_imgs/loop-skewing.png)
+
+# Conclusions
+
+<!-- TODO: Write something -->
+<!-- TODO: Resulting graphs -->
+
+## Speedup Table
+
+Speedup with respect from the previous versiono (starting with the `-O0`
+implementation)
+
+| N    | lab1  | lab2  | lab3  | lab4  | total  |
+| ---- | ----- | ----- | ----- | ----- | ------ |
+| 128  | 1.05x | 10.8x | 2.04x | 0.79x | 18x    |
+| 512  | 1.46x | 11.1x | 15.7x | 1.47x | 375x   |
+| 2048 | 1.69x | 11.4x | 20.0x | 1.57x | 608x   |
+| 4096 | 2.32x | 10.2x | 6.87x | 5.65x | 916x   |
+| 8192 | 2.27x | 9.85x | 6.14x | 6.84x | 940x   |
