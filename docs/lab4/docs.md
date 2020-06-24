@@ -178,10 +178,6 @@ checkCudaErrors(cudaMemcpy(hu_prev, du_prev, size_in_m, cudaMemcpyDeviceToHost))
 checkCudaErrors(cudaMemcpy(hv_prev, dv_prev, size_in_m, cudaMemcpyDeviceToHost));
 ```
 
-### Results
-
-<!-- TODO: Put results here -->
-
 ## threactburst
 Obviously, the bottleneck of *reactburst* is how *react* is computed. So let us
 get deep into that function to see what can be done to make it faster.
@@ -287,9 +283,6 @@ Note that in this version we are not dealing with how react and step
 communicate, so those copies that were shown above are still here in
 *threactburst*.
 
-### Results
-<!-- TODO: Put here results -->
-
 ## stepburst
 
 It is time to make copies between react and step dissapear. In this version, a
@@ -310,10 +303,6 @@ checkCudaErrors(cudaMemcpy(hd_prev, dd_prev, size_in_mem,cudaMemcpyDeviceToHost)
 checkCudaErrors(cudaMemcpy(hu_prev, du_prev, size_in_mem,cudaMemcpyDeviceToHost));
 checkCudaErrors(cudaMemcpy(hv_prev, dv_prev, size_in_mem,cudaMemcpyDeviceToHost));
 ```
-
-### Results
-
-<!-- TODO: Put Results here -->
 
 # Failed Versions
 
@@ -447,6 +436,58 @@ actually used we check it with nvvp that show us a thorougly execution of the
 program. Here we could obtain that *gpu_lin_solve_rb_step* is the 85% of the
 code, and the rest is taken by the other kernels. Maybe we could get some
 concurrency between kernels but they were not the key of the problem.
+
+## stepburst-tex
+
+The cuda programming guide and lots of posts praise the use of texture memory
+instead of reading from global memory. Especially for stencil patterns.
+Nevertheless its implementation would be a little painfull for us, since
+textures must be declared in file scope (In order to be known at compile time),
+we can not pass them by parameter. That would lead to so many changes in
+functions signatures and hours of testing correctness. Instead of that, we test
+it with the kernel *gpu_lin_solve_rb_step* checking if they speedup that kernel.
+
+```c
+__global__
+void gpu_lin_solve_rb_step_tex(...){
+  ...
+  for (int y = 1 + gtidy; y <= n; y += grid_height) {
+    for (int x = start + gtidx; x < width - (1 - start); x += grid_width) {
+      int index = y * width + x;
+      same[index] = (same0[index] + a * (
+          tex2D(tex_dred, x, y - 1) +
+          tex2D(tex_dred, x - start, y) +
+          tex2D(tex_dred, x - start + 1, y) +
+          tex2D(tex_dred, x, y + 1)
+      )) / c;
+    }
+  }
+}
+
+texture<float, cudaTextureType2D, cudaReadModeElementType> tex_dred;
+
+// Bind the texture @tex_dred to the array @dred.
+cudaChannelFormatDesc channel_desc = cudaCreateChannelDesc<float>();
+checkCudaErrors(cudaBindTexture2D(NULL, &tex_dred, dred, &channel_desc, width, n, width * sizeof(float)));
+
+// Gauss-Seidel
+for (unsigned int k = 0; k < 20; ++k) {
+  // Red case is launched both since we can not pass textures by parameter
+  gpu_lin_solve_rb_step_tex<<<grid_dim, block_dim>>>(RED, ...)
+  gpu_lin_solve_rb_step_tex<<<grid_dim, block_dim>>>(RED, ...);
+  gpu_set_bnd<<<div_round_up(n + 2, block_dim.x), block_dim.x>>>(n, b, dd);
+}
+cudaUnbindTexture(tex_dred);
+```
+
+Then using *nvprof* we could measure the time needed to run this kernel with the
+older one. Unfortunately for us, results were so similar. We discovered later
+that Turing mershes the cache L1 and the texture cache in such a way that when
+we launch kernels both caches are used. We also wanted to use textures in
+*advect* to take the most of *interpolations*. But we could not use it due to
+red-black organization. The idea was to bind a matrix **dd**, **du**, and
+**dv**, to a texture and avoid parsing float coordenates to indexes.
+Nevertheless, we need the indexes to know if a cell is RED or BLACK.
 
 ## onekernel
 
@@ -737,7 +778,7 @@ bottom right cell in the following way is a correct parallel implementation.
 
 ## Speedup Table
 
-Speedup with respect from the previous versions (starting with the `-O0`
+Speedup with respect from the previous versiono (starting with the `-O0`
 implementation)
 
 | N    | lab1  | lab2  | lab3  | lab4  | total  |

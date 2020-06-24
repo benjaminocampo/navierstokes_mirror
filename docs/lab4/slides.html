@@ -714,6 +714,60 @@ shared memory. **Idea to solve it**: fill all the found-in-undefined-shared-memo
 sub grids, and then all the rest which were not cached.
 ---
 class: center, middle
+# Failed Version: stepburst-tex
+---
+# stepburst-tex
+- The cuda programming guide and lots of posts praise the use of texture memory.
+Especially for stencil patterns.
+- Idea: Use of texture cache instead of reading from global memory.
+
+```c
+texture<float, cudaTextureType2D, cudaReadModeElementType> tex_dred;
+
+// Bind the texture @tex_dred to the array @dred.
+cudaChannelFormatDesc channel_desc = cudaCreateChannelDesc<float>();
+checkCudaErrors(cudaBindTexture2D(NULL, &tex_dred, dred, &channel_desc, width, n, width * sizeof(float)));
+
+// Gauss-Seidel
+for (unsigned int k = 0; k < 20; ++k) {
+  // Red case is launched both since we can not pass textures by parameter.
+  gpu_lin_solve_rb_step_tex<<<grid_dim, block_dim>>>(RED, ...)
+  gpu_lin_solve_rb_step_tex<<<grid_dim, block_dim>>>(RED, ...);
+  gpu_set_bnd<<<div_round_up(n + 2, block_dim.x), block_dim.x>>>(n, b, dd);
+}
+cudaUnbindTexture(tex_dred);
+```
+- Textures are declared in file scope (In order to be known at compile time).
+- They can not be passed by parameter.
+- We might use texture objects but it needs the use of cuArrays.
+---
+# stepburst-tex
+
+```c
+__global__
+void gpu_lin_solve_rb_step_tex(...){
+  ...
+  for (int y = 1 + gtidy; y <= n; y += grid_height) {
+    for (int x = start + gtidx; x < width - (1 - start); x += grid_width) {
+      int index = y * width + x;
+      same[index] = (same0[index] + a * (
+          tex2D(tex_dred, x, y - 1) +
+          tex2D(tex_dred, x - start, y) +
+          tex2D(tex_dred, x - start + 1, y) +
+          tex2D(tex_dred, x, y + 1)
+      )) / c;
+    }
+  }
+}
+```
+- Results were not changed. Turing mershes the cache L1 and the texture cache so
+kernel launches used both caches.
+
+- Use of textures in advect to take the most of *interpolations*.
+
+- Issue: We need indexes to know if a cell is RED or BLACK.
+---
+class: center, middle
 # Honorable Mentions
 ---
 # Honorable Mentions
