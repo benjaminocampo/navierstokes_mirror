@@ -294,8 +294,7 @@ communicate, so those copies that were shown above are still here in
 
 It is time to make copies between react and step dissapear. In this version, a
 bunch of kernels launches are queued up to the thrust synchronization. In order
-to do so, move them at the end of the simulation. So everything the memory that
-is touched in the program belongs to the device. This can be accomplished since
+to do so, copies were moved at the end of the simulation. So everything that is touched in the program belongs to the device. This can be accomplished since
 the GPU works by itself, i.e, react and step use memory that is on the device.
 So, the CPU does not do more just launch kernels. If it were not for the thrust
 pitfalls this one would be the *fullburst* version that we were aiming for.
@@ -352,24 +351,23 @@ just commented the following lines:
   float max_velocity2 = 0.1f;
 /*
   dfloatp tdd_prev(dd_prev);
-  // TODO: Same as above.
   float max_density = *thrust::max_element(tdd_prev, tdd_prev + size);
 */
   float max_density = 0.1f;
 ```
 
 Yep, we are cheating a bit, but the result of this trick astonished us, since we
-did not increase so much the performance. Why? We uncover that the number of
+did not increase so much the performance. Why? We uncovered that the number of
 kernel launches that can be queued is limited to around 1024, so our idea of
 launching the entire program and just wait for the result is not possible.
-Fortunately, we discover it before implementing it. Imagine the amount of time
+Fortunately, we discovered it before implementing it. Imagine the amount of time
 that we have lost if we inmersed ourselves to accomplish this "optimization". We
 had already seen that cub allows reductions without blocking so that implies
 that react had to be implemented again.
 
 ## streamburst
 
-Another idea was the use of streams in the code and maximize the concurrency.
+Another idea was the use of streams in the code and maximize concurrency.
 Nevertheless we did not get wildly deep into it since streams require more than
 a few changes in the code. What we learn after 3 laboratories is to test an idea
 before losing hours on a chair in front of a screen with implementations that
