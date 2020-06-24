@@ -471,7 +471,7 @@ __global__ gpu_lin_solve(...) {
 Unfortunately it seems that the [grid synchronization
 feature](https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#grid-synchronization-cg)
 of the CG is not very optimized in hardware yet (at least up to turing), and
-unfortunately we saw a decrease in performance (from ~2.5 to ~3.5).
+unfortunately we saw a decrease in performance (from ~2.5 to ~3.5 with N=4096).
 
 Some points that we need to mention that appeared during this implementation
 were:
@@ -479,7 +479,7 @@ were:
 - Not syncing: Removing the `grid.sync()` call above makes the simulation a
   little weird, however it could be still a pretty reasonable approximation for
   some use cases, and the performance increases significantly (from ~2.5 to
-  ~1.6).
+  ~1.6 with N=4096).
 - Occupancy API: For using the grid sync feature of CGs we need to use special
   ways of launching kernels and defining their dimensions. In particular the
   number of blocks must match those of the amount of SMs in the device, and the
@@ -528,28 +528,45 @@ neighbours halo, but still it did not give gains.
 
 ### onekernel-shmem
 
-<!-- TODO: Same as above but would've been a lot better -->
-
-### onekernel-shared-1024
-
-<!-- TODO:  -->
+As in this version we have exactly one block per SM per the CG requirements, the
+idea is to fill the shared memory of each block with a portion of its sub grid
+and use shared memory when the grid strid loop needs to use memory that is
+cached there. Unfortunately in our tests the with and without the added
+conditional were in all cases worst than stepburst. The grid synchronization was still a heavy hit on performance.
 
 ### stepburst-occupancy
 
-<!-- TODO: Did not work, better fit the data not the hardware -->
+We brought the idea of using the occupancy api from the onekernel implementation
+with the hopes that by dividing the problem to match exactly the hardware it may
+improve the performance, but the opposite happened. It seems that dividing the
+problem in weird partitions (in this cases divided by 68 as the RTX 2080 ti has
+68 SMs) is probably subutilizing the vector units.
 
 ### stepburst-roae
 
-<!-- TODO: Last stroke ldg, stwt, ldlu -->
-<!--
-- vector loads
-- l1/shmem balance
-- cache hints
-- loop unroll
-- flags de nvcc?
-- ptx intrinsics, __ldg, __stwt (strean), __ldlu, math intrinsics
-- block/grid dims tinkering
--->
+As we were running out of good ideas, we implemented all of our bad ones in
+here, the "Root Of All Evil" branch, which applies and discuss lots of minimal
+and mostly superficial optimizations, which are as follows:
+
+- `cudaDeviceSetCacheConfig`: Hint for increased cache usage as we couldn't use
+  shared memory
+- Vector loads: `float4`, `int4`, and similar types are supposed to increase a
+  bit [the overall
+  bandwidth](https://developer.nvidia.com/blog/cuda-pro-tip-increase-performance-with-vectorized-memory-access/)
+  but for using them we needed to make aligned reads and our memory layout did
+  not allow that.
+- `#pragma loop unroll`: For unrolling loops.
+- `nvcc` flags: basically `-use_fast_math` and
+  [friends](https://docs.nvidia.com/cuda/cuda-c-best-practices-guide/index.html#nvcc-compiler-switches).
+- Block/grid dims: There were many settings which gave good results, we decided
+  to go with 8x8 as 64 is the amount of cuda cores in one SM for the 2080 Ti.
+- PTX intrinsics: There are many intrinsics for math (which were already enabled
+  by the nvcc flags) and for memory load/store, we tried using a similar
+  technique as to the `stream` technique we used in lab2 with `__stwt` but it
+  didn't give any gains, probably CUDA was already figuring that out. Also the
+  `__ldg` intrinsic which hints that a load should be cached in a read-only
+  faster cache, it improved about 2% the performance in our pascal GTX 1060 MaxQ
+  but nothing on the target RTX 2080 Ti.
 
 ### stepburst-shidden
 
