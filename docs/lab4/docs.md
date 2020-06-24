@@ -570,11 +570,82 @@ and mostly superficial optimizations, which are as follows:
 
 ### stepburst-shidden
 
-<!-- TODO: undefined reuse of shared memory,
+So this was the hacky idea. We read in some places that the shared memory even
+though in theory it has the same lifetime of a block, in practice the driver
+does not clean shared memory between calls and just sets it unused. So the idea
+is that we can reuse between kernel launches this "undefined" shared memory with
+some tricks which we implemented as follows:
 
-  shidden hits:
-  rtx 2080 ti hits: upto 64**2 all hits, 512**2 25%, 2048**2 2.21%
-  gtx 1060 maxq hits: upto 64**2 all hits, 512**2 and 2048**2 ~50%
+```c
+void lin_solve(...) {
+  gpu_lin_solve_rb_step_shtore(RED);
+  gpu_lin_solve_rb_step_shtore(BLACK);
+  for (int k = 0; k < 19; k++) {
+    gpu_lin_solve_rb_step_shload(RED);
+    gpu_lin_solve_rb_step_shload(BLACK);
+  }
+}
 
-  if it wouldve been implented, how to calculate the not-found blocks
--->
+__global__
+void gpu_lin_solve_rb_step_shtore(...) {
+  __shared__ float csame0[BLOCK_HEIGHT][BLOCK_WIDTH];
+  __shared__ int bx, by, id1, id2;
+
+  // Save block information for later discovery
+  if (first thread of block) {
+    bx = blockIdx.x; by = blockIdx.y;
+    id1 = bx * by + bx; id2 = bx * by + by;
+  }
+
+  // Save appropiaty value of same0 for next kernels
+  const float previous = same0[index];
+  csame0[threadIdx.y][threadIdx.x] = previous;
+
+  ... // Get lots of "set but not used" compiler warnings
+
+  ... // regular lin_solve_rb_step using previous instead of same0
+
+}
+
+__global__
+void gpu_lin_solve_rb_step_shload(...) {
+  __shared__ float csame0[BLOCK_HEIGHT][BLOCK_WIDTH];
+  __shared__ int bx, by, id1, id2;
+
+  float previous;
+  // Notice most of these variables are undefined
+  if (id1 == bx * by + bx && id2 == bx * by + by) {
+    // Found'em! read "undefined" memory.
+    previous = csame0[threadIdx.y][threadIdx.x];
+  } else {
+    // Read from global memory
+    previous = same0[index]; // (*) There is a catch here, explained in a moment
+  }
+
+  ... // Regular lin_solve_rb_step but using bx and by as block indexes instead
+}
+```
+
+Notice in the conditional from `_shload` we check that our undefined shared
+memory effectively has the correct values, one could ask about the ratio in
+which this check effectively "finds" what it is looking for, here are the
+results:
+- GTX 1060 MaxQ: N <= 64 => 100%, N == 512 or N == 2048 => 50%
+- RTX 2080 Ti: N <= 64 => 100%, N == 512 => 25%, N == 2048 => 2.21%
+
+So from one side, it seems that the new turing architecture does something with
+undefined shared memory that makes it not as reliable as in pascal. In pascal
+however that 50% means literally half of the reads to same0 in the twenty
+iterations could be avoided.
+
+(*) Another thing to take into consideration is the `else` in the code above is
+figurative and does not solve all of our problems to make the algorithm correct.
+In particular, when we don't find a hit, we can't just keep computing as usual,
+because our sub grid could've been already computed by another block which found
+the corresponding shared memory. And as such we would need to divide into two
+steps the solver, first filling all the found-in-undefined-shared-memory sub
+grids, and then all the rest which were not cached.
+
+So because of that implementation complication and the fact that in turing, our
+target architecture, would not make a notorious difference, we decided not to
+finish implementing the idea.
