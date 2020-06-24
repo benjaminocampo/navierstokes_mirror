@@ -737,7 +737,7 @@ bottom right cell in the following way is a correct parallel implementation.
 
 ## Speedup Table
 
-Speedup with respect from the previous versiono (starting with the `-O0`
+Speedup with respect from the previous versions (starting with the `-O0`
 implementation)
 
 | N    | lab1  | lab2  | lab3  | lab4  | total  |

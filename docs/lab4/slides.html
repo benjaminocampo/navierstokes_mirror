@@ -712,8 +712,168 @@ problems to make the algorithm correct.
 could've been already computed by another block which found the corresponding
 shared memory. **Idea to solve it**: fill all the found-in-undefined-shared-memory
 sub grids, and then all the rest which were not cached.
---- 
+---
+class: center, middle
+# Honorable Mentions
+---
+# Honorable Mentions
 
+- During the development with CUDA, lots of appealing options and names appeared
+and so we thought it could be a good idea to mention some of them.
+---
+# Thrust vs CUB vs ModernGPU
+
+- Thrust: focuses on ease of use, and high level abstractions that run not only
+  on CUDA but also on OpenMP, OpenACC and others. Thrust uses CUB at its core.
+
+- CUB: on the other hand is a specific, performance oriented library for CUDA,
+it is more cumbersome to use but it is more flexible as well. We particularly
+notice the ability of CUB to do reductions on device while thrust forces you
+to bring the result to host.
+
+- ModernGPU: Is more of a learning oriented library that is made to be read and
+not so much used, the codebase prioritize ease of understanding and novel
+ideas to get inspired from.
+---
+# CPU-GPU Implementation
+
+- We did not get to implement an heterogenous version which uses both OpenMP and
+CUDA, but we thought about it a lot.
+
+- The rough idea of implementation would've
+been to reuse our OpenMP strip-divided version delimiting the grid with a
+particular row index.
+
+- In each step the CPU and GPU need to interchange the
+topmost (or bottommost) row to the other and continue its work.
+---
+# Turing Specialized Hardware
+
+- Hardware that we considered to use but did not really found a good application
+for them.
+
+- Tensor Cores: Are special functional units in each SM (8 of them in each SM)
+  dedicated to 4x4 matrix fused multiply and add.
+
+- RT Cores: Are a piece of dedicated hardware found in each SM that solves two
+  problems related to ray tracing: ray casting (intersection test) and boundary
+  volume hierarchy traversal (BVH).
+---
+# cuSOLVER
+
+- A library that implements many linear solvers in CUDA.
+
+- There was no explicit "Gauss-Seidel Relaxation" solver and our numerical
+analysis knowledge did not help much helping us to recognize which solver
+would've been of use in our case.
+---
+# Loop Skewing
+
+- Loop or Time Skewing algorithms for solving stencil.
+
+- It was called the *Wavefront Pattern* and it was a concept we bumped into many times on our
+searches.
+
+- In our gauss-seidel traversal, if you consider the dependencies of each cell,
+you will notice that diagonal cells do not have any dependency between them.
+
+- Diagonal cells can be computed in parallel, having each iteration of a parallel
+loop traverse *(like wavefronts)* from the upper left cell in diagonals to the
+bottom right cell in the following way is a correct parallel implementation.
+
+<div align="center">
+  <img src="res/other_imgs/loop-skewing.png"
+       alt="Loop skewing"
+       style="width:550px;" />
+</div>
+---
+class: center, middle
+# Conclusions and Final Results
+---
+# lab3 vs lab4
+<div align="center">
+  <img src="res/graphs/3_lab3_lab4.png"
+       alt="lab3vslab4"
+       style="width:600px;" />
+</div>
+---
+# lab2 vs lab3 vs lab4
+<div align="center">
+  <img src="res/graphs/2_lab2_lab3_lab4.png"
+       alt="lab3vslab4"
+       style="width:700px;" />
+</div>
+---
+# lab1 vs lab2 vs lab3 vs lab4
+<div align="center">
+  <img src="res/graphs/1_lab1_lab2_lab3_lab4.png"
+       alt="lab3vslab4"
+       style="width:750px;" />
+</div>
+
+---
+# Without CP vs lab1 vs lab2 vs lab3 vs lab4
+<div align="center">
+  <img src="res/graphs/0_O0_lab1_lab2_lab3_lab4.png"
+       alt="lab3vslab4"
+       style="width:800px; height: 300px;" />
+</div>
+---
+# Speedup Table
+
+- Speedup with respect the previous versions (starting with -O0).
+
+<table style="width:100%; border: 1px solid black;">
+  <tr>
+    <th>N</th>
+    <th>lab1</th>
+    <th>lab2</th>
+    <th>lab3</th>
+    <th>lab4</th>
+    <th>total</th>
+  </tr>
+  <tr>
+    <td>128</td>
+    <td>1.05x</td> 
+    <td>10.8x</td> 
+    <td>2.04x</td> 
+    <td>0.79x</td> 
+    <td>18x</td>
+  </tr>
+  <tr>
+    <td>512</td>
+    <td>1.46x</td> 
+    <td>11.1x</td> 
+    <td>15.7x</td> 
+    <td>1.47x</td> 
+    <td>375x</td>
+  </tr>
+  <tr>
+    <td>2048</td>
+    <td>1.69x</td> 
+    <td>11.4x</td> 
+    <td>20.0x</td> 
+    <td>1.57x</td> 
+    <td>608x</td>
+  </tr>
+  <tr>
+    <td>4096</td>
+    <td>2.32x</td> 
+    <td>10.2x</td> 
+    <td>6.87x</td> 
+    <td>5.65x</td> 
+    <td>916x</td>
+  </tr>
+  <tr>
+    <td>8192</td>
+    <td>2.27x</td> 
+    <td>9.85x</td> 
+    <td>6.14x</td> 
+    <td>6.84x</td> 
+    <td>940x</td>
+  </tr>
+</table>
+---
 
 </textarea>
     <script src="https://remarkjs.com/downloads/remark-latest.min.js">
