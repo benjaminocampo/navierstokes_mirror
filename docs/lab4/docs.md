@@ -5,23 +5,24 @@
 
 # Migration: from CPU to GPU
 
-Before putting our hands over the work and looking up optimizations,
-we needed to migrate all our implementation to Cuda code. It was no so easy
-due to the number of lines to be rewritten (more than a 1000 lines of code).
-Another obstacle that we had to confront was the CPU-GPU communication.
-Since their communication was expensive, minimizing synchronizations between
-them was crucial to maintain the simulation at its maximum speed.
-In order to do so, the entire program should be launched to the GPU at the
-beggining. After all the grid-updates were completed, results were
-returned to the CPU. We nick named this process as *fullburst*. That is what
-we were aiming. There is just one small detail. Moving everything in a bunch
-leads to failures, and hours looking for their bugs.
-How can we move everything in that way without loosing the patience?
+Before putting our hands over the work and looking up optimizations, we needed
+to migrate all our implementation to Cuda code. It was no so easy due to the
+number of lines to be rewritten (more than a 1000 lines of code). Another
+obstacle that we had to confront was the CPU-GPU communication. Since their
+communication was expensive, minimizing synchronizations between them was
+crucial to maintain the simulation at its maximum speed. In order to do so, the
+entire program should be launched to the GPU at the beggining. After all the
+grid-updates were completed, results were returned to the CPU. We nick named
+this process as *fullburst*. That is what we were aiming. There is just one
+small detail. Moving everything in a bunch leads to failures, and hours looking
+for their bugs. How can we move everything in that way without loosing the
+patience?
 
-Remember that the simulation consists of a number of updates or steps, and
-for each step, calls to a set of functions.
+Remember that the simulation consists of a number of updates or steps, and for
+each step, calls to a set of functions.
 
 **Simulation Step**
+
 - *react*
 - *step*:
   - *addsource*
@@ -29,26 +30,27 @@ for each step, calls to a set of functions.
   - *project*
   - *advect*
 
-The migration process consisted in implementing them one by one, and checking
-if the simulation keeps well after it. Obviously, since they were developed in
-an incremental way, synchronizations with the host were needed. But it was
+The migration process consisted in implementing them one by one, and checking if
+the simulation keeps well after it. Obviously, since they were developed in an
+incremental way, synchronizations with the host were needed. But it was
 momentary until the migration was fully-implemented. It might be thought as the
 device "asking for help to the host", since it can not handle the rest of the
-functions. We also had to take into account which snippet of code
-should be a *kernel*. Since one of the easiest way to synchronyze threads in
-the GPU is through *kernels*, some dependencies were dealed with them.
-We are not mentioning changes of signatures, makefile rules, deletion of omp 
-pragmas, includes, allocation of device and host data, etc. They were also
-developed by means of little changes but were not the core of the migration.
+functions. We also had to take into account which snippet of code should be a
+*kernel*. Since one of the easiest way to synchronyze threads in the GPU is
+through *kernels*, some dependencies were dealed with them. We are not
+mentioning changes of signatures, makefile rules, deletion of omp pragmas,
+includes, allocation of device and host data, etc. They were also developed by
+means of little changes but were not the core of the migration.
 
 # Versions
 
 ## reactburst
 
 During the migration, we dealed with the function *step*, i.e, implement that
-procedure in such a way that is executed in the device. This version was
-called *reactburst* since step was computed by the GPU, but *react* was still
-performed by the CPU (without changes from the lab 3). This is how the execution of step is:
+procedure in such a way that is executed in the device. This version was called
+*reactburst* since step was computed by the GPU, but *react* was still performed
+by the CPU (without changes from the lab 3). This is how the execution of step
+is:
 
 ![migration_step](res/migration_imgs/graph-dependency.png)
 
@@ -64,43 +66,41 @@ was converted into a kernel.
 ### diffuse
 
 *diffuse* was splitted in three kernel launches. Two of them were calls to
-*lin_solve_rb_step* to compute Gauss-Seidel for RED and BLACK cells. These kernels had to compute just the half of the simulation matrix
-so the block and grid dimensions were chosen in a way that fits better
-for them. Since *set_bnd* depens on the previous two kernel calls,
-a synchronyzation goes between them. So another different kernel was
-created for its execution.
-Note that *set_bnd* is launched in one dimension with different block
-and grid dims since it does not need to update the entire grid.
+*lin_solve_rb_step* to compute Gauss-Seidel for RED and BLACK cells. These
+kernels had to compute just the half of the simulation matrix so the block and
+grid dimensions were chosen in a way that fits better for them. Since *set_bnd*
+depens on the previous two kernel calls, a synchronyzation goes between them. So
+another different kernel was created for its execution. Note that *set_bnd* is
+launched in one dimension with different block and grid dims since it does not
+need to update the entire grid.
 <!-- TODO: Talk about the choice of block_dim -->
 
 ![migration_step](res/migration_imgs/diffuse.png)
 
 ### project
 
-*project* is one of the longest in terms of kernel launches, since it
-consits of two parts and an execution of linsolve. As the previous case,
-they had some dependencies so project had to be splitted in sub kernels
-as above.
+*project* is one of the longest in terms of kernel launches, since it consits of
+two parts and an execution of linsolve. As the previous case, they had some
+dependencies so project had to be splitted in sub kernels as above.
 
 ![migration_step](res/migration_imgs/project.png)
 
 ### advect
 
-After developing the previous two functions. *advect* was not so hard to
-deal with. Again the same strategy was used in this case.
+After developing the previous two functions. *advect* was not so hard to deal
+with. Again the same strategy was used in this case.
 
 ![migration_step](res/migration_imgs/advect.png)
 
 ### Kernels
 
 After revising the main functions of *step* let us cover some of the kernels
-that are mentioned above.
-For each kernel, grid stripe loop was used. It consists in looping over
-the grids, working with the global id of each thread related to the
-current grid that we are working. Here is a part of the implementation of
-*gpu_lin_solve_rb_step* and *set_bnd*. The rest of kernels are similar,
-if you are interested in their implementation, you can glace at them at
-our repository. 
+that are mentioned above. For each kernel, grid stripe loop was used. It
+consists in looping over the grids, working with the global id of each thread
+related to the current grid that we are working. Here is a part of the
+implementation of *gpu_lin_solve_rb_step* and *set_bnd*. The rest of kernels are
+similar, if you are interested in their implementation, you can glace at them at
+our repository.
 
 ```c
 __global__
@@ -126,6 +126,7 @@ void gpu_lin_solve_rb_step(grid_color color, unsigned int n, float a, float c,
   }
 }
 ```
+
 ```c
 __global__
 void gpu_set_bnd(unsigned int n, boundary b, float *x) {
@@ -148,11 +149,10 @@ void gpu_set_bnd(unsigned int n, boundary b, float *x) {
 
 ### Pitfalls
 
-In order to complete one update of the grid, and count one step
-of the simulation, both *react* and *step* have to be
-performed. Since *react* is computed by the host we can not
-avoid a synchronization and copies from host to device at that
-point. This is what we have in *headless.c* for each simulation
+In order to complete one update of the grid, and count one step of the
+simulation, both *react* and *step* have to be performed. Since *react* is
+computed by the host we can not avoid a synchronization and copies from host to
+device at that point. This is what we have in *headless.c* for each simulation
 step.
 
 ```c
@@ -177,8 +177,8 @@ checkCudaErrors(cudaMemcpy(hv_prev, dv_prev, size_in_m, cudaMemcpyDeviceToHost))
 <!-- TODO: Put results here -->
 
 ## threactburst
-Obviously, the bottleneck of *reactburst* is how *react* is computed. So let us get
-deep into that function to see what can be done to make it faster.
+Obviously, the bottleneck of *reactburst* is how *react* is computed. So let us
+get deep into that function to see what can be done to make it faster.
 
 ```c
 // Two reductions
@@ -212,11 +212,11 @@ if (max_density < 1.0f) {
 }
 ```
 
-Here as the comments says we have two reductions needed to compute *max_velocity2*
-and *max_density*. Then, the entire matrices *uu*, *vv*, and *d*, are set to 0, so memsets
-can be used here. Finally those arrays are updated so we can tell the GPU to do
-that for us.
-Instead of doing the reductions by hand, we make the most of what *thrust* (a Cuda library) and C++ have to offer. 
+Here as the comments says we have two reductions needed to compute
+*max_velocity2* and *max_density*. Then, the entire matrices *uu*, *vv*, and
+*d*, are set to 0, so memsets can be used here. Finally those arrays are updated
+so we can tell the GPU to do that for us. Instead of doing the reductions by
+hand, we make the most of what *thrust* (a Cuda library) and C++ have to offer. 
 
 ```c
 // Reduction 1
@@ -224,6 +224,7 @@ Instead of doing the reductions by hand, we make the most of what *thrust* (a Cu
   float max_density = *thrust::max_element(tdd_prev, tdd_prev + size);
   // Implicit cudaDeviceSynchronize();
 ```
+
 ```c
 // Reduction 2
 struct compare_dfloatp2 {
@@ -255,7 +256,6 @@ struct compare_dfloatp2 {
   float max_velocity2 = mvu * mvu + mvv * mvv;
 ```
 
-
 ```c
   // Memsets and kernel launches
   size_t size_in_mem = size * sizeof(float);
@@ -276,6 +276,7 @@ struct compare_dfloatp2 {
     gpu_react_density<<<grid_dim, block_dim>>>(dd_prev, source, N);
 }
 ```
+
 Note that in this version we are not dealing with how react and step
 communicate, so those copies that were shown above are still here in
 *threactburst*.
@@ -285,14 +286,14 @@ communicate, so those copies that were shown above are still here in
 
 ## stepburst
 
-It is time to make copies between react and step dissapear. In this
-version, a bunch of kernels launches are queued up to the thrust synchronization. In order to do so, move them at the end of the
-simulation. So everything the memory that is touched in the program
-belongs to the device. This can be accomplished since the GPU works
-by itself, i.e, react and step use memory that is on the device.
-So, the CPU does not do more just launch kernels. If it were not for
-the thrust pitfalls this one would be the *fullburst* version that
-we were aiming for.
+It is time to make copies between react and step dissapear. In this version, a
+bunch of kernels launches are queued up to the thrust synchronization. In order
+to do so, move them at the end of the simulation. So everything the memory that
+is touched in the program belongs to the device. This can be accomplished since
+the GPU works by itself, i.e, react and step use memory that is on the device.
+So, the CPU does not do more just launch kernels. If it were not for the thrust
+pitfalls this one would be the *fullburst* version that we were aiming for.
+
 ```c
 for (i = 0; i < steps; i++) one_step();
 // Copies are placed at the end
@@ -311,12 +312,11 @@ checkCudaErrors(cudaMemcpy(hv_prev, dv_prev, size_in_mem,cudaMemcpyDeviceToHost)
 
 ## fullburst
 
-We did not want to live with that feeling of "how much performance
-would have been obtained if *fullburst* were implemented?" In order to
-check it, we did a little test that consisted in erasing the
-reductions in such a way thrust does not block the entire burst of
-launches, but still keeping *react*. In summary we just commented the
-following lines:
+We did not want to live with that feeling of "how much performance would have
+been obtained if *fullburst* were implemented?" In order to check it, we did a
+little test that consisted in erasing the reductions in such a way thrust does
+not block the entire burst of launches, but still keeping *react*. In summary we
+just commented the following lines:
 
 ```c
 /*
@@ -345,21 +345,23 @@ following lines:
   float max_density = 0.1f;
 ```
 
-Yep, we are cheating a bit, but the result of this trick astonished us,
-since we did not increase so much the performance. So imagine the
-amount of time that we have lost if we inmersed ourselves to accomplish
-this "optimization". We had already seen that cub allows reductions
-without blocking so that implies that react had to be implemented again.
+Yep, we are cheating a bit, but the result of this trick astonished us, since we
+did not increase so much the performance. Why? We uncover that the number of
+kernel launches that can be queued is limited, so our idea of launching the
+entire program and just wait for the result is not possible. Fortunately, we
+discover it before implementing it. Imagine the amount of time that we have lost
+if we inmersed ourselves to accomplish this "optimization". We had already seen
+that cub allows reductions without blocking so that implies that react had to be
+implemented again.
 
 ## streamburst
 
-Another idea was the use of streams in the code and maximize
-the concurrency. Nevertheless we did not get wildly deep into
-it since streams require more than a few changes in the code. What we
-learn after 3 laboratories is to test an idea before losing hours on
-a chair in front of a screen with implementations that are not
-goint to be fruitful. The idea was to assign one stream to each
-kernel launch and see what happens. Something like:
+Another idea was the use of streams in the code and maximize the concurrency.
+Nevertheless we did not get wildly deep into it since streams require more than
+a few changes in the code. What we learn after 3 laboratories is to test an idea
+before losing hours on a chair in front of a screen with implementations that
+are not goint to be fruitful. The idea was to assign one stream to each kernel
+launch and see what happens. Something like:
 
 ```c
 static cudaStream_t streams[32768];
@@ -376,8 +378,55 @@ kernel<<< ..., ..., get_new_stream()>>>
 
 ```
 
-After changing adding streams, results were oscillating between
-2 and 3 ns per cell. They were not better but also not worse.
-So we were not sure about how much performance might be obtained
-with streams. Maybe there is an overhead if a new stream is
-created for each kernel launch.
+After changing adding streams, results were oscillating between 2 and 3 ns per
+cell. They were not better but also not worse. So we were not sure about how
+much performance might be obtained with streams. Maybe there is an overhead if a
+new stream is created for each kernel launch.
+
+## graphburst
+
+After doing that experiment we decide to tackle an implementation with streams
+but also using cuda graphs. So first we needed to analyze where the dependencies
+were placed in order to assign properly job/kernels for them. Looking at the
+graph we traced in reactburst, we can expand it to see kernel dependencies and
+find which kernel launches can be executed with other one.
+
+![migration_step](res/other_imgs/stream-flow.png)
+
+As we can see in the graph, we divided the work in three streams. It might look
+the work is unbalanced, but consider that streams increase concurrency using
+resources that other kernels do not use completely. We also wanted to use cuda
+graphs, capturing it by means of *streamCapture* cuda directives. Since one of
+the conditions of these technique is to have a *main stream*, we selected the
+red one to command over the others. 
+
+The implementation was not so straightforward as the graph looks like, but we
+could do it in such a way that there are no so much changes of the *stepburst*
+version. At the beggining of the program, events and streams were created and
+then one call to step was performed enclosed by *cudaStreamBeginCapture* and
+*cudaStreamEndCapture*. After it, it returned an instance of graph is created
+and finally launched.
+
+```c
+cudaGraph_t graph;
+create_stream_events();
+checkCudaErrors(cudaStreamBeginCapture(stream0,cudaStreamCaptureModeGlobal));
+step(
+  N, diff, visc, dt,
+  dd, du, dv, dd_prev, du_prev, dv_prev,
+  stream0, stream1, stream2,
+  spread, join_stream0, join_stream1, join_stream2
+);
+checkCudaErrors(cudaStreamEndCapture(stream0, &graph));
+checkCudaErrors(cudaGraphInstantiate(&step_graph, graph, NULL,NULL, 0));
+cudaGraphDestroy(graph);
+```
+
+```c
+one_step(...){
+  react(...);
+  checkCudaErrors(cudaGraphLaunch(step_graph, stream0));
+  ...
+}
+```
+
