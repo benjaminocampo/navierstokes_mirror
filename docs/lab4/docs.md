@@ -3,6 +3,42 @@
 - Benjamín Ocampo: nicolasbenjaminocampo@gmail.com
 - Mateo de Mayo: mateodemayo@gmail.com
 
+# Table Of Contents
+
+1. [Parallel Computing - Lab 4: Cuda](#parallel-computing---lab-4-cuda)
+1. [Hardware](#hardware)
+1. [Migration: from CPU to GPU](#migration-from-cpu-to-gpu)
+1. [Versions](#versions)
+    1. [Reactburst](#reactburst)
+        1. [Add_source](#add_source)
+        1. [Diffuse](#diffuse)
+        1. [Project](#project)
+        1. [Advect](#advect)
+        1. [Kernels](#kernels)
+        1. [Pitfalls](#pitfalls)
+    1. [Threactburst](#threactburst)
+    1. [Stepburst](#stepburst)
+    1. [Migation Results](#migation-results)
+1. [Failed Versions](#failed-versions)
+    1. [Fullburst](#fullburst)
+    1. [Streamburst](#streamburst)
+    1. [Graphburst](#graphburst)
+    1. [Stepburst-tex](#stepburst-tex)
+    1. [Onekernel](#onekernel)
+        1. [Stepburst-shmem](#stepburst-shmem)
+        1. [Onekernel-shmem](#onekernel-shmem)
+        1. [Stepburst-occupancy](#stepburst-occupancy)
+        1. [Stepburst-roae](#stepburst-roae)
+        1. [Stepburst-shidden](#stepburst-shidden)
+1. [Honorable Mentions](#honorable-mentions)
+    1. [Thrust vs CUB vs ModernGPU](#thrust-vs-cub-vs-moderngpu)
+    1. [CPU-GPU Implementation](#cpu-gpu-implementation)
+    1. [Turing Specialized Hardware](#turing-specialized-hardware)
+    1. [CuSOLVER](#cusolver)
+    1. [Loop Skewing](#loop-skewing)
+    1. [Conclusions](#conclusions)
+    1. [Speed Up Table](#speed-up-table)
+
 # Hardware
 
 - RTX 2080 Ti (target device): 68 Turing SMs
